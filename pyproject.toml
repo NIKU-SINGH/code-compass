@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "code-compass"
+version = "0.1.0"
+description = "Codebase intelligence engine using graph databases, Tree-sitter, and LLMs"
+requires-python = ">=3.11"
+dependencies = [
+    "compass-core",
+    "compass-cli",
+    "compass-mcp",
+]
+
+[tool.hatch.envs.default]
+dependencies = [
+    "pytest",
+    "ruff",
+]
