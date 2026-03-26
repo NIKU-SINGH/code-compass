@@ -18,3 +18,11 @@ dependencies = [
     "pytest",
     "ruff",
 ]
+
+[tool.uv.workspace]
+members = ["apps/cli", "apps/mcp", "packages/core"]
+
+[tool.uv.sources]
+compass-core = { workspace = true }
+compass-cli = { workspace = true }
+compass-mcp = { workspace = true }

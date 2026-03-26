@@ -1,17 +1,31 @@
-"""FastAPI application setup & mounts static/."""
-
-from pathlib import Path
-
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from compass_core.server.routers.chat import router as chat_router
+from compass_core.server.routers.repo import router as repo_router
 
-from compass_core.server.routers import chat, repo
+app = FastAPI(
+    title="Code Compass API",
+    description="Backend for the Code Compass visual knowledge graph."
+)
 
-app = FastAPI(title="Code Compass")
+# Allow the Vite dev server (localhost:5173) to talk to FastAPI (localhost:8000)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, restrict this
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-app.include_router(chat.router, prefix="/api")
-app.include_router(repo.router, prefix="/api")
+@app.get("/health")
+def health_check():
+    """Basic health check route for the frontend to verify connection."""
+    return {
+        "status": "ok", 
+        "service": "Code Compass Core API",
+        "version": "0.1.0"
+    }
 
-static_dir = Path(__file__).parent / "static"
-if static_dir.exists():
-    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+# Include routers
+app.include_router(chat_router, prefix="/api", tags=["chat"])
+app.include_router(repo_router, prefix="/api", tags=["repo"])
