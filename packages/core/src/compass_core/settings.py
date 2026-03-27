@@ -8,10 +8,16 @@ STAGE = os.environ.get("STAGE", None)
 
 
 class Settings(BaseSettings):
-    KUZU_DB_PATH: str = Field(default=".compass/graph.kuzu", description="Path to the KuzuDB graph database file")
-    LLM_MODEL: str = Field(default="gpt-4o-mini", description="LLM model identifier passed to LiteLLM")
+    KUZU_DB_PATH: str = Field(
+        default=".compass/graph.kuzu", description="Path to the KuzuDB graph database file"
+    )
+    LLM_MODEL: str = Field(
+        default="gpt-4o-mini", description="LLM model identifier passed to LiteLLM"
+    )
     LLM_API_KEY: str = Field(default="", description="API key for the configured LLM provider")
-    REPO_ROOT: Path = Field(default=Path("."), description="Root path of the repository being analysed")
+    REPO_ROOT: Path = Field(
+        default=Path("."), description="Root path of the repository being analysed"
+    )
 
     API_HOST: str = Field(default="127.0.0.1", description="Host the FastAPI server binds to")
     API_PORT: int = Field(default=8000, description="Port the FastAPI server listens on")

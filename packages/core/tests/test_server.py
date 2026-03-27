@@ -10,4 +10,8 @@ client = TestClient(app)
 def test_health_check():
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "Code Compass Core API", "version": "0.1.0"}
+    assert response.json() == {
+        "status": "ok",
+        "service": "Code Compass Core API",
+        "version": "0.1.0",
+    }

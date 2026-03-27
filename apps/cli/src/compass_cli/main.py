@@ -46,7 +46,9 @@ def print_banner():
         )
     )
     console.print()
-    console.print(Align.center("[bold color(214)]🧭 Navigate your codebase with ease 🧭[/bold color(214)]"))
+    console.print(
+        Align.center("[bold color(214)]🧭 Navigate your codebase with ease 🧭[/bold color(214)]")
+    )
 
 
 @app.callback(invoke_without_command=True)
@@ -83,16 +85,23 @@ def serve(
         console.print(f"[bold green]Starting API server[/bold green] on http://{host}:{port}")
         procs.append(
             subprocess.Popen(
-                [sys.executable, "-m", "uvicorn", "compass_core.server.main:app",
-                 "--host", host, "--port", str(port), "--reload"],
+                [
+                    sys.executable,
+                    "-m",
+                    "uvicorn",
+                    "compass_core.server.main:app",
+                    "--host",
+                    host,
+                    "--port",
+                    str(port),
+                    "--reload",
+                ],
             )
         )
 
         if not no_frontend and web_dir.exists():
             console.print(f"[bold green]Starting frontend[/bold green] on {settings.FRONTEND_URL}")
-            procs.append(
-                subprocess.Popen(["pnpm", "dev"], cwd=web_dir)
-            )
+            procs.append(subprocess.Popen(["pnpm", "dev"], cwd=web_dir))
 
         console.print("[dim]Press Ctrl+C to stop.[/dim]")
 
