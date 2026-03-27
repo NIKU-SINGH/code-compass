@@ -1,6 +1,5 @@
 """Tests for the FastAPI server."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 from compass_core.server.main import app

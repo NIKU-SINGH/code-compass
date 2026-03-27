@@ -1,30 +1,29 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from compass_core.settings import settings
 from compass_core.server.routers.chat import router as chat_router
 from compass_core.server.routers.repo import router as repo_router
 
 app = FastAPI(
-    title="Code Compass API",
-    description="Backend for the Code Compass visual knowledge graph."
+    title="Code Compass API", description="Backend for the Code Compass visual knowledge graph."
 )
 
 # Allow the Vite dev server (localhost:5173) to talk to FastAPI (localhost:8000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict this
+    allow_origins=[settings.FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 @app.get("/health")
 def health_check():
     """Basic health check route for the frontend to verify connection."""
-    return {
-        "status": "ok", 
-        "service": "Code Compass Core API",
-        "version": "0.1.0"
-    }
+    return {"status": "ok", "service": "Code Compass Core API", "version": "0.1.0"}
+
 
 # Include routers
 app.include_router(chat_router, prefix="/api", tags=["chat"])
