@@ -41,3 +41,4 @@ known-first-party = ["compass_core", "compass_cli", "compass_mcp"]
 [tool.pytest.ini_options]
 testpaths = ["packages/core/tests", "apps/cli/tests"]
 asyncio_mode = "auto"
+addopts = "--import-mode=importlib"

@@ -1,9 +1,8 @@
 import os
 from pathlib import Path
-from typing import Tuple, Type
 
 from pydantic import Field, computed_field
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 STAGE = os.environ.get("STAGE", None)
 
@@ -25,22 +24,23 @@ class Settings(BaseSettings):
     def FRONTEND_URL(self) -> str:
         return f"http://{self.FRONTEND_HOST}:{self.FRONTEND_PORT}"
 
-    class Config:
-        validate_assignment = True
-        case_sensitive = True
-        env_file = f".env.{STAGE}" if STAGE else ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        validate_assignment=True,
+        case_sensitive=True,
+        env_file=f".env.{STAGE}" if STAGE else ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     @classmethod
     def settings_customise_sources(
         cls,
-        _settings_cls: Type[BaseSettings],
+        _settings_cls: type[BaseSettings],
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
         if os.environ.get("STAGE", "").lower() == "production":
             return env_settings, init_settings, file_secret_settings
 

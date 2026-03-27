@@ -3,11 +3,12 @@ import sys
 from pathlib import Path
 
 import typer
-from compass_core.settings import settings
 from rich.align import Align
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
+
+from compass_core.settings import settings
 
 app = typer.Typer(help="Code Compass CLI")
 console = Console()

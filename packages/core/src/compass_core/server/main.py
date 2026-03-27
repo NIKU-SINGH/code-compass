@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from compass_core.settings import settings
 from compass_core.server.routers.chat import router as chat_router
 from compass_core.server.routers.repo import router as repo_router
+from compass_core.settings import settings
 
 app = FastAPI(
     title="Code Compass API", description="Backend for the Code Compass visual knowledge graph."
