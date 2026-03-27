@@ -1,23 +1,12 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "code-compass"
 version = "0.1.0"
 description = "Codebase intelligence engine using graph databases, Tree-sitter, and LLMs"
 requires-python = ">=3.11"
-dependencies = [
-    "compass-core",
-    "compass-cli",
-    "compass-mcp",
-]
+dependencies = []
 
-[tool.hatch.envs.default]
-dependencies = [
-    "pytest",
-    "ruff",
-]
+[tool.uv]
+package = false
 
 [tool.uv.workspace]
 members = ["apps/cli", "apps/mcp", "packages/core"]
@@ -26,3 +15,30 @@ members = ["apps/cli", "apps/mcp", "packages/core"]
 compass-core = { workspace = true }
 compass-cli = { workspace = true }
 compass-mcp = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "compass-core",
+    "compass-cli",
+    "compass-mcp",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+    "httpx>=0.27.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["compass_core", "compass_cli", "compass_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/core/tests", "apps/cli/tests"]
+asyncio_mode = "auto"
+addopts = "--import-mode=importlib"
