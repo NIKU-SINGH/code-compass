@@ -374,9 +374,9 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "compass-cli", editable = "apps/cli" },
+    { name = "compass-cli", editable = "packages/cli" },
     { name = "compass-core", editable = "packages/core" },
-    { name = "compass-mcp", editable = "apps/mcp" },
+    { name = "compass-mcp", editable = "packages/mcp" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
@@ -395,7 +395,7 @@ wheels = [
 [[package]]
 name = "compass-cli"
 version = "0.1.0"
-source = { editable = "apps/cli" }
+source = { editable = "packages/cli" }
 dependencies = [
     { name = "compass-core" },
     { name = "rich" },
@@ -439,7 +439,7 @@ requires-dist = [
 [[package]]
 name = "compass-mcp"
 version = "0.1.0"
-source = { editable = "apps/mcp" }
+source = { editable = "packages/mcp" }
 dependencies = [
     { name = "compass-core" },
     { name = "mcp" },
