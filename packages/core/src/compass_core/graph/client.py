@@ -1,1 +1,1 @@
-"""KuzuDB connection logic."""
+"""LadybugDB connection logic."""

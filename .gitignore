@@ -31,5 +31,5 @@ packages/core/src/compass_core/server/static/
 .DS_Store
 Thumbs.db
 
-# KuzuDB
-*.kuzu/
+# LadybugDB
+*.ladybug/

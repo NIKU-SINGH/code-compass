@@ -8,8 +8,8 @@ STAGE = os.environ.get("STAGE", None)
 
 
 class Settings(BaseSettings):
-    KUZU_DB_PATH: str = Field(
-        default=".compass/graph.kuzu", description="Path to the KuzuDB graph database file"
+    LADYBUG_DB_PATH: str = Field(
+        default=".compass/graph.ladybug", description="Path to the LadybugDB graph database file"
     )
     LLM_MODEL: str = Field(
         default="gpt-4o-mini", description="LLM model identifier passed to LiteLLM"

@@ -5,8 +5,8 @@ from pathlib import Path
 from compass_core.settings import settings
 
 
-def test_default_kuzu_db_path():
-    assert settings.KUZU_DB_PATH == ".compass/graph.kuzu"
+def test_default_ladybug_db_path():
+    assert settings.LADYBUG_DB_PATH == ".compass/graph.ladybug"
 
 
 def test_default_llm_model():
