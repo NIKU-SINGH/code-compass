@@ -9,7 +9,7 @@ dependencies = []
 package = false
 
 [tool.uv.workspace]
-members = ["apps/cli", "apps/mcp", "packages/core"]
+members = ["packages/cli", "packages/mcp", "packages/core"]
 
 [tool.uv.sources]
 compass-core = { workspace = true }
@@ -39,6 +39,6 @@ ignore = ["E501"]
 known-first-party = ["compass_core", "compass_cli", "compass_mcp"]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/core/tests", "apps/cli/tests"]
+testpaths = ["packages/core/tests", "packages/cli/tests"]
 asyncio_mode = "auto"
 addopts = "--import-mode=importlib"

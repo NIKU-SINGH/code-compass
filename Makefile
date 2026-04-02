@@ -2,8 +2,8 @@
 
 install:
 	pip install -e packages/core
-	pip install -e apps/cli
-	pip install -e apps/mcp
+	pip install -e packages/cli
+	pip install -e packages/mcp
 
 install-web:
 	cd apps/web && pnpm install
