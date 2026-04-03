@@ -62,7 +62,7 @@ class ParsedFunction:
         parent_class: The name of the class if this is a method, otherwise None.
 
     Examples:
-        `@cache\ndef add(a, b):\n    """Sum."""\n    return a + b` maps to:
+        `@cache\ndef add(a, b):\n    'Sum.'\n    return a + b` maps to:
         ParsedFunction(
             name="add",
             signature="def add(a, b):",
@@ -106,7 +106,7 @@ class ParsedClass:
         file_path: The absolute path to the file containing this class.
 
     Examples:
-        `class API(Base):\n    """Doc."""\n    def get(self): ...` maps to:
+        `class API(Base):\n    'Doc.'\n    def get(self): ...` maps to:
         ParsedClass(
             name="API",
             bases=["Base"],
