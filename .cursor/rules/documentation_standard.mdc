@@ -1,0 +1,26 @@
+---
+description: Enforces Google Style docstrings and prohibits inline comments for attributes in Python files.
+globs: ["**/*.py"]
+alwaysApply: false
+---
+
+# Documentation Standards (Google Style)
+
+Always adhere to these rules when writing or refactoring Python code in this repository.
+
+## Python Docstrings
+- **Google Style**: All functions, classes, and modules must use the Google Python Style Guide docstring format.
+- **Attributes**: For dataclasses and classes, all field metadata must be documented in the `Attributes:` section of the class docstring.
+- **Arguments**: Use the `Args:` section for function/method parameters.
+- **Returns**: Use the `Returns:` section for function/method return values.
+- **Examples**: Include at least one practical example in the class-level docstring showing usage or code-to-model mapping.
+
+## Prohibited Patterns
+- **No Inline Comments**: Do NOT use inline comments for attribute descriptions (e.g., `x: int # description`).
+- **No Placeholders**: Do NOT leave `TODO` or `...` placeholders in documentation.
+
+## Aesthetics (Internal Tools/UI)
+If the Python code involves UI generation or styling tokens:
+- Use **HSL tailored colors**.
+- Implement **rich aesthetics** with modern typography and dark modes.
+- Ensure **dynamic design** with hover effects and micro-animations.
