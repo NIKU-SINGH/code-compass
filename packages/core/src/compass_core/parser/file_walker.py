@@ -1,26 +1,16 @@
 """Core utilities for discovering Python source files in a repository.
 
-This module provides high-performance, parallel file traversal with support for 
-repository-wide ignores (via .gitignore) and size-based filtering.
-
-Key Features:
-- Respects .gitignore using pathspec rules.
-- Skips common development directories (.git, node_modules, etc.).
-- Performance-oriented traversal with parallel processing support.
-- Configurable file size limits to avoid oversized symbolic or data files.
+Respects .gitignore rules and skips common development directories.
+Applies a file size limit to avoid oversized or generated files.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Iterator
 from pathlib import Path
-from typing import TypeVar
 
 import pathspec
-
-T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
 
@@ -176,34 +166,3 @@ def _should_skip_file(entry: Path, root: Path, spec: pathspec.PathSpec | None) -
     return False
 
 
-def ingest_parallel(
-    root: Path,
-    process_file: Callable[[Path], T],
-    *,
-    max_workers: int | None = None,
-) -> Iterator[tuple[Path, T]]:
-    """Walk a repository root and process .py files in parallel.
-
-    Leverages a thread pool for concurrent file processing. This is particularly
-    effective for CPU-bound tasks (like parsing) when the underlying logic
-    releases the GIL (e.g., Tree-sitter's C extensions).
-
-    Args:
-        root: Repository root directory passed to :func:`walk_python_files`.
-        process_file: A callable that accepts a :class:`~pathlib.Path` and returns 
-            a result of type T.
-        max_workers: Thread-pool size. Defaults to the executor choice
-            (usually `min(32, cpu_count + 4)`).
-
-    Yields:
-        Tuples of `(path, result)` in order of completion.
-
-    Raises:
-        Any exception raised by *process_file* will be propagated here.
-    """
-    files = list(walk_python_files(root))
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        future_to_path = {pool.submit(process_file, f): f for f in files}
-        for future in as_completed(future_to_path):
-            path = future_to_path[future]
-            yield path, future.result()
