@@ -63,11 +63,27 @@ def main(ctx: typer.Context):
 
 
 @app.command()
-def index(path: str = typer.Argument(..., help="Path to the repository to index")):
+def index(
+    path: str = typer.Argument(..., help="Path to the repository to index"),
+    db: str = typer.Option(None, "--db", help="Path to LadybugDB database (default: <repo>/.compass/graph.ladybug)"),
+    workers: int = typer.Option(None, "--workers", help="Number of parallel parse workers"),
+):
     """Index a repository for code intelligence."""
-    console.print(f"[bold blue]Indexing repository at:[/bold blue] {path}")
-    # TODO: Connect to compass-core for indexing
-    console.print("[green]Indexing complete (mocked).[/green]")
+    from pathlib import Path
+    from compass_core.indexer.engine import index_repo
+
+    repo_path = Path(path).resolve()
+    db_path = Path(db).resolve() if db else None
+
+    console.print(f"[bold blue]Indexing repository at:[/bold blue] {repo_path}")
+
+    result = index_repo(repo_path, db_path=db_path, max_workers=workers or None)
+
+    console.print(
+        f"[green]Done.[/green] "
+        f"{result.file_count} files · {result.class_count} classes · "
+        f"{result.function_count} functions · {result.elapsed_seconds:.1f}s"
+    )
 
 
 @app.command()
