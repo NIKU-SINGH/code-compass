@@ -1,18 +1,20 @@
 """Persist a ResolvedGraph into LadybugDB.
 
-This module is a pure sink — it makes zero semantic decisions. Every node
-and edge it writes has already been fully resolved by the resolver layer.
+This module acts as a pure sink for the graph resolution process. It is
+responsible for taking a fully resolved graph and persisting its nodes
+and edges into the underlying graph database.
 
-Write order (always nodes before edges):
+The writing process follows a strict order, ensuring nodes are created
+before the edges that connect them:
   1. File nodes
   2. Class nodes
   3. Function nodes
-  4. ExternalFunction nodes  (derived from external_call_edges)
-  5. CONTAINS edges          (File→Class, File→Function, Class→Function)
+  4. ExternalFunction nodes (derived from call edges to external libraries)
+  5. CONTAINS edges (File -> Class, File -> Function, Class -> Function)
   6. IMPORTS edges
   7. INHERITS edges
-  8. CALLS edges
-  9. CALLS_EXTERN edges
+  8. CALLS edges (Internal)
+  9. CALLS_EXTERN edges (External)
 """
 
 from __future__ import annotations
@@ -28,11 +30,18 @@ logger = logging.getLogger(__name__)
 
 
 def write(db: GraphDB, graph: ResolvedGraph) -> None:
-    """Write all nodes and edges from *graph* into *db*.
+    """Write all nodes and edges from a resolved graph into the database.
+
+    This function orchestrates the batch writing of a complete `ResolvedGraph`
+    structure. It ensures that all structural entities (files, classes,
+    functions) are persisted as nodes before establishing the relationships
+    (imports, inheritance, calls) as edges.
 
     Args:
-        db:    Open GraphDB connection (schema must already exist).
-        graph: Fully resolved graph produced by the resolver.
+        db: An active `GraphDB` connection. The database schema must already
+            be initialized before calling this function.
+        graph: A `ResolvedGraph` instance containing all extracted and
+            resolved nodes and edges for the project.
     """
     # --- Nodes first ---
     for pf in graph.files:
@@ -84,6 +93,12 @@ def write(db: GraphDB, graph: ResolvedGraph) -> None:
 
 
 def _write_file(db: GraphDB, f: ParsedFile) -> None:
+    """Persist a file node to the database.
+
+    Args:
+        db: Active database connection.
+        f: The `ParsedFile` metadata containing the path and module info.
+    """
     db.execute(
         """
         MERGE (n:File {path: $path})
@@ -95,6 +110,13 @@ def _write_file(db: GraphDB, f: ParsedFile) -> None:
 
 
 def _write_class(db: GraphDB, cls: ParsedClass) -> None:
+    """Persist a class node to the database.
+
+    Args:
+        db: Active database connection.
+        cls: The `ParsedClass` metadata, including 1-indexed line numbers
+            and source content.
+    """
     db.execute(
         """
         MERGE (n:Class {id: $id})
@@ -121,6 +143,13 @@ def _write_class(db: GraphDB, cls: ParsedClass) -> None:
 
 
 def _write_function(db: GraphDB, func: ParsedFunction) -> None:
+    """Persist a function or method node to the database.
+
+    Args:
+        db: Active database connection.
+        func: The `ParsedFunction` metadata, including 1-indexed line numbers,
+            signature details, and decorators.
+    """
     db.execute(
         """
         MERGE (n:Function {id: $id})
@@ -155,6 +184,16 @@ def _write_function(db: GraphDB, func: ParsedFunction) -> None:
 
 
 def _write_external_function(db: GraphDB, full_ref: str, library: str) -> None:
+    """Persist an external function node to the database.
+
+    External functions are identified during the call resolution phase
+    when a call target is found to reside in an external library.
+
+    Args:
+        db: Active database connection.
+        full_ref: The fully qualified reference to the function (e.g., 'os.path.join').
+        library: The name of the external library containing the function.
+    """
     db.execute(
         """
         MERGE (n:ExternalFunction {full_ref: $full_ref})
@@ -171,6 +210,15 @@ def _write_external_function(db: GraphDB, full_ref: str, library: str) -> None:
 
 
 def _write_contains(db: GraphDB, f: ParsedFile) -> None:
+    """Write structural containment edges (CONTAINS) for a file.
+
+    Establishes relationships between a file and its defined classes/functions,
+    as well as between classes and their methods.
+
+    Args:
+        db: Active database connection.
+        f: The `ParsedFile` whose internal structure is being persisted.
+    """
     for cls in f.classes:
         _exec(db, "MATCH (a:File {path: $src}), (b:Class {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
               {"src": f.path, "dst": class_id(cls)})
@@ -188,7 +236,17 @@ def _write_contains(db: GraphDB, f: ParsedFile) -> None:
 
 
 def _exec(db: GraphDB, query: str, params: dict) -> None:
-    """Execute a query, logging and swallowing errors so one bad edge never aborts the batch."""
+    """Execute a database query with error containment.
+
+    This utility ensures that failures in individual edge creation (e.g., due to
+    unexpected resolution states) do not abort the entire batch writing process.
+    Errors are logged at DEBUG level.
+
+    Args:
+        db: Active database connection.
+        query: The Cypher query string to execute.
+        params: Key-value pairs for query parameterization.
+    """
     try:
         db.execute(query, params)
     except Exception:
