@@ -1,18 +1,25 @@
-"""Public entry point for the resolution phase.
+"""Public entry point for the resolution phase (Pass 2).
 
 This module takes the raw output of Pass 1 (a list of ParsedFile objects) and 
-produces a ResolvedGraph. The ResolvedGraph contains a flat structure of nodes 
-and fully resolved, typed edges that can be persisted by the graph writer 
-without making further semantic decisions.
+orchestrates the semantic resolution of symbols, imports, inheritance, 
+and function calls to produce a ResolvedGraph.
+
+The resulting graph represents the complete architecture of the codebase in 
+a flat, serializable structure that is ready for ingestion into the graph 
+database (Pass 3).
 
 Example:
+    >>> from compass_core.parser.models import ParsedFile
     >>> from compass_core.resolver.resolver import resolve
-    >>> resolved = resolve(parsed_files)
+    >>> files = [ParsedFile(path="main.py", functions=[], classes=[])]
+    >>> graph = resolve(files)
+    >>> print(f"Resolved {len(graph.call_edges)} call edges.")
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from compass_core.parser.models import ParsedFile
 from compass_core.resolver import call_resolver, import_map, symbol_table
@@ -29,10 +36,13 @@ from compass_core.resolver.symbol_table import class_id, function_id
 logger = logging.getLogger(__name__)
 
 
-def resolve(files: list[ParsedFile]) -> ResolvedGraph:
+def resolve(
+    files: list[ParsedFile],
+    on_progress: Callable[[int, int], None] | None = None,
+) -> ResolvedGraph:
     """Resolve all semantic relationships between parsed files.
 
-    This function orchestrates the resolution pipeline:
+    This function orchestrates a multi-stage resolution pipeline:
       1. Builds a global symbol table (qualified name -> node ID).
       2. Builds a per-file import map (local name -> origin file).
       3. Extracts file-level import dependencies.
@@ -41,6 +51,9 @@ def resolve(files: list[ParsedFile]) -> ResolvedGraph:
 
     Args:
         files: A list of ParsedFile objects produced by the parser phase.
+        on_progress: Optional callback ``on_progress(current, total)``, called
+            once after each of the 5 internal pipeline steps. Useful for tracking
+            long-running indexing tasks.
 
     Returns:
         A ResolvedGraph instance containing all files and resolved edges.
@@ -51,13 +64,23 @@ def resolve(files: list[ParsedFile]) -> ResolvedGraph:
     all_files: dict[str, ParsedFile] = {f.path: f for f in files}
 
     sym_table = symbol_table.build(files)
+    if on_progress:
+        on_progress(1, 5)
     imp_map = import_map.build(files)
+    if on_progress:
+        on_progress(2, 5)
 
     graph = ResolvedGraph(files=files)
 
     _collect_import_edges(graph, files, imp_map)
+    if on_progress:
+        on_progress(3, 5)
     _collect_inherit_edges(graph, files, sym_table)
+    if on_progress:
+        on_progress(4, 5)
     _collect_call_edges(graph, files, sym_table, imp_map, all_files)
+    if on_progress:
+        on_progress(5, 5)
 
     logger.info(
         "Resolution complete: %d import, %d inherit, %d call, %d external-call edges",
@@ -79,12 +102,16 @@ def _collect_import_edges(
     files: list[ParsedFile],
     imp_map: import_map.ImportMap,
 ) -> None:
-    """Extract and add ImportEdge objects to the graph.
+    """Extract and add file-level import dependencies to the graph.
+
+    This analysis constructs the high-level module dependency graph by 
+    traversing the import maps of all files.
 
     Args:
-        graph: The ResolvedGraph being populated.
-        files: The list of parsed files to process.
-        imp_map: The pre-calculated mapping of local names to source paths.
+        graph: The ResolvedGraph being populated with edges.
+        files: The list of parsed files to process for imports.
+        imp_map: The pre-calculated mapping of local names to source paths 
+            used to resolve relative and alias imports.
     """
     seen: set[tuple[str, str]] = set()
     for pf in files:
@@ -103,12 +130,16 @@ def _collect_inherit_edges(
     files: list[ParsedFile],
     sym_table: symbol_table.SymbolTable,
 ) -> None:
-    """Extract and add InheritEdge objects to the graph.
+    """Extract and add class inheritance relationships to the graph.
+
+    Traces the inheritance chain for every class in the input file list to 
+    connect children to their parent classes in the resolved graph.
 
     Args:
-        graph: The ResolvedGraph being populated.
-        files: The list of parsed files to process.
-        sym_table: The global symbol table used to resolve class names.
+        graph: The ResolvedGraph being populated with edges.
+        files: The list of parsed files containing classes to process.
+        sym_table: The global symbol table used to resolve class names to 
+            canonical node IDs.
     """
     for pf in files:
         for cls in pf.classes:
@@ -128,8 +159,16 @@ def _collect_call_edges(
 ) -> None:
     """Analyze all function bodies to resolve call sites into graph edges.
 
+    This is the most complex phase of resolution, as it must trace calls 
+    through imports, same-module functions, and class methods.
+
+    Note:
+        Dynamic calls, wildcard imports that can't be resolved, and 
+        calls to standard libraries are documented in the graph but 
+        may result in ExternalCallEdge if not found in the local codebase.
+
     Args:
-        graph: The ResolvedGraph being populated.
+        graph: The ResolvedGraph being populated with edges.
         files: The list of parsed files to process.
         sym_table: The global symbol table for looking up target IDs.
         imp_map: The per-file import map for tracing external vs internal names.
