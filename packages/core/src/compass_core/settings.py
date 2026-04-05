@@ -50,7 +50,7 @@ class Settings(BaseSettings):
         if os.environ.get("STAGE", "").lower() == "production":
             return env_settings, init_settings, file_secret_settings
 
-        return dotenv_settings, env_settings, init_settings, file_secret_settings
+        return env_settings, dotenv_settings, init_settings, file_secret_settings
 
 
 settings = Settings()

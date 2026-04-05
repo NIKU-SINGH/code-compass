@@ -6,6 +6,7 @@ __pycache__/
 dist/
 build/
 .eggs/
+.compass/
 *.egg
 .venv/
 venv/
