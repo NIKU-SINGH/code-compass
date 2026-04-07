@@ -19,9 +19,9 @@ Example:
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 
 from compass_core.parser.models import ParsedFile
+from compass_core.progress import ProgressReporter
 from compass_core.resolver import call_resolver, import_map, symbol_table
 from compass_core.resolver.models import (
     EXTERNAL,
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 def resolve(
     files: list[ParsedFile],
-    on_progress: Callable[[int, int], None] | None = None,
+    reporter: ProgressReporter | None = None,
 ) -> ResolvedGraph:
     """Resolve all semantic relationships between parsed files.
 
@@ -51,9 +51,8 @@ def resolve(
 
     Args:
         files: A list of ParsedFile objects produced by the parser phase.
-        on_progress: Optional callback ``on_progress(current, total)``, called
-            once after each of the 5 internal pipeline steps. Useful for tracking
-            long-running indexing tasks.
+        reporter: Optional progress reporter. Receives ``"resolve"`` updates
+            once after each of the 5 internal pipeline steps.
 
     Returns:
         A ResolvedGraph instance containing all files and resolved edges.
@@ -64,23 +63,23 @@ def resolve(
     all_files: dict[str, ParsedFile] = {f.path: f for f in files}
 
     sym_table = symbol_table.build(files)
-    if on_progress:
-        on_progress(1, 5)
+    if reporter:
+        reporter.update("resolve", 1, 5)
     imp_map = import_map.build(files)
-    if on_progress:
-        on_progress(2, 5)
+    if reporter:
+        reporter.update("resolve", 2, 5)
 
     graph = ResolvedGraph(files=files)
 
     _collect_import_edges(graph, files, imp_map)
-    if on_progress:
-        on_progress(3, 5)
+    if reporter:
+        reporter.update("resolve", 3, 5)
     _collect_inherit_edges(graph, files, sym_table)
-    if on_progress:
-        on_progress(4, 5)
+    if reporter:
+        reporter.update("resolve", 4, 5)
     _collect_call_edges(graph, files, sym_table, imp_map, all_files)
-    if on_progress:
-        on_progress(5, 5)
+    if reporter:
+        reporter.update("resolve", 5, 5)
 
     logger.info(
         "Resolution complete: %d import, %d inherit, %d call, %d external-call edges",
