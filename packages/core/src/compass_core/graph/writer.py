@@ -20,56 +20,139 @@ before the edges that connect them:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 
 from compass_core.graph.db import GraphDB
 from compass_core.parser.models import ParsedClass, ParsedFile, ParsedFunction
+from compass_core.progress import ProgressReporter
 from compass_core.resolver.models import ResolvedGraph
 from compass_core.resolver.symbol_table import class_id, function_id
 
 logger = logging.getLogger(__name__)
 
 
-def write(db: GraphDB, graph: ResolvedGraph) -> None:
+@dataclass
+class WriteResult:
+    """Statistics returned after persisting a graph to the database.
+
+    Attributes:
+        node_count: Number of nodes successfully written to the DB.
+        edge_count: Number of edges successfully written to the DB.
+    """
+
+    node_count: int
+    edge_count: int
+
+
+def _calculate_expected_nodes(graph: ResolvedGraph) -> int:
+    """Calculate the exact number of nodes the writer will attempt to persist.
+
+    Counts one File node per file, one Class node per class, one Function
+    node per top-level function and per method, and one ExternalFunction
+    node per unique ``full_ref`` across all external call edges.
+    """
+    unique_ext = {e.full_ref for e in graph.external_call_edges}
+    return (
+        sum(
+            1 + len(f.classes) + sum(len(c.methods) for c in f.classes) + len(f.functions)
+            for f in graph.files
+        )
+        + len(unique_ext)
+    )
+
+
+def _calculate_expected_edges(graph: ResolvedGraph) -> int:
+    """Calculate the exact number of edges the writer will attempt to persist.
+
+    Counts one CONTAINS edge per class, top-level function, and method,
+    plus one edge each for every import, inheritance, internal call, and
+    external call relationship.
+    """
+    return (
+        sum(
+            len(f.classes) + len(f.functions) + sum(len(c.methods) for c in f.classes)
+            for f in graph.files
+        )
+        + len(graph.import_edges)
+        + len(graph.inherit_edges)
+        + len(graph.call_edges)
+        + len(graph.external_call_edges)
+    )
+
+
+def write(
+    db: GraphDB,
+    graph: ResolvedGraph,
+    reporter: ProgressReporter | None = None,
+) -> WriteResult:
     """Write all nodes and edges from a resolved graph into the database.
 
-    This function orchestrates the batch writing of a complete `ResolvedGraph`
-    structure. It ensures that all structural entities (files, classes,
-    functions) are persisted as nodes before establishing the relationships
-    (imports, inheritance, calls) as edges.
-
     Args:
-        db: An active `GraphDB` connection. The database schema must already
-            be initialized before calling this function.
-        graph: A `ResolvedGraph` instance containing all extracted and
-            resolved nodes and edges for the project.
+        db: An active ``GraphDB`` connection with an initialized schema.
+        graph: A ``ResolvedGraph`` with all extracted nodes and edges.
+        reporter: Optional progress reporter. Receives ``"write_nodes"``
+            updates during node insertion and ``"write_edges"`` updates
+            during edge insertion.
+
+    Returns:
+        WriteResult with final node and edge counts. Counts reflect rows
+        actually written — failed DB writes are not included.
     """
+    node_total = _calculate_expected_nodes(graph)
+    edge_total = _calculate_expected_edges(graph)
+    node_count = 0
+    edge_count = 0
+
+    def _node() -> None:
+        nonlocal node_count
+        node_count += 1
+        if reporter:
+            reporter.update("write_nodes", node_count, node_total)
+
+    def _edge() -> None:
+        nonlocal edge_count
+        edge_count += 1
+        if reporter:
+            reporter.update("write_edges", edge_count, edge_total)
+
     # --- Nodes first ---
     for pf in graph.files:
         _write_file(db, pf)
+        _node()
         for cls in pf.classes:
             _write_class(db, cls)
+            _node()
             for method in cls.methods:
                 _write_function(db, method)
+                _node()
         for func in pf.functions:
             _write_function(db, func)
+            _node()
 
+    seen_ext: set[str] = set()
     for ext_edge in graph.external_call_edges:
-        _write_external_function(db, ext_edge.full_ref, ext_edge.library)
+        if ext_edge.full_ref not in seen_ext:
+            _write_external_function(db, ext_edge.full_ref, ext_edge.library)
+            seen_ext.add(ext_edge.full_ref)
+            _node()
 
     # --- Edges second ---
     for pf in graph.files:
-        _write_contains(db, pf)
+        _write_contains(db, pf, _edge)
 
     for edge in graph.import_edges:
-        _exec(db, "MATCH (a:File {path: $src}), (b:File {path: $dst}) CREATE (a)-[:IMPORTS]->(b)",
-              {"src": edge.from_path, "dst": edge.to_path})
+        if _exec(db, "MATCH (a:File {path: $src}), (b:File {path: $dst}) CREATE (a)-[:IMPORTS]->(b)",
+                 {"src": edge.from_path, "dst": edge.to_path}):
+            _edge()
 
     for edge in graph.inherit_edges:
-        _exec(db, "MATCH (a:Class {id: $src}), (b:Class {id: $dst}) CREATE (a)-[:INHERITS]->(b)",
-              {"src": edge.child_id, "dst": edge.parent_id})
+        if _exec(db, "MATCH (a:Class {id: $src}), (b:Class {id: $dst}) CREATE (a)-[:INHERITS]->(b)",
+                 {"src": edge.child_id, "dst": edge.parent_id}):
+            _edge()
 
     for edge in graph.call_edges:
-        _exec(
+        if _exec(
             db,
             """
             MATCH (a:Function {id: $src}), (b:Function {id: $dst})
@@ -77,14 +160,18 @@ def write(db: GraphDB, graph: ResolvedGraph) -> None:
             """,
             {"src": edge.caller_id, "dst": edge.callee_id,
              "conf": edge.confidence, "ctype": edge.call_type, "line": edge.line},
-        )
+        ):
+            _edge()
 
     for edge in graph.external_call_edges:
-        _exec(
+        if _exec(
             db,
             "MATCH (a:Function {id: $src}), (b:ExternalFunction {full_ref: $dst}) CREATE (a)-[:CALLS_EXTERN {line: $line}]->(b)",
             {"src": edge.caller_id, "dst": edge.full_ref, "line": edge.line},
-        )
+        ):
+            _edge()
+
+    return WriteResult(node_count=node_count, edge_count=edge_count)
 
 
 # ---------------------------------------------------------------------------
@@ -209,25 +296,30 @@ def _write_external_function(db: GraphDB, full_ref: str, library: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _write_contains(db: GraphDB, f: ParsedFile) -> None:
+def _write_contains(db: GraphDB, f: ParsedFile, on_edge: Callable[[], None]) -> None:
     """Write structural containment edges (CONTAINS) for a file.
 
     Establishes relationships between a file and its defined classes/functions,
-    as well as between classes and their methods.
+    as well as between classes and their methods. Calls ``on_edge`` once per
+    edge successfully written, enabling granular progress reporting.
 
     Args:
         db: Active database connection.
         f: The `ParsedFile` whose internal structure is being persisted.
+        on_edge: Callback invoked once for each edge successfully written.
     """
     for cls in f.classes:
-        _exec(db, "MATCH (a:File {path: $src}), (b:Class {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
-              {"src": f.path, "dst": class_id(cls)})
+        if _exec(db, "MATCH (a:File {path: $src}), (b:Class {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+                 {"src": f.path, "dst": class_id(cls)}):
+            on_edge()
         for method in cls.methods:
-            _exec(db, "MATCH (a:Class {id: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
-                  {"src": class_id(cls), "dst": function_id(method)})
+            if _exec(db, "MATCH (a:Class {id: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+                     {"src": class_id(cls), "dst": function_id(method)}):
+                on_edge()
     for func in f.functions:
-        _exec(db, "MATCH (a:File {path: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
-              {"src": f.path, "dst": function_id(func)})
+        if _exec(db, "MATCH (a:File {path: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+                 {"src": f.path, "dst": function_id(func)}):
+            on_edge()
 
 
 # ---------------------------------------------------------------------------
@@ -235,19 +327,23 @@ def _write_contains(db: GraphDB, f: ParsedFile) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _exec(db: GraphDB, query: str, params: dict) -> None:
-    """Execute a database query with error containment.
+def _exec(db: GraphDB, query: str, params: dict) -> bool:
+    """Execute a database query, returning whether it succeeded.
 
-    This utility ensures that failures in individual edge creation (e.g., due to
-    unexpected resolution states) do not abort the entire batch writing process.
-    Errors are logged at DEBUG level.
+    Failures in individual edge creation (e.g. due to unresolved MATCH targets)
+    do not abort the batch. Errors are logged at DEBUG level.
 
     Args:
         db: Active database connection.
         query: The Cypher query string to execute.
         params: Key-value pairs for query parameterization.
+
+    Returns:
+        ``True`` if the query executed without error, ``False`` otherwise.
     """
     try:
         db.execute(query, params)
+        return True
     except Exception:
         logger.debug("DB write failed — query: %s | params: %s", query.strip(), params, exc_info=True)
+        return False

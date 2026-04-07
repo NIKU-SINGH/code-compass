@@ -46,6 +46,7 @@ from compass_core.graph.writer import write
 from compass_core.parser.extractor import extract_file
 from compass_core.parser.file_walker import walk_python_files
 from compass_core.parser.models import ParsedFile
+from compass_core.progress import ProgressReporter
 from compass_core.resolver.resolver import resolve
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,7 @@ def index_repo(
     repo_path: Path,
     db_path: Path | None = None,
     max_workers: int | None = None,
+    reporter: ProgressReporter | None = None,
 ) -> IndexResult:
     """Index a repository: parse all Python files and write a knowledge graph.
 
@@ -100,6 +102,8 @@ def index_repo(
         db_path: Where to create/open the LadybugDB database. Defaults to
             ``repo_path/.compass/graph.ladybug``.
         max_workers: ProcessPoolExecutor pool size. Defaults to ``os.cpu_count()``.
+        reporter: Optional progress reporter. Receives updates for
+            ``"parse"``, ``"resolve"``, ``"write_nodes"``, and ``"write_edges"`` phases.
 
     Returns:
         IndexResult: Summary of counts and elapsed time.
@@ -115,12 +119,16 @@ def index_repo(
     # --- Phase 1: parallel parse ---
     files = list(walk_python_files(repo_path))
     logger.info("Phase 1: parsing %d files with max_workers=%s", len(files), max_workers)
-    parsed_files = _run_phase1(files, repo_path, max_workers)
+    parsed_files, _ = _run_phase1(files, repo_path, max_workers, reporter=reporter)
     logger.info("Phase 1 complete: %d files parsed successfully", len(parsed_files))
 
-    # --- Phase 2 & 3: resolve + write graph ---
+    # --- Phase 2: resolve ---
+    graph = resolve(parsed_files, reporter=reporter)
+
+    # --- Phase 3: write graph ---
     with GraphDB(db_path) as db:
-        _run_phase2_and_3(db, parsed_files)
+        create_schema(db)
+        write(db, graph, reporter=reporter)
 
     elapsed = time.monotonic() - start
 
@@ -143,7 +151,38 @@ def index_repo(
 
 
 # ---------------------------------------------------------------------------
-# Phase 1 — parallel parse
+# Public phase helpers (used by CLI for granular display)
+# ---------------------------------------------------------------------------
+
+
+def parse_files(
+    files: list[Path],
+    repo_root: Path,
+    max_workers: int | None = None,
+    reporter: ProgressReporter | None = None,
+) -> tuple[list[ParsedFile], list[Path]]:
+    """Parse Python files in parallel using tree-sitter.
+
+    Args:
+        files: Absolute paths to the ``.py`` files to parse.
+        repo_root: Repository root for module-name derivation.
+        max_workers: Process pool size. Defaults to ``os.cpu_count()``.
+        reporter: Optional progress reporter. Receives ``"parse"`` updates.
+
+    Returns:
+        Tuple of (successfully parsed files, paths that failed to parse).
+    """
+    return _run_phase1(files, repo_root, max_workers, reporter=reporter)
+
+
+def save_metadata(repo_path: Path) -> None:
+    """Write ``.compass/metadata.json`` with the current HEAD commit hash."""
+    commit = _get_git_commit(repo_path)
+    _save_metadata(repo_path, commit)
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 — parallel parse (internal)
 # ---------------------------------------------------------------------------
 
 
@@ -174,60 +213,48 @@ def _run_phase1(
     files: list[Path],
     repo_root: Path,
     max_workers: int | None,
-) -> list[ParsedFile]:
+    reporter: ProgressReporter | None = None,
+) -> tuple[list[ParsedFile], list[Path]]:
     """Parse files in parallel using ProcessPoolExecutor.
 
     Args:
         files: Absolute paths to all .py files to parse.
         repo_root: Repository root passed to each worker for module name derivation.
         max_workers: Pool size. Defaults to ``os.cpu_count()``.
+        reporter: Optional progress reporter. Receives ``"parse"`` updates.
 
     Returns:
-        list[ParsedFile]: Only successfully parsed files (None results are dropped).
+        Tuple of (successfully parsed files, paths that failed to parse).
     """
     if not files:
-        return []
+        return [], []
 
+    total = len(files)
     # CPU-bound work — use process count, not thread count
     workers = max_workers or os.cpu_count() or 1
     args = [(str(f), str(repo_root)) for f in files]
 
     parsed: list[ParsedFile] = []
+    failed: list[Path] = []
+    done = 0
     with ProcessPoolExecutor(max_workers=workers) as executor:
         future_to_path = {executor.submit(_parse_worker, arg): arg[0] for arg in args}
         for future in as_completed(future_to_path):
             path_str = future_to_path[future]
+            done += 1
             try:
                 result = future.result()
                 if result is not None:
                     parsed.append(result)
+                else:
+                    failed.append(Path(path_str))
             except Exception:
                 logger.exception("Worker raised exception for %s", path_str)
-    return parsed
+                failed.append(Path(path_str))
+            if reporter:
+                reporter.update("parse", done, total)
+    return parsed, failed
 
-
-# ---------------------------------------------------------------------------
-# Phase 2 & 3 — resolve + write
-# ---------------------------------------------------------------------------
-
-
-def _run_phase2_and_3(db: GraphDB, parsed_files: list[ParsedFile]) -> None:
-    """Resolve all relationships and write the graph to LadybugDB.
-
-    Phase 2 builds the symbol table and resolves every raw call into a typed,
-    confidence-scored edge. Phase 3 persists the result as nodes and edges.
-
-    Args:
-        db: Open LadybugDB connection.
-        parsed_files: All successfully parsed files from phase 1.
-    """
-    logger.info("Phase 2: resolving %d files", len(parsed_files))
-    graph = resolve(parsed_files)
-
-    logger.info("Phase 3: writing graph to DB")
-    create_schema(db)
-    write(db, graph)
-    logger.info("Phase 3 complete")
 
 
 # ---------------------------------------------------------------------------
