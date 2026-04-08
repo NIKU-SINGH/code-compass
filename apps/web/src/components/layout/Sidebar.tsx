@@ -1,3 +1,7 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Home,
   ListTodo,
@@ -6,6 +10,7 @@ import {
   HelpCircle,
   Library,
   Compass,
+  PanelLeft,
 } from "lucide-react";
 import {
   Sidebar,
@@ -20,18 +25,18 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 const NAV_ITEMS = [
   { label: "Home", icon: Home, href: "/" },
-  { label: "Tasks", icon: ListTodo, href: "/tasks", active: true },
-  { label: "Automations", icon: Zap, href: "/automations" },
+  { label: "Projects", icon: ListTodo, href: "/projects" },
+  { label: "Automations", icon: Zap, href: "#" },
 ];
 
-const RECENT_TASKS = [
-  { id: "1", label: "Repository Purpose Overview", active: true },
-  { id: "2", label: "Explain the purpose and overview...", active: false },
-  { id: "3", label: "Set up CI pipeline", active: false },
+const RECENT_PROJECTS = [
+  { id: "demo", label: "code-compass", active: true },
+  { id: "sample-1", label: "my-api-service", active: false },
 ];
 
 const FOOTER_ITEMS = [
@@ -41,21 +46,42 @@ const FOOTER_ITEMS = [
 ];
 
 export function AppSidebar() {
+  const pathname = usePathname();
+  const { state, toggleSidebar } = useSidebar();
+  const collapsed = state === "collapsed";
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <a href="/">
-                <div className="size-7 rounded bg-primary flex items-center justify-center shrink-0">
-                  <Compass className="size-4 text-primary-foreground" />
-                </div>
-                <span className="font-semibold text-foreground">Code Compass</span>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex items-center">
+          <SidebarMenu className="flex-1">
+            <SidebarMenuItem>
+              {collapsed ? (
+                <SidebarMenuButton
+                  size="lg"
+                  onClick={toggleSidebar}
+                  className="group/logo"
+                  tooltip="Expand sidebar"
+                >
+                  <div className="size-7 rounded bg-primary flex items-center justify-center shrink-0 relative">
+                    <Compass className="size-4 text-primary-foreground transition-opacity group-hover/logo:opacity-0" />
+                    <PanelLeft className="size-4 text-primary-foreground absolute inset-0 m-auto opacity-0 transition-opacity group-hover/logo:opacity-100" />
+                  </div>
+                </SidebarMenuButton>
+              ) : (
+                <SidebarMenuButton size="lg" asChild>
+                  <Link href="/">
+                    <div className="size-7 rounded bg-primary flex items-center justify-center shrink-0">
+                      <Compass className="size-4 text-primary-foreground" />
+                    </div>
+                    <span className="font-semibold text-foreground">Code Compass</span>
+                  </Link>
+                </SidebarMenuButton>
+              )}
+            </SidebarMenuItem>
+          </SidebarMenu>
+          {!collapsed && <SidebarTrigger />}
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
@@ -65,11 +91,11 @@ export function AppSidebar() {
             <SidebarMenu>
               {NAV_ITEMS.map((item) => (
                 <SidebarMenuItem key={item.label}>
-                  <SidebarMenuButton asChild isActive={item.active}>
-                    <a href={item.href}>
+                  <SidebarMenuButton asChild isActive={pathname === item.href}>
+                    <Link href={item.href}>
                       <item.icon />
                       <span>{item.label}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -79,22 +105,25 @@ export function AppSidebar() {
 
         <SidebarSeparator />
 
-        {/* Recent Tasks */}
+        {/* Recent Projects */}
         <SidebarGroup>
-          <SidebarGroupLabel>Recent Tasks</SidebarGroupLabel>
+          <SidebarGroupLabel>Recent Projects</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {RECENT_TASKS.map((task) => (
-                <SidebarMenuItem key={task.id}>
-                  <SidebarMenuButton asChild>
-                    <a href={`/tasks/${task.id}`}>
+              {RECENT_PROJECTS.map((project) => (
+                <SidebarMenuItem key={project.id}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === `/project/${project.id}`}
+                  >
+                    <Link href={`/project/${project.id}`}>
                       <span
                         className={`size-1.5 rounded-full shrink-0 ${
-                          task.active ? "bg-green-500" : "bg-muted-foreground/40"
+                          project.active ? "bg-green-500" : "bg-muted-foreground/40"
                         }`}
                       />
-                      <span className="truncate">{task.label}</span>
-                    </a>
+                      <span className="truncate">{project.label}</span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -109,10 +138,10 @@ export function AppSidebar() {
           {FOOTER_ITEMS.map((item) => (
             <SidebarMenuItem key={item.label}>
               <SidebarMenuButton asChild>
-                <a href={item.href}>
+                <Link href={item.href}>
                   <item.icon />
                   <span>{item.label}</span>
-                </a>
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
@@ -122,4 +151,3 @@ export function AppSidebar() {
   );
 }
 
-export { SidebarTrigger };

@@ -1,20 +1,24 @@
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar, SidebarTrigger } from "./Sidebar";
+"use client";
 
-interface MainLayoutProps {
-  children: React.ReactNode;
-}
+import { usePathname } from "next/navigation";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { AppSidebar } from "./Sidebar";
 
-export function MainLayout({ children }: MainLayoutProps) {
+export function MainLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const fullHeight = pathname.startsWith("/project/");
+
   return (
     <SidebarProvider>
       <AppSidebar />
-      <main className="flex-1 overflow-y-auto">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <SidebarTrigger />
-        </div>
+      <SidebarInset
+        className={[
+          "flex-1 min-w-0 flex flex-col",
+          fullHeight ? "h-svh overflow-hidden" : "overflow-y-auto",
+        ].join(" ")}
+      >
         {children}
-      </main>
+      </SidebarInset>
     </SidebarProvider>
   );
 }
