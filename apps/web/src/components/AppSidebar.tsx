@@ -85,7 +85,6 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Main navigation */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -105,7 +104,6 @@ export function AppSidebar() {
 
         <SidebarSeparator />
 
-        {/* Recent Projects */}
         <SidebarGroup>
           <SidebarGroupLabel>Recent Projects</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -150,4 +148,3 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
-
