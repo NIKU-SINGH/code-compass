@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import time
+import webbrowser
 from pathlib import Path
 
 import typer
@@ -143,6 +144,10 @@ def serve(
     web_dir = Path(__file__).parents[4] / "apps" / "web"
     procs: list[subprocess.Popen] = []
 
+    # Derive project ID from the current working directory name.
+    project_id = Path.cwd().name
+    frontend_url = f"{settings.FRONTEND_URL}/project/{project_id}"
+
     try:
         display.console.print(f"[bold green]Starting API server[/bold green] on http://{host}:{port}")
         procs.append(
@@ -153,8 +158,11 @@ def serve(
         )
 
         if not no_frontend and web_dir.exists():
-            display.console.print(f"[bold green]Starting frontend[/bold green] on {settings.FRONTEND_URL}")
+            display.console.print(f"[bold green]Starting frontend[/bold green] on {frontend_url}")
             procs.append(subprocess.Popen(["pnpm", "dev"], cwd=web_dir))
+            # Wait for the dev server to boot, then open the browser.
+            time.sleep(2)
+            webbrowser.open(frontend_url)
 
         display.console.print("[dim]Press Ctrl+C to stop.[/dim]")
 

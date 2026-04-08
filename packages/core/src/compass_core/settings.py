@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     API_PORT: int = Field(default=8000, description="Port the FastAPI server listens on")
 
     FRONTEND_HOST: str = Field(default="localhost", description="Host of the frontend dev server")
-    FRONTEND_PORT: int = Field(default=5173, description="Port of the frontend dev server")
+    FRONTEND_PORT: int = Field(default=3000, description="Port of the frontend dev server")
 
     @computed_field
     @property
