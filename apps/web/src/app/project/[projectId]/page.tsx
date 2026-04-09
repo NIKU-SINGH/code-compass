@@ -10,8 +10,8 @@ export default async function ProjectPage({ params }: Props) {
 
   return (
     <div className="flex-1 flex overflow-hidden">
-      <ChatPanel />
-      <RightPanel key={projectId} />
+      <ChatPanel projectId={projectId} />
+      <RightPanel key={projectId} projectId={projectId} />
     </div>
   );
 }

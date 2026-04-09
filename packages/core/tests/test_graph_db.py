@@ -1,12 +1,9 @@
-import unittest
+from pathlib import Path
 
 from compass_core.graph.db import GraphDB
 
 
-class TestGraphDB(unittest.TestCase):
-    def test_initialization(self):
-        # Initialize GraphDB and test the instance
-        self.assertIsNotNone(GraphDB())
-
-if __name__ == '__main__':
-    unittest.main()
+def test_initialization(tmp_path: Path) -> None:
+    db = GraphDB(tmp_path / "test.ladybug")
+    assert db is not None
+    db.close()

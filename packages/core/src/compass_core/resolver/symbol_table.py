@@ -127,9 +127,7 @@ def _index_method(
     table[f"{module_name}.{class_name}.{method.name}"] = node_id
 
 
-def _index_function(
-    table: SymbolTable, func: ParsedFunction, module_name: str
-) -> None:
+def _index_function(table: SymbolTable, func: ParsedFunction, module_name: str) -> None:
     """Indexes a top-level function in the symbol table.
 
     Updates the table with both the function's short name and its

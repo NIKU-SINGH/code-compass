@@ -64,9 +64,7 @@ def _module_index(files: list[ParsedFile]) -> dict[str, str]:
     return {pf.module_name: pf.path for pf in files}
 
 
-def _resolve_file_imports(
-    pf: ParsedFile, module_to_path: dict[str, str]
-) -> dict[str, str | None]:
+def _resolve_file_imports(pf: ParsedFile, module_to_path: dict[str, str]) -> dict[str, str | None]:
     """Resolve all imports in a single file to their source file paths.
 
     Args:

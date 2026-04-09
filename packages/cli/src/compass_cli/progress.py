@@ -23,8 +23,8 @@ _GOLD = "color(214)"
 # Ordered list of (phase_key, display_label). The order determines vertical
 # position in the terminal — earlier entries appear above later ones.
 _TASKS: list[tuple[Phase, str]] = [
-    ("parse",       "Parsing files      "),
-    ("resolve",     "Resolving symbols  "),
+    ("parse", "Parsing files      "),
+    ("resolve", "Resolving symbols  "),
     ("write_nodes", "Inserting nodes    "),
     ("write_edges", "Inserting edges    "),
 ]

@@ -1,11 +1,11 @@
 """Public entry point for the resolution phase (Pass 2).
 
-This module takes the raw output of Pass 1 (a list of ParsedFile objects) and 
-orchestrates the semantic resolution of symbols, imports, inheritance, 
+This module takes the raw output of Pass 1 (a list of ParsedFile objects) and
+orchestrates the semantic resolution of symbols, imports, inheritance,
 and function calls to produce a ResolvedGraph.
 
-The resulting graph represents the complete architecture of the codebase in 
-a flat, serializable structure that is ready for ingestion into the graph 
+The resulting graph represents the complete architecture of the codebase in
+a flat, serializable structure that is ready for ingestion into the graph
 database (Pass 3).
 
 Example:
@@ -103,13 +103,13 @@ def _collect_import_edges(
 ) -> None:
     """Extract and add file-level import dependencies to the graph.
 
-    This analysis constructs the high-level module dependency graph by 
+    This analysis constructs the high-level module dependency graph by
     traversing the import maps of all files.
 
     Args:
         graph: The ResolvedGraph being populated with edges.
         files: The list of parsed files to process for imports.
-        imp_map: The pre-calculated mapping of local names to source paths 
+        imp_map: The pre-calculated mapping of local names to source paths
             used to resolve relative and alias imports.
     """
     seen: set[tuple[str, str]] = set()
@@ -131,13 +131,13 @@ def _collect_inherit_edges(
 ) -> None:
     """Extract and add class inheritance relationships to the graph.
 
-    Traces the inheritance chain for every class in the input file list to 
+    Traces the inheritance chain for every class in the input file list to
     connect children to their parent classes in the resolved graph.
 
     Args:
         graph: The ResolvedGraph being populated with edges.
         files: The list of parsed files containing classes to process.
-        sym_table: The global symbol table used to resolve class names to 
+        sym_table: The global symbol table used to resolve class names to
             canonical node IDs.
     """
     for pf in files:
@@ -158,12 +158,12 @@ def _collect_call_edges(
 ) -> None:
     """Analyze all function bodies to resolve call sites into graph edges.
 
-    This is the most complex phase of resolution, as it must trace calls 
+    This is the most complex phase of resolution, as it must trace calls
     through imports, same-module functions, and class methods.
 
     Note:
-        Dynamic calls, wildcard imports that can't be resolved, and 
-        calls to standard libraries are documented in the graph but 
+        Dynamic calls, wildcard imports that can't be resolved, and
+        calls to standard libraries are documented in the graph but
         may result in ExternalCallEdge if not found in the local codebase.
 
     Args:

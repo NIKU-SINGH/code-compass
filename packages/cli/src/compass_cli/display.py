@@ -68,10 +68,16 @@ def help_commands() -> None:
     """
     console.print("[bold]Usage:[/bold]  compass [OPTIONS] COMMAND [ARGS]...\n")
     console.print("[bold]Commands:[/bold]")
-    console.print(f"  [bold {_GOLD}]index[/bold {_GOLD}]   Index a repository for code intelligence")
-    console.print(f"  [bold {_GOLD}]serve[/bold {_GOLD}]   Start the API server and frontend dev server")
+    console.print(
+        f"  [bold {_GOLD}]index[/bold {_GOLD}]   Index a repository for code intelligence"
+    )
+    console.print(
+        f"  [bold {_GOLD}]serve[/bold {_GOLD}]   Start the API server and frontend dev server"
+    )
     console.print()
-    console.print("[dim]Run [bold]compass COMMAND --help[/bold] for command-specific options.[/dim]")
+    console.print(
+        "[dim]Run [bold]compass COMMAND --help[/bold] for command-specific options.[/dim]"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -191,15 +197,12 @@ def next_steps() -> None:
 
     Includes the command to start the web UI.
     """
-    console.print(f"[bold]What's next:[/bold]")
+    console.print("[bold]What's next:[/bold]")
     console.print(
         f"  [bold {_GOLD}]compass serve[/bold {_GOLD}]            "
         f"Start the web UI and explore your codebase"
     )
-    console.print(
-        f"  [bold {_GOLD}]compass serve --help[/bold {_GOLD}]     "
-        f"See all server options"
-    )
+    console.print(f"  [bold {_GOLD}]compass serve --help[/bold {_GOLD}]     See all server options")
     console.print()
 
 

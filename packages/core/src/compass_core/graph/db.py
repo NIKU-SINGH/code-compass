@@ -60,8 +60,7 @@ class GraphDB:
             The raw Result object containing the query output.
         """
         if params:
-            stmt = self._conn.prepare(query)
-            return self._conn.execute(stmt, params)
+            return self._conn.execute(query, params)
         return self._conn.execute(query)
 
     def execute_many(self, statements: list[str]) -> None:

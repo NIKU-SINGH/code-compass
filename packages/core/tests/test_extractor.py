@@ -10,11 +10,8 @@ import hashlib
 from pathlib import Path
 from textwrap import dedent
 
-import pytest
-
 from compass_core.parser.extractor import extract_file
 from compass_core.parser.models import ParsedFile
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -33,10 +30,14 @@ def write_py(tmp_path: Path, name: str, source: str) -> Path:
 
 
 def test_extract_simple_function(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         def add(a: int, b: int) -> int:
             return a + b
-        """)
+        """,
+    )
     pf = extract_file(p)
     assert len(pf.functions) == 1
     fn = pf.functions[0]
@@ -49,27 +50,38 @@ def test_extract_simple_function(tmp_path: Path) -> None:
 
 
 def test_extract_function_docstring(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", '''\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        '''\
         def greet(name: str) -> str:
             """Return a greeting."""
             return f"Hello, {name}"
-        ''')
+        ''',
+    )
     pf = extract_file(p)
     fn = pf.functions[0]
     assert fn.docstring == "Return a greeting."
 
 
 def test_extract_function_no_docstring(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         def noop():
             pass
-        """)
+        """,
+    )
     pf = extract_file(p)
     assert pf.functions[0].docstring is None
 
 
 def test_extract_decorator(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         import functools
 
         @functools.cache
@@ -77,21 +89,26 @@ def test_extract_decorator(tmp_path: Path) -> None:
             if n < 2:
                 return n
             return fib(n - 1) + fib(n - 2)
-        """)
+        """,
+    )
     pf = extract_file(p)
     fn = pf.functions[0]
     assert fn.decorators == ["functools.cache"]
-    assert fn.line_start == 3   # decorator line
+    assert fn.line_start == 3  # decorator line
 
 
 def test_extract_multiline_signature(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         def process(
             items: list[int],
             multiplier: int = 1,
         ) -> list[int]:
             return [x * multiplier for x in items]
-        """)
+        """,
+    )
     pf = extract_file(p)
     sig = pf.functions[0].signature
     assert "def process" in sig
@@ -104,14 +121,18 @@ def test_extract_multiline_signature(tmp_path: Path) -> None:
 
 
 def test_extract_class_with_methods(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         class Counter:
             def __init__(self, start: int = 0) -> None:
                 self.value = start
 
             def increment(self) -> None:
                 self.value += 1
-        """)
+        """,
+    )
     pf = extract_file(p)
     assert len(pf.classes) == 1
     cls = pf.classes[0]
@@ -123,42 +144,58 @@ def test_extract_class_with_methods(tmp_path: Path) -> None:
 
 
 def test_extract_class_docstring(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", '''\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        '''\
         class MyClass:
             """A simple class."""
             pass
-        ''')
+        ''',
+    )
     pf = extract_file(p)
     assert pf.classes[0].docstring == "A simple class."
 
 
 def test_extract_class_bases(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         class Admin(User, Auditable):
             pass
-        """)
+        """,
+    )
     pf = extract_file(p)
     assert pf.classes[0].bases == ["User", "Auditable"]
 
 
 def test_extract_class_no_bases(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         class Plain:
             pass
-        """)
+        """,
+    )
     pf = extract_file(p)
     assert pf.classes[0].bases == []
 
 
 def test_class_methods_not_in_top_level_functions(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         class MyClass:
             def method(self):
                 pass
 
         def standalone():
             pass
-        """)
+        """,
+    )
     pf = extract_file(p)
     assert len(pf.functions) == 1
     assert pf.functions[0].name == "standalone"
@@ -222,11 +259,15 @@ def test_extract_import_wildcard(tmp_path: Path) -> None:
 
 
 def test_raw_calls_simple(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         def run():
             foo()
             bar()
-        """)
+        """,
+    )
     pf = extract_file(p)
     calls = pf.functions[0].raw_calls
     assert "foo" in calls
@@ -234,11 +275,15 @@ def test_raw_calls_simple(tmp_path: Path) -> None:
 
 
 def test_raw_calls_dotted(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         def run(self):
             self.save()
             db.fetch()
-        """)
+        """,
+    )
     pf = extract_file(p)
     calls = pf.functions[0].raw_calls
     assert "self.save" in calls
@@ -246,23 +291,31 @@ def test_raw_calls_dotted(tmp_path: Path) -> None:
 
 
 def test_raw_calls_deduplication(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         def run():
             foo()
             foo()
             foo()
-        """)
+        """,
+    )
     pf = extract_file(p)
     assert pf.functions[0].raw_calls.count("foo") == 1
 
 
 def test_raw_calls_not_in_nested_function(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         def outer():
             x = 1
             def inner():
                 secret()
-        """)
+        """,
+    )
     pf = extract_file(p)
     calls = pf.functions[0].raw_calls
     assert "secret" not in calls
@@ -319,27 +372,39 @@ def test_syntax_error_file_does_not_crash(tmp_path: Path) -> None:
 
 
 def test_file_path_stored_on_function(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         def foo():
             pass
-        """)
+        """,
+    )
     pf = extract_file(p)
     assert pf.functions[0].file_path == str(p)
 
 
 def test_source_stored_on_function(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         def hello():
             return "world"
-        """)
+        """,
+    )
     pf = extract_file(p)
     assert "def hello" in pf.functions[0].source
 
 
 def test_source_stored_on_class(tmp_path: Path) -> None:
-    p = write_py(tmp_path, "f.py", """\
+    p = write_py(
+        tmp_path,
+        "f.py",
+        """\
         class Foo:
             pass
-        """)
+        """,
+    )
     pf = extract_file(p)
     assert "class Foo" in pf.classes[0].source

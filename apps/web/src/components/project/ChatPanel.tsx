@@ -23,7 +23,7 @@ const PLACEHOLDER_MESSAGES: Message[] = [
 
 const MODELS = ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5"];
 
-export function ChatPanel() {
+export function ChatPanel({ projectId: _projectId }: { projectId: string }) {
   const [messages, setMessages] = useState<Message[]>(PLACEHOLDER_MESSAGES);
   const [input, setInput] = useState("");
   const [model, setModel] = useState(MODELS[0]);

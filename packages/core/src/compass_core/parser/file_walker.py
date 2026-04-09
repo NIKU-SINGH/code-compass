@@ -164,5 +164,3 @@ def _should_skip_file(entry: Path, root: Path, spec: pathspec.PathSpec | None) -
     except OSError:
         return True
     return False
-
-

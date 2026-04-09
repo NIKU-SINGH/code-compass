@@ -15,15 +15,14 @@ from compass_core.graph.schema import create_schema
 from compass_core.graph.writer import write
 from compass_core.parser.models import Import, ParsedClass, ParsedFile, ParsedFunction
 from compass_core.resolver.models import (
+    RESOLVED,
     CallEdge,
     ExternalCallEdge,
     ImportEdge,
     InheritEdge,
-    RESOLVED,
     ResolvedGraph,
 )
 from compass_core.resolver.symbol_table import class_id, function_id
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -119,7 +118,7 @@ def test_write_file_node_fields(db: GraphDB) -> None:
     write(db, ResolvedGraph(files=[pf]))
     result = db.execute("MATCH (n:File {path: '/repo/a.py'}) RETURN n.module_name, n.content_hash")
     cols = result.get_column_names()
-    row = dict(zip(cols, result.get_next()))
+    row = dict(zip(cols, result.get_next(), strict=False))
     assert row["n.module_name"] == "mymod"
     assert row["n.content_hash"] == "hash1"
 
@@ -141,7 +140,9 @@ def test_write_function_node(db: GraphDB) -> None:
 
 
 def test_write_method_node(db: GraphDB) -> None:
-    method = make_function(name="run", file_path="/repo/a.py", is_method=True, parent_class="Worker")
+    method = make_function(
+        name="run", file_path="/repo/a.py", is_method=True, parent_class="Worker"
+    )
     cls = make_class(name="Worker", file_path="/repo/a.py", methods=[method])
     pf = make_file(path="/repo/a.py", classes=[cls])
     write(db, ResolvedGraph(files=[pf]))
@@ -160,7 +161,7 @@ def test_file_to_class_contains_edge(db: GraphDB) -> None:
     write(db, ResolvedGraph(files=[pf]))
     count = _count(
         db,
-        "MATCH (f:File {path: '/repo/a.py'})-[:CONTAINS]->(c:Class {name: 'Foo'}) RETURN count(*)"
+        "MATCH (f:File {path: '/repo/a.py'})-[:CONTAINS]->(c:Class {name: 'Foo'}) RETURN count(*)",
     )
     assert count == 1
 
@@ -171,7 +172,7 @@ def test_file_to_function_contains_edge(db: GraphDB) -> None:
     write(db, ResolvedGraph(files=[pf]))
     count = _count(
         db,
-        "MATCH (f:File {path: '/repo/a.py'})-[:CONTAINS]->(n:Function {name: 'helper'}) RETURN count(*)"
+        "MATCH (f:File {path: '/repo/a.py'})-[:CONTAINS]->(n:Function {name: 'helper'}) RETURN count(*)",
     )
     assert count == 1
 
@@ -183,7 +184,7 @@ def test_class_to_method_contains_edge(db: GraphDB) -> None:
     write(db, ResolvedGraph(files=[pf]))
     count = _count(
         db,
-        "MATCH (c:Class {name: 'Agent'})-[:CONTAINS]->(m:Function {name: 'act'}) RETURN count(*)"
+        "MATCH (c:Class {name: 'Agent'})-[:CONTAINS]->(m:Function {name: 'act'}) RETURN count(*)",
     )
     assert count == 1
 
@@ -203,7 +204,7 @@ def test_imports_edge_between_files(db: GraphDB) -> None:
     write(db, graph)
     count = _count(
         db,
-        "MATCH (a:File {path: '/repo/a.py'})-[:IMPORTS]->(b:File {path: '/repo/b.py'}) RETURN count(*)"
+        "MATCH (a:File {path: '/repo/a.py'})-[:IMPORTS]->(b:File {path: '/repo/b.py'}) RETURN count(*)",
     )
     assert count == 1
 
@@ -224,8 +225,7 @@ def test_inherits_edge(db: GraphDB) -> None:
     )
     write(db, graph)
     count = _count(
-        db,
-        "MATCH (c:Class {name: 'Child'})-[:INHERITS]->(b:Class {name: 'Base'}) RETURN count(*)"
+        db, "MATCH (c:Class {name: 'Child'})-[:INHERITS]->(b:Class {name: 'Base'}) RETURN count(*)"
     )
     assert count == 1
 
@@ -265,7 +265,7 @@ def test_calls_edge_direct_import(db: GraphDB) -> None:
     write(db, graph)
     count = _count(
         db,
-        "MATCH (a:Function {name: 'fn_a'})-[r:CALLS]->(b:Function {name: 'fn_b'}) RETURN count(*)"
+        "MATCH (a:Function {name: 'fn_a'})-[r:CALLS]->(b:Function {name: 'fn_b'}) RETURN count(*)",
     )
     assert count == 1
 
@@ -297,7 +297,7 @@ def test_calls_extern_edge(db: GraphDB) -> None:
     write(db, graph)
     count = _count(
         db,
-        "MATCH (f:Function {name: 'fetch'})-[:CALLS_EXTERN]->(e:ExternalFunction) RETURN count(*)"
+        "MATCH (f:Function {name: 'fetch'})-[:CALLS_EXTERN]->(e:ExternalFunction) RETURN count(*)",
     )
     assert count == 1
 
