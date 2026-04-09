@@ -53,13 +53,10 @@ def _calculate_expected_nodes(graph: ResolvedGraph) -> int:
     node per unique ``full_ref`` across all external call edges.
     """
     unique_ext = {e.full_ref for e in graph.external_call_edges}
-    return (
-        sum(
-            1 + len(f.classes) + sum(len(c.methods) for c in f.classes) + len(f.functions)
-            for f in graph.files
-        )
-        + len(unique_ext)
-    )
+    return sum(
+        1 + len(f.classes) + sum(len(c.methods) for c in f.classes) + len(f.functions)
+        for f in graph.files
+    ) + len(unique_ext)
 
 
 def _calculate_expected_edges(graph: ResolvedGraph) -> int:
@@ -142,13 +139,19 @@ def write(
         _write_contains(db, pf, _edge)
 
     for edge in graph.import_edges:
-        if _exec(db, "MATCH (a:File {path: $src}), (b:File {path: $dst}) CREATE (a)-[:IMPORTS]->(b)",
-                 {"src": edge.from_path, "dst": edge.to_path}):
+        if _exec(
+            db,
+            "MATCH (a:File {path: $src}), (b:File {path: $dst}) CREATE (a)-[:IMPORTS]->(b)",
+            {"src": edge.from_path, "dst": edge.to_path},
+        ):
             _edge()
 
     for edge in graph.inherit_edges:
-        if _exec(db, "MATCH (a:Class {id: $src}), (b:Class {id: $dst}) CREATE (a)-[:INHERITS]->(b)",
-                 {"src": edge.child_id, "dst": edge.parent_id}):
+        if _exec(
+            db,
+            "MATCH (a:Class {id: $src}), (b:Class {id: $dst}) CREATE (a)-[:INHERITS]->(b)",
+            {"src": edge.child_id, "dst": edge.parent_id},
+        ):
             _edge()
 
     for edge in graph.call_edges:
@@ -158,8 +161,13 @@ def write(
             MATCH (a:Function {id: $src}), (b:Function {id: $dst})
             CREATE (a)-[:CALLS {confidence: $conf, call_type: $ctype, line: $line}]->(b)
             """,
-            {"src": edge.caller_id, "dst": edge.callee_id,
-             "conf": edge.confidence, "ctype": edge.call_type, "line": edge.line},
+            {
+                "src": edge.caller_id,
+                "dst": edge.callee_id,
+                "conf": edge.confidence,
+                "ctype": edge.call_type,
+                "line": edge.line,
+            },
         ):
             _edge()
 
@@ -309,16 +317,25 @@ def _write_contains(db: GraphDB, f: ParsedFile, on_edge: Callable[[], None]) -> 
         on_edge: Callback invoked once for each edge successfully written.
     """
     for cls in f.classes:
-        if _exec(db, "MATCH (a:File {path: $src}), (b:Class {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
-                 {"src": f.path, "dst": class_id(cls)}):
+        if _exec(
+            db,
+            "MATCH (a:File {path: $src}), (b:Class {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+            {"src": f.path, "dst": class_id(cls)},
+        ):
             on_edge()
         for method in cls.methods:
-            if _exec(db, "MATCH (a:Class {id: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
-                     {"src": class_id(cls), "dst": function_id(method)}):
+            if _exec(
+                db,
+                "MATCH (a:Class {id: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+                {"src": class_id(cls), "dst": function_id(method)},
+            ):
                 on_edge()
     for func in f.functions:
-        if _exec(db, "MATCH (a:File {path: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
-                 {"src": f.path, "dst": function_id(func)}):
+        if _exec(
+            db,
+            "MATCH (a:File {path: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+            {"src": f.path, "dst": function_id(func)},
+        ):
             on_edge()
 
 
@@ -345,5 +362,7 @@ def _exec(db: GraphDB, query: str, params: dict) -> bool:
         db.execute(query, params)
         return True
     except Exception:
-        logger.debug("DB write failed — query: %s | params: %s", query.strip(), params, exc_info=True)
+        logger.debug(
+            "DB write failed — query: %s | params: %s", query.strip(), params, exc_info=True
+        )
         return False

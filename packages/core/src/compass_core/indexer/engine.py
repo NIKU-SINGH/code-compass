@@ -138,8 +138,7 @@ def index_repo(
 
     class_count = sum(len(pf.classes) for pf in parsed_files)
     function_count = sum(
-        len(pf.functions) + sum(len(c.methods) for c in pf.classes)
-        for pf in parsed_files
+        len(pf.functions) + sum(len(c.methods) for c in pf.classes) for pf in parsed_files
     )
 
     return IndexResult(
@@ -204,6 +203,7 @@ def _parse_worker(args: tuple[str, str]) -> ParsedFile | None:
         return extract_file(path, root=root)
     except Exception:
         import traceback
+
         # Use print — worker processes don't share log handlers with the main process
         print(f"[compass] Failed to parse {path}: {traceback.format_exc()}")
         return None
@@ -254,7 +254,6 @@ def _run_phase1(
             if reporter:
                 reporter.update("parse", done, total)
     return parsed, failed
-
 
 
 # ---------------------------------------------------------------------------

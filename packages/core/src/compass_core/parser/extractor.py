@@ -124,24 +124,28 @@ def _parse_import_statement(node: Node, source_bytes: bytes) -> list[Import]:
 
     for child in node.named_children:
         if child.type == "dotted_name":
-            result.append(Import(
-                module=_node_text(child, source_bytes),
-                names=[],
-                alias=None,
-                is_from=False,
-                line=line,
-            ))
+            result.append(
+                Import(
+                    module=_node_text(child, source_bytes),
+                    names=[],
+                    alias=None,
+                    is_from=False,
+                    line=line,
+                )
+            )
         elif child.type == "aliased_import":
             # aliased_import: dotted_name "as" identifier
             name_node = child.child_by_field_name("name")
             alias_node = child.child_by_field_name("alias")
-            result.append(Import(
-                module=_node_text(name_node, source_bytes) if name_node else "",
-                names=[],
-                alias=_node_text(alias_node, source_bytes) if alias_node else None,
-                is_from=False,
-                line=line,
-            ))
+            result.append(
+                Import(
+                    module=_node_text(name_node, source_bytes) if name_node else "",
+                    names=[],
+                    alias=_node_text(alias_node, source_bytes) if alias_node else None,
+                    is_from=False,
+                    line=line,
+                )
+            )
     return result
 
 
@@ -183,9 +187,7 @@ def _parse_import_from_statement(node: Node, source_bytes: bytes) -> Import:
 # ---------------------------------------------------------------------------
 
 
-def _extract_classes(
-    source_bytes: bytes, root_node: Node, file_path: str
-) -> list[ParsedClass]:
+def _extract_classes(source_bytes: bytes, root_node: Node, file_path: str) -> list[ParsedClass]:
     """Extract all top-level class definitions from the module."""
     classes: list[ParsedClass] = []
     for node in root_node.children:
@@ -198,9 +200,7 @@ def _extract_classes(
     return classes
 
 
-def _extract_class(
-    node: Node, source_bytes: bytes, file_path: str
-) -> ParsedClass:
+def _extract_class(node: Node, source_bytes: bytes, file_path: str) -> ParsedClass:
     """Build a ParsedClass from a class_definition AST node."""
     name_node = node.child_by_field_name("name")
     name = _node_text(name_node, source_bytes) if name_node else ""
@@ -243,13 +243,17 @@ def _extract_methods(
     for child in body_node.children:
         if child.type == "function_definition":
             methods.append(
-                _extract_function(child, source_bytes, file_path, is_method=True, parent_class=parent_class)
+                _extract_function(
+                    child, source_bytes, file_path, is_method=True, parent_class=parent_class
+                )
             )
         elif child.type == "decorated_definition":
             inner = _unwrap_decorated(child)
             if inner and inner.type == "function_definition":
                 methods.append(
-                    _extract_function(inner, source_bytes, file_path, is_method=True, parent_class=parent_class)
+                    _extract_function(
+                        inner, source_bytes, file_path, is_method=True, parent_class=parent_class
+                    )
                 )
     return methods
 
@@ -273,7 +277,9 @@ def _extract_top_level_functions(
             inner = _unwrap_decorated(node)
             if inner and inner.type == "function_definition":
                 functions.append(
-                    _extract_function(inner, source_bytes, file_path, is_method=False, parent_class=None)
+                    _extract_function(
+                        inner, source_bytes, file_path, is_method=False, parent_class=None
+                    )
                 )
     return functions
 
@@ -327,12 +333,12 @@ def _extract_signature(node: Node, source_bytes: bytes) -> str:
     body_node = node.child_by_field_name("body")
     if body_node:
         # Signature is everything from def to the byte before the body block
-        sig_bytes = source_bytes[node.start_byte: body_node.start_byte]
+        sig_bytes = source_bytes[node.start_byte : body_node.start_byte]
         # Strip trailing whitespace/colon/newlines to get a clean def line
         sig = sig_bytes.decode("utf-8", errors="replace").rstrip().rstrip(":")
         return sig + ":"
     # Fallback: first line of the node
-    full = source_bytes[node.start_byte: node.end_byte].decode("utf-8", errors="replace")
+    full = source_bytes[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
     return full.splitlines()[0]
 
 
@@ -371,7 +377,7 @@ def _strip_string_literal(raw: str) -> str:
     # Fallback: strip common quote styles
     for prefix in ('"""', "'''", '"', "'"):
         if raw.startswith(prefix) and raw.endswith(prefix) and len(raw) >= 2 * len(prefix):
-            return raw[len(prefix): -len(prefix)]
+            return raw[len(prefix) : -len(prefix)]
     return raw
 
 
@@ -467,7 +473,7 @@ def _node_text(node: Node | None, source_bytes: bytes) -> str:
     """Decode the source text covered by a tree-sitter node."""
     if node is None:
         return ""
-    return source_bytes[node.start_byte: node.end_byte].decode("utf-8", errors="replace")
+    return source_bytes[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
 
 
 def _slice_source(source_bytes: bytes, start: int, end: int) -> str:

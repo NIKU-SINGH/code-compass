@@ -46,7 +46,7 @@ class CallResult:
     """Outcome of resolving one raw call string."""
 
     raw: str
-    target_id: str | None       # Function node ID if resolved internally
+    target_id: str | None  # Function node ID if resolved internally
     call_type: str
     confidence: float
     external_library: str | None = None  # set only for EXTERNAL calls
@@ -111,10 +111,12 @@ def _resolve_one(
 
     # Rule 1: self.method() — same-class lookup
     if raw.startswith("self.") and func.parent_class and tail is not None:
-        method_name = raw[len("self."):]
+        method_name = raw[len("self.") :]
         key = f"{func.parent_class}.{method_name}"
         if key in symbol_table:
-            return CallResult(raw=raw, target_id=symbol_table[key], call_type=RESOLVED, confidence=1.0)
+            return CallResult(
+                raw=raw, target_id=symbol_table[key], call_type=RESOLVED, confidence=1.0
+            )
 
     # Rule 2: direct import — bare name imported explicitly
     if tail is None and head in file_imports:
@@ -138,7 +140,9 @@ def _resolve_one(
             return CallResult(raw=raw, target_id=target_id, call_type=RESOLVED, confidence=0.9)
 
     # Rule 4: __init__ chain — re-export through a package __init__.py
-    init_result = _resolve_via_init(raw, head, tail, file, file_imports, symbol_table, all_files, visited)
+    init_result = _resolve_via_init(
+        raw, head, tail, file, file_imports, symbol_table, all_files, visited
+    )
     if init_result is not None:
         return init_result
 
@@ -215,7 +219,9 @@ def _resolve_via_mro(
     for base in cls.bases:
         key = f"{base}.{method_name}"
         if key in symbol_table:
-            return CallResult(raw=raw, target_id=symbol_table[key], call_type=POLYMORPHIC, confidence=0.8)
+            return CallResult(
+                raw=raw, target_id=symbol_table[key], call_type=POLYMORPHIC, confidence=0.8
+            )
     return None
 
 

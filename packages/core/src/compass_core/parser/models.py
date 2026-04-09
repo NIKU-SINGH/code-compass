@@ -12,12 +12,12 @@ from dataclasses import dataclass, field
 class Import:
     """A single import statement, raw and unresolved.
 
-    Captured from a source file's AST, this model represents what is being imported 
+    Captured from a source file's AST, this model represents what is being imported
     without checking if the module exists on the filesystem.
 
     Attributes:
         module: The dotted path of the module being imported (e.g., "os.path").
-        names: Specific objects or sub-modules imported from the module 
+        names: Specific objects or sub-modules imported from the module
             (e.g., ["join", "exists"]). Empty for basic imports like `import os`.
         alias: The rename target if the 'as' keyword is used.
         is_from: True if the statement is `from X import Y`, False for `import X`.
@@ -47,16 +47,16 @@ class ParsedFunction:
 
     Attributes:
         name: The name of the function (e.g., "process_data").
-        signature: The full definition line including arguments and return type 
+        signature: The full definition line including arguments and return type
             (e.g., "def foo(x: int) -> int:").
         docstring: The function's docstring content, if any.
         line_start: 1-indexed line number where the function (or its decorator) starts.
         line_end: 1-indexed line number where the function body ends (inclusive).
         source: The complete source code of the function and its decorators.
         file_path: The absolute path to the file containing this function.
-        raw_calls: A list of function/method call strings found within the body, 
+        raw_calls: A list of function/method call strings found within the body,
             captured raw (e.g., ["db.fetch", "print"]).
-        decorators: List of decorator names applied to the function 
+        decorators: List of decorator names applied to the function
             (e.g., ["staticmethod", "cache"]).
         is_method: True if the function is defined inside a class.
         parent_class: The name of the class if this is a method, otherwise None.
@@ -133,18 +133,18 @@ class ParsedClass:
 class ParsedFile:
     """Comprehensive data model representing a fully parsed Python source file.
 
-    This serves as the root container for all structured information extracted 
+    This serves as the root container for all structured information extracted
     from a single file by the parser.
 
     Attributes:
         path: The absolute path to the source file.
-        module_name: The dotted module name derived from the path 
+        module_name: The dotted module name derived from the path
             (e.g., "compass_core.parser.models").
         imports: A list of `Import` objects found in the file.
         classes: A list of `ParsedClass` objects found in the file.
-        functions: A list of top-level `ParsedFunction` objects 
+        functions: A list of top-level `ParsedFunction` objects
             (does not include class methods).
-        content_hash: A SHA-256 hex digest of the file content used for 
+        content_hash: A SHA-256 hex digest of the file content used for
             caching and change detection.
 
     Examples:

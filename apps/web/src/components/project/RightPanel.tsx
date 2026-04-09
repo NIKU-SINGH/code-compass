@@ -6,7 +6,7 @@ import { GraphTab } from "./GraphTab";
 import { QueryTab } from "./QueryTab";
 import { AnalysisTab } from "./AnalysisTab";
 
-export function RightPanel() {
+export function RightPanel({ projectId: _projectId }: { projectId: string }) {
   return (
     <Tabs defaultValue="graph" className="flex-1 flex flex-col overflow-hidden">
       <TabsList>

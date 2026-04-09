@@ -35,8 +35,8 @@ const NAV_ITEMS = [
 ];
 
 const RECENT_PROJECTS = [
-  { id: "demo", label: "code-compass", active: true },
-  { id: "sample-1", label: "my-api-service", active: false },
+  { id: "demo", label: "code-compass" },
+  { id: "sample-1", label: "my-api-service" },
 ];
 
 const FOOTER_ITEMS = [
@@ -115,11 +115,7 @@ export function AppSidebar() {
                     isActive={pathname === `/project/${project.id}`}
                   >
                     <Link href={`/project/${project.id}`}>
-                      <span
-                        className={`size-1.5 rounded-full shrink-0 ${
-                          project.active ? "bg-green-500" : "bg-muted-foreground/40"
-                        }`}
-                      />
+                      <span className="size-1.5 rounded-full shrink-0 bg-muted-foreground/40" />
                       <span className="truncate">{project.label}</span>
                     </Link>
                   </SidebarMenuButton>

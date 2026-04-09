@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import time
+import urllib.request
 import webbrowser
 from pathlib import Path
 
@@ -10,6 +11,19 @@ from compass_cli import display
 from compass_cli.progress import RichProgressReporter
 from compass_core.logger import setup as setup_logging
 from compass_core.settings import settings
+
+
+def _wait_for_server(url: str, timeout: int = 30) -> bool:
+    """Poll url until it responds or timeout (seconds) is reached."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            urllib.request.urlopen(url, timeout=1)
+            return True
+        except Exception:
+            time.sleep(0.5)
+    return False
+
 
 app = typer.Typer(
     help="Code Compass CLI",
@@ -29,7 +43,9 @@ def main(ctx: typer.Context) -> None:
 @app.command()
 def index(
     path: str = typer.Argument(..., help="Path to the repository to index"),
-    db: str = typer.Option(None, "--db", help="Path to LadybugDB database (default: <repo>/.compass/graph.ladybug)"),
+    db: str = typer.Option(
+        None, "--db", help="Path to LadybugDB database (default: <repo>/.compass/graph.ladybug)"
+    ),
     workers: int = typer.Option(None, "--workers", help="Number of parallel parse workers"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
 ) -> None:
@@ -67,12 +83,13 @@ def index(
 
         class_count = sum(len(pf.classes) for pf in parsed)
         function_count = sum(
-            len(pf.functions) + sum(len(c.methods) for c in pf.classes)
-            for pf in parsed
+            len(pf.functions) + sum(len(c.methods) for c in pf.classes) for pf in parsed
         )
         skipped = len(skipped_files)
 
-        display.step("Files parsed", f"{len(parsed)}" + (f"  ({skipped} skipped)" if skipped else ""))
+        display.step(
+            "Files parsed", f"{len(parsed)}" + (f"  ({skipped} skipped)" if skipped else "")
+        )
         if verbose and skipped_files:
             for f in skipped_files:
                 display.console.print(f"  [dim red]  skipped: {f}[/dim red]")
@@ -149,20 +166,31 @@ def serve(
     frontend_url = f"{settings.FRONTEND_URL}/project/{project_id}"
 
     try:
-        display.console.print(f"[bold green]Starting API server[/bold green] on http://{host}:{port}")
+        display.console.print(
+            f"[bold green]Starting API server[/bold green] on http://{host}:{port}"
+        )
         procs.append(
             subprocess.Popen(
-                [sys.executable, "-m", "uvicorn", "compass_core.server.main:app",
-                 "--host", host, "--port", str(port), "--reload"],
+                [
+                    sys.executable,
+                    "-m",
+                    "uvicorn",
+                    "compass_core.server.main:app",
+                    "--host",
+                    host,
+                    "--port",
+                    str(port),
+                    "--reload",
+                ],
             )
         )
 
         if not no_frontend and web_dir.exists():
             display.console.print(f"[bold green]Starting frontend[/bold green] on {frontend_url}")
             procs.append(subprocess.Popen(["pnpm", "dev"], cwd=web_dir))
-            # Wait for the dev server to boot, then open the browser.
-            time.sleep(2)
-            webbrowser.open(frontend_url)
+            # Poll until the dev server is ready, then open the browser.
+            if _wait_for_server(f"http://{settings.FRONTEND_HOST}:{settings.FRONTEND_PORT}"):
+                webbrowser.open(frontend_url)
 
         display.console.print("[dim]Press Ctrl+C to stop.[/dim]")
 

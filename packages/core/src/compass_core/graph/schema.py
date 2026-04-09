@@ -1,7 +1,7 @@
 """Cypher DDL statements to initialise the Compass knowledge graph schema.
 
-This module defines the graph database schema for storing Python source code 
-information, including nodes for files, classes, and functions, and their 
+This module defines the graph database schema for storing Python source code
+information, including nodes for files, classes, and functions, and their
 inter-relationships.
 """
 
@@ -26,7 +26,6 @@ _NODE_TABLES: list[str] = [
         PRIMARY KEY(path)
     )
     """,
-
     # Class: A class definition extracted from source.
     #   - id (PK): Unique identifier, format: 'file_path::ClassName'.
     #   - name: The unqualified name of the class.
@@ -49,7 +48,6 @@ _NODE_TABLES: list[str] = [
         PRIMARY KEY(id)
     )
     """,
-
     # Function: A function or method definition.
     #   - id (PK): Unique identifier, format: 'file_path::[ClassName.]name'.
     #   - name: The name of the function or method.
@@ -80,7 +78,6 @@ _NODE_TABLES: list[str] = [
         PRIMARY KEY(id)
     )
     """,
-
     # ExternalFunction: A call to an external library function.
     #   - full_ref (PK): Fully qualified name (e.g., "jwt.decode").
     #   - name: The name of the function.
@@ -93,7 +90,6 @@ _NODE_TABLES: list[str] = [
         PRIMARY KEY(full_ref)
     )
     """,
-
     # Field: A class-level attribute or data field.
     #   - id (PK): Unique identifier, format: 'file_path::ClassName.field_name'.
     #   - name: The name of the attribute.
@@ -125,21 +121,18 @@ _REL_TABLES: list[str] = [
         FROM Class TO Function
     )
     """,
-
     # IMPORTS: Dependency between files when one module imports another.
     """
     CREATE REL TABLE IF NOT EXISTS IMPORTS(
         FROM File TO File
     )
     """,
-
     # INHERITS: Class inheritance relationship (Subclass → Superclass).
     """
     CREATE REL TABLE IF NOT EXISTS INHERITS(
         FROM Class TO Class
     )
     """,
-
     # CALLS: Internal function execution flow with metadata.
     #   - confidence (FLOAT): Probability score from the call graph analyzer.
     #   - call_type (STRING): The nature of the call (e.g., "direct", "dynamic").
@@ -152,7 +145,6 @@ _REL_TABLES: list[str] = [
         line       INT64
     )
     """,
-
     # CALLS_EXTERN: Function execution flow to external library functions.
     #   - line (INT64): 1-indexed line number where the call occurs.
     """
@@ -161,7 +153,6 @@ _REL_TABLES: list[str] = [
         line INT64
     )
     """,
-
     # HAS_FIELD: Relationship representing class ownership of an attribute.
     """
     CREATE REL TABLE IF NOT EXISTS HAS_FIELD(
@@ -175,11 +166,12 @@ _REL_TABLES: list[str] = [
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def create_schema(db: GraphDB) -> None:
     """Create all node and relationship tables if they do not already exist.
 
-    All statements use the 'IF NOT EXISTS' clause to ensure safety when 
-    running against an initialized database. Node tables are always 
+    All statements use the 'IF NOT EXISTS' clause to ensure safety when
+    running against an initialized database. Node tables are always
     created before relationship tables to avoid schema violations.
 
     Args:
