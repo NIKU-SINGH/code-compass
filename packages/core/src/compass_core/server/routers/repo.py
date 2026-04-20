@@ -30,6 +30,8 @@ class OverviewResponse(BaseModel):
     entry_points: list[EntryPoint]
 
 
+_MAX_ENTRY_POINTS = 5
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -41,19 +43,17 @@ def _count(db: GraphDB, query: str) -> int:
 
 
 def _edge_count(db: GraphDB) -> int:
-    total = 0
-    for rel in ("CONTAINS", "IMPORTS", "INHERITS", "CALLS", "CALLS_EXTERN", "HAS_FIELD"):
-        total += _count(db, f"MATCH ()-[:{rel}]->() RETURN count(*)")
-    return total
+    result = db.execute("MATCH ()-[r]->() RETURN count(*)")
+    return int(result.get_next()[0]) if result.has_next() else 0
 
 
 def _entry_points(db: GraphDB) -> list[EntryPoint]:
     result = db.execute(
-        """
+        f"""
         MATCH (f:File)
-        WHERE NOT EXISTS { MATCH (:File)-[:IMPORTS]->(f) }
+        WHERE NOT EXISTS {{ MATCH (:File)-[:IMPORTS]->(f) }}
         RETURN f.path, f.module_name
-        LIMIT 5
+        LIMIT {_MAX_ENTRY_POINTS}
         """
     )
     rows = result.get_all()
@@ -74,9 +74,9 @@ async def repo_info():
 async def repo_overview() -> OverviewResponse:
     try:
         with GraphDB() as db:
-            file_count = _count(db, "MATCH (n:File) RETURN count(n)")
-            class_count = _count(db, "MATCH (n:Class) RETURN count(n)")
-            function_count = _count(db, "MATCH (n:Function) RETURN count(n)")
+            file_count = _count(db, "MATCH (n:File) RETURN count(*)")
+            class_count = _count(db, "MATCH (n:Class) RETURN count(*)")
+            function_count = _count(db, "MATCH (n:Function) RETURN count(*)")
             edge_count = _edge_count(db)
             entry_points = _entry_points(db)
     except Exception as exc:

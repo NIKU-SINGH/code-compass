@@ -34,3 +34,7 @@ Thumbs.db
 
 # LadybugDB
 *.ladybug/
+
+# Superpower
+.superpower
+.superpowers

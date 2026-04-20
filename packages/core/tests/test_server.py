@@ -1,6 +1,5 @@
 """Tests for the FastAPI server."""
 
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from fastapi.testclient import TestClient
@@ -24,9 +23,9 @@ def test_repo_overview_returns_shape():
     """Overview endpoint returns the expected JSON shape."""
     mock_db = MagicMock()
 
-    def fake_execute(query, params=None):
+    def fake_execute(query, **_kwargs):
         result = MagicMock()
-        if "count(n)" in query or "count(r)" in query or "count(*)" in query:
+        if "count(*)" in query:
             result.has_next.return_value = True
             result.get_next.return_value = (10,)
         else:
@@ -46,12 +45,13 @@ def test_repo_overview_returns_shape():
 
     assert response.status_code == 200
     data = response.json()
-    assert "file_count" in data
-    assert "class_count" in data
-    assert "function_count" in data
+    assert data["file_count"] == 10
+    assert data["class_count"] == 10
+    assert data["function_count"] == 10
     assert "edge_count" in data
-    assert "entry_points" in data
-    assert isinstance(data["entry_points"], list)
+    assert len(data["entry_points"]) == 2
+    assert data["entry_points"][0]["path"] == "/repo/main.py"
+    assert data["entry_points"][0]["module_name"] == "main"
 
 
 def test_repo_overview_503_when_db_unavailable():
