@@ -30,6 +30,25 @@ class OverviewResponse(BaseModel):
     entry_points: list[EntryPoint]
 
 
+class GraphNode(BaseModel):
+    id: str
+    label: str
+    type: str
+    file_path: str
+
+
+class GraphEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+    type: str
+
+
+class GraphResponse(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+
+
 _MAX_ENTRY_POINTS = 5
 
 # ---------------------------------------------------------------------------
@@ -58,6 +77,62 @@ def _entry_points(db: GraphDB) -> list[EntryPoint]:
     )
     rows = result.get_all()
     return [EntryPoint(path=row[0], module_name=row[1]) for row in rows]
+
+
+def _graph_nodes(db: GraphDB) -> list[GraphNode]:
+    nodes: list[GraphNode] = []
+
+    for row in db.execute("MATCH (f:File) RETURN f.path, f.path, 'File', f.path").get_all():
+        path = row[0]
+        nodes.append(GraphNode(id=path, label=path.split("/")[-1], type="File", file_path=path))
+
+    for row in db.execute("MATCH (c:Class) RETURN c.id, c.name, 'Class', c.file_path").get_all():
+        nodes.append(GraphNode(id=row[0], label=row[1], type="Class", file_path=row[3]))
+
+    for row in db.execute(
+        "MATCH (fn:Function) RETURN fn.id, fn.name, fn.is_method, fn.file_path"
+    ).get_all():
+        node_type = "Method" if row[2] else "Function"
+        nodes.append(GraphNode(id=row[0], label=row[1], type=node_type, file_path=row[3]))
+
+    return nodes
+
+
+def _graph_edges(db: GraphDB) -> list[GraphEdge]:
+    edges: list[GraphEdge] = []
+    counter = 0
+
+    def _add(source: str, target: str, edge_type: str) -> None:
+        nonlocal counter
+        edges.append(GraphEdge(id=f"e{counter}", source=source, target=target, type=edge_type))
+        counter += 1
+
+    for row in db.execute(
+        "MATCH (a:File)-[:CONTAINS]->(b:Class) RETURN a.path, b.id"
+    ).get_all():
+        _add(row[0], row[1], "CONTAINS")
+
+    for row in db.execute(
+        "MATCH (a:File)-[:CONTAINS]->(b:Function) RETURN a.path, b.id"
+    ).get_all():
+        _add(row[0], row[1], "CONTAINS")
+
+    for row in db.execute(
+        "MATCH (a:Class)-[:CONTAINS]->(b:Function) RETURN a.id, b.id"
+    ).get_all():
+        _add(row[0], row[1], "CONTAINS")
+
+    for row in db.execute(
+        "MATCH (a:File)-[:IMPORTS]->(b:File) RETURN a.path, b.path"
+    ).get_all():
+        _add(row[0], row[1], "IMPORTS")
+
+    for row in db.execute(
+        "MATCH (a:Class)-[:INHERITS]->(b:Class) RETURN a.id, b.id"
+    ).get_all():
+        _add(row[0], row[1], "INHERITS")
+
+    return edges
 
 
 # ---------------------------------------------------------------------------
@@ -90,3 +165,15 @@ async def repo_overview() -> OverviewResponse:
         edge_count=edge_count,
         entry_points=entry_points,
     )
+
+
+@router.get("/repo/graph", response_model=GraphResponse)
+async def repo_graph() -> GraphResponse:
+    try:
+        with GraphDB() as db:
+            nodes = _graph_nodes(db)
+            edges = _graph_edges(db)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {exc}") from exc
+
+    return GraphResponse(nodes=nodes, edges=edges)
