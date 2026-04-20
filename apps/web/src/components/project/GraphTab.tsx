@@ -1,6 +1,6 @@
 import { Network } from "lucide-react";
 
-export function GraphTab() {
+export function GraphTab({ projectId: _projectId }: { projectId: string }) {
   return (
     <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
       <div className="size-12 rounded-xl bg-muted flex items-center justify-center">
