@@ -34,20 +34,20 @@ export const DEFAULT_FILTER_STATE: FilterState = {
 };
 
 const NODE_CONFIG: Array<{ type: NodeType; label: string; color: string }> = [
-  { type: "File",        label: "File",         color: "oklch(0.588 0.217 264)" },
-  { type: "Class",       label: "Class",        color: "#f59e0b" },
-  { type: "Function",    label: "Function",     color: "#10b981" },
-  { type: "Method",      label: "Method",       color: "#06b6d4" },
-  { type: "ExternalDep", label: "External Dep", color: "#94a3b8" },
-  { type: "Field",       label: "Field",        color: "#a78bfa" },
+  { type: "File",        label: "File",         color: "#60a5fa" },
+  { type: "Class",       label: "Class",        color: "#fb923c" },
+  { type: "Function",    label: "Function",     color: "#4ade80" },
+  { type: "Method",      label: "Method",       color: "#c084fc" },
+  { type: "ExternalDep", label: "External Dep", color: "#f87171" },
+  { type: "Field",       label: "Field",        color: "#e879f9" },
 ];
 
 const EDGE_CONFIG: Array<{ type: EdgeType; label: string; color: string; dashed?: boolean }> = [
-  { type: "CONTAINS",    label: "Contains",   color: "#10b981" },
-  { type: "IMPORTS",     label: "Imports",    color: "oklch(0.588 0.217 264)" },
-  { type: "INHERITS",    label: "Inherits",   color: "#f97316" },
+  { type: "CONTAINS",    label: "Contains",   color: "#4ade80" },
+  { type: "IMPORTS",     label: "Imports",    color: "#60a5fa" },
+  { type: "INHERITS",    label: "Inherits",   color: "#fb923c" },
   { type: "CALLS",       label: "Calls",      color: "rgba(255,255,255,0.25)", dashed: true },
-  { type: "CALLS_EXTERN",label: "Ext. Calls", color: "#94a3b8",               dashed: true },
+  { type: "CALLS_EXTERN",label: "Ext. Calls", color: "#f87171",               dashed: true },
 ];
 
 interface Props {
@@ -77,7 +77,7 @@ export function FilterPanel({ state, onChange }: Props) {
   }
 
   return (
-    <div className="w-[210px] border-r border-border bg-card flex flex-col flex-shrink-0 overflow-y-auto text-sm">
+    <div className="w-[210px] border-r border-border bg-card flex flex-col flex-shrink-0 h-full overflow-y-auto text-sm">
 
       {/* Header */}
       <div className="px-4 py-3 border-b border-border">

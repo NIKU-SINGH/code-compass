@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -99,11 +102,16 @@ def _graph_nodes(db: GraphDB) -> list[GraphNode]:
 
 
 def _graph_edges(db: GraphDB) -> list[GraphEdge]:
+    seen: set[tuple[str, str, str]] = set()
     edges: list[GraphEdge] = []
     counter = 0
 
     def _add(source: str, target: str, edge_type: str) -> None:
         nonlocal counter
+        key = (source, target, edge_type)
+        if key in seen:
+            return
+        seen.add(key)
         edges.append(GraphEdge(id=f"e{counter}", source=source, target=target, type=edge_type))
         counter += 1
 
@@ -127,12 +135,72 @@ def _graph_edges(db: GraphDB) -> list[GraphEdge]:
     ).get_all():
         _add(row[0], row[1], "IMPORTS")
 
+    # DB IMPORTS is empty when module names weren't resolved at index time.
+    # Fall back to parsing Python files directly with ast.
+    if not any(e.type == "IMPORTS" for e in edges):
+        file_paths = [e.file_path for e in nodes if e.type == "File"] if False else []
+        for row in db.execute("MATCH (f:File) RETURN f.path, f.module_name").get_all():
+            file_paths.append(row[0])
+        for src, tgt in _ast_import_edges(file_paths):
+            _add(src, tgt, "IMPORTS")
+
     for row in db.execute(
         "MATCH (a:Class)-[:INHERITS]->(b:Class) RETURN a.id, b.id"
     ).get_all():
         _add(row[0], row[1], "INHERITS")
 
     return edges
+
+
+def _ast_import_edges(file_paths: list[str]) -> list[tuple[str, str]]:
+    """Derive file→file import edges by parsing Python source with ast.
+
+    The DB module names use full repo-relative paths (packages.X.src.Y) rather
+    than install names, so the resolver produces no IMPORTS edges. We work
+    around this by building a lookup from every plausible suffix of each
+    module name to its file path, then matching import statements against it.
+    """
+    # Build suffix-based lookup: "compass_core.graph.db" → path, "graph.db" → path, etc.
+    path_set = set(file_paths)
+    suffix_to_path: dict[str, str] = {}
+    for fp in file_paths:
+        p = Path(fp)
+        # derive dotted name from path parts, try all trailing sub-sequences
+        parts = list(p.with_suffix("").parts)
+        for start in range(len(parts)):
+            key = ".".join(parts[start:])
+            suffix_to_path.setdefault(key, fp)
+        # bare stem as well
+        suffix_to_path.setdefault(p.stem, fp)
+
+    results: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for src_path in file_paths:
+        try:
+            source = Path(src_path).read_text(encoding="utf-8", errors="ignore")
+            tree = ast.parse(source, filename=src_path)
+        except (OSError, SyntaxError):
+            continue
+
+        imported: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported.append(alias.name)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.append(node.module)
+
+        for mod in imported:
+            tgt_path = suffix_to_path.get(mod)
+            if not tgt_path or tgt_path == src_path or tgt_path not in path_set:
+                continue
+            key = (src_path, tgt_path)
+            if key not in seen:
+                seen.add(key)
+                results.append(key)
+
+    return results
 
 
 # ---------------------------------------------------------------------------

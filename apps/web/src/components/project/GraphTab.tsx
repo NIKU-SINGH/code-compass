@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
 import forceAtlas2 from "graphology-layout-forceatlas2";
-import { circular } from "graphology-layout";
 import { apiFetch } from "@/lib/api";
 import {
   FilterPanel,
@@ -15,29 +14,29 @@ import {
 } from "./FilterPanel";
 
 const NODE_COLOR: Record<NodeType, string> = {
-  File:        "oklch(0.588 0.217 264)",
-  Class:       "#f59e0b",
-  Function:    "#10b981",
-  Method:      "#06b6d4",
-  ExternalDep: "#94a3b8",
-  Field:       "#a78bfa",
+  File:        "#60a5fa", // blue  — structural containers
+  Class:       "#fb923c", // orange — class definitions
+  Function:    "#4ade80", // green  — functions
+  Method:      "#c084fc", // violet — methods
+  ExternalDep: "#f87171", // red    — external deps
+  Field:       "#e879f9", // fuchsia — fields
 };
 
 const NODE_SIZE: Record<NodeType, number> = {
-  File:        12,
-  Class:       9,
-  Function:    6,
-  Method:      6,
+  File:        14,
+  Class:       10,
+  Function:    7,
+  Method:      7,
   ExternalDep: 5,
   Field:       5,
 };
 
 const EDGE_COLOR: Record<EdgeType, string> = {
-  CONTAINS:    "#10b981",
-  IMPORTS:     "oklch(0.588 0.217 264)",
-  INHERITS:    "#f97316",
-  CALLS:       "rgba(255,255,255,0.15)",
-  CALLS_EXTERN:"#94a3b8",
+  CONTAINS:    "#4ade80",
+  IMPORTS:     "#60a5fa",
+  INHERITS:    "#fb923c",
+  CALLS:       "rgba(255,255,255,0.12)",
+  CALLS_EXTERN:"#f87171",
 };
 
 interface ApiNode { id: string; label: string; type: string; file_path: string; }
@@ -64,10 +63,18 @@ export function GraphTab({ projectId }: { projectId: string }) {
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // Kill any existing sigma instance and clear stale canvases (React StrictMode runs effects twice)
+    sigmaRef.current?.kill();
+    sigmaRef.current = null;
+    graphRef.current = null;
+    containerRef.current.innerHTML = "";
+
     let sigma: Sigma | null = null;
+    let cancelled = false;
 
     apiFetch<GraphData>("/api/repo/graph")
       .then((data) => {
+        if (cancelled || !containerRef.current) return;
         const graph = new Graph({ multi: false, type: "directed" });
 
         data.nodes.forEach((n) => {
@@ -87,23 +94,72 @@ export function GraphTab({ projectId }: { projectId: string }) {
           try {
             graph.addEdgeWithKey(e.id, e.source, e.target, {
               edgeType: e.type as EdgeType,
-              color:    EDGE_COLOR[e.type as EdgeType] ?? "rgba(255,255,255,0.15)",
-              size:     1,
+              type:     "line",
+              color:    EDGE_COLOR[e.type as EdgeType] ?? "rgba(255,255,255,0.20)",
+              size:     2,
             });
           } catch {
             // skip duplicate or missing-node edges
           }
         });
 
-        circular.assign(graph);
-        forceAtlas2.assign(graph, { iterations: 100, settings: { gravity: 1 } });
+        // Solar-system layout: each file is a "sun" with its children orbiting it.
+        // Recursive solar layout — no forceAtlas2 so coordinates stay predictable.
+        // Each parent is a "sun"; children orbit it at a radius large enough that
+        // edges are visible beyond node circles.
+        const childrenOf: Record<string, string[]> = {};
+        graph.forEachEdge((_e, attrs, src, tgt) => {
+          if (attrs.edgeType === "CONTAINS")
+            (childrenOf[src] = childrenOf[src] ?? []).push(tgt);
+        });
+
+        // Orbit radius in graph units: large enough to peek past node circles.
+        // Sigma node sizes (7–14) are in screen px; 1 graph unit ≈ viewport/coordRange px.
+        // Using 25+ units ensures edges are always visible.
+        const orbitRadius = (childCount: number) =>
+          Math.max(25, Math.sqrt(childCount) * 12);
+
+        function placeSubtree(id: string, cx: number, cy: number, scale: number) {
+          graph.setNodeAttribute(id, "x", cx);
+          graph.setNodeAttribute(id, "y", cy);
+          const kids = childrenOf[id] ?? [];
+          if (!kids.length) return;
+          const r = orbitRadius(kids.length) * scale;
+          kids.forEach((kid, i) => {
+            const angle = (i / kids.length) * 2 * Math.PI - Math.PI / 2;
+            placeSubtree(kid, cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, 0.45);
+          });
+        }
+
+        // Root nodes = nodes with no incoming CONTAINS edge
+        const allChildren = new Set(Object.values(childrenOf).flat());
+        const roots = graph.nodes().filter(n => !allChildren.has(n));
+
+        // Phyllotaxis (golden-angle) scatter — looks organic, avoids grids/lines.
+        // Each root is placed at angle = i * goldenAngle, radius grows with √i
+        // so groups spread outward evenly without clustering.
+        const golden = Math.PI * (3 - Math.sqrt(5)); // ≈ 137.5°
+        const spacing = 90;
+        roots.forEach((root, idx) => {
+          const groupR = orbitRadius((childrenOf[root] ?? []).length);
+          const r = Math.sqrt(idx + 0.5) * (spacing + groupR * 0.4);
+          const angle = idx * golden;
+          placeSubtree(root, Math.cos(angle) * r, Math.sin(angle) * r, 1);
+        });
 
         graphRef.current = graph;
 
         sigma = new Sigma(graph, containerRef.current!, {
-          renderEdgeLabels: false,
-          defaultEdgeColor: "rgba(255,255,255,0.15)",
-          defaultNodeColor: "#6b7280",
+          renderEdgeLabels:          false,
+          defaultEdgeType:           "line",
+          defaultEdgeColor:          "rgba(255,255,255,0.20)",
+          defaultNodeColor:          "#60a5fa",
+          labelColor:                { color: "rgba(255,255,255,0.85)" },
+          labelSize:                 11,
+          labelWeight:               "500",
+          labelRenderedSizeThreshold: 4,
+          stagePadding:              40,
+          enableEdgeEvents:          false,
         });
 
         sigma.on("clickNode", ({ node }) => {
@@ -123,6 +179,8 @@ export function GraphTab({ projectId }: { projectId: string }) {
         sigma.on("clickStage", () => setPopover(null));
 
         sigmaRef.current = sigma;
+        // Start zoomed in — ratio < 1 means closer to nodes in sigma's camera model
+        sigma.getCamera().setState({ x: 0.5, y: 0.5, angle: 0, ratio: 0.5 });
         setLoading(false);
       })
       .catch((e: Error) => {
@@ -131,7 +189,11 @@ export function GraphTab({ projectId }: { projectId: string }) {
       });
 
     return () => {
+      cancelled = true;
       sigma?.kill();
+      sigmaRef.current = null;
+      graphRef.current = null;
+      if (containerRef.current) containerRef.current.innerHTML = "";
     };
   }, [projectId]);
 
@@ -152,7 +214,7 @@ export function GraphTab({ projectId }: { projectId: string }) {
       graph.setEdgeAttribute(edge, "hidden", !filter.edges[type] || srcHidden || tgtHidden);
     });
 
-    sigmaRef.current?.refresh();
+    sigmaRef.current?.scheduleRefresh();
   }, [filter]);
 
   // Apply label visibility
@@ -162,7 +224,7 @@ export function GraphTab({ projectId }: { projectId: string }) {
     graph.forEachNode((node, attrs) => {
       graph.setNodeAttribute(node, "label", filter.showLabels ? (attrs.label as string) : "");
     });
-    sigmaRef.current?.refresh();
+    sigmaRef.current?.scheduleRefresh();
   }, [filter.showLabels]);
 
   // Search filter
@@ -183,7 +245,7 @@ export function GraphTab({ projectId }: { projectId: string }) {
       });
     }
 
-    sigmaRef.current?.refresh();
+    sigmaRef.current?.scheduleRefresh();
   }, [search, filter.nodes]);
 
   // Layout switching
@@ -191,11 +253,49 @@ export function GraphTab({ projectId }: { projectId: string }) {
     const graph = graphRef.current;
     if (!graph) return;
     if (layout === "force") {
-      forceAtlas2.assign(graph, { iterations: 100, settings: { gravity: 1 } });
+      forceAtlas2.assign(graph, {
+        iterations: 150,
+        settings: { gravity: 0.05, scalingRatio: 20, barnesHutOptimize: true, slowDown: 15 },
+      });
+    } else if (layout === "radial") {
+      // Radial: nodes in a circle ordered by type
+      const nodes = graph.nodes().sort((a, b) => {
+        const order: Record<string, number> = { File: 0, Class: 1, Function: 2, Method: 3, ExternalDep: 4, Field: 5 };
+        return (order[graph.getNodeAttribute(a, "nodeType")] ?? 9) - (order[graph.getNodeAttribute(b, "nodeType")] ?? 9);
+      });
+      nodes.forEach((n, i) => {
+        const angle = (i / nodes.length) * 2 * Math.PI;
+        graph.setNodeAttribute(n, "x", Math.cos(angle) * 20);
+        graph.setNodeAttribute(n, "y", Math.sin(angle) * 20);
+      });
     } else {
-      circular.assign(graph);
+      // Tree: same phyllotaxis as initial layout
+      const co: Record<string, string[]> = {};
+      graph.forEachEdge((_e, attrs, src, tgt) => {
+        if (attrs.edgeType === "CONTAINS") (co[src] = co[src] ?? []).push(tgt);
+      });
+      const childSet = new Set(Object.values(co).flat());
+      const rts = graph.nodes().filter(n => !childSet.has(n));
+      const g2 = Math.PI * (3 - Math.sqrt(5));
+      const orb = (n: number) => Math.max(25, Math.sqrt(n) * 12);
+      function place(id: string, cx: number, cy: number, sc: number) {
+        graph.setNodeAttribute(id, "x", cx);
+        graph.setNodeAttribute(id, "y", cy);
+        const kids = co[id] ?? [];
+        if (!kids.length) return;
+        const r = orb(kids.length) * sc;
+        kids.forEach((k, i) => {
+          const a = (i / kids.length) * 2 * Math.PI - Math.PI / 2;
+          place(k, cx + Math.cos(a) * r, cy + Math.sin(a) * r, 0.45);
+        });
+      }
+      rts.forEach((root, idx) => {
+        const r = Math.sqrt(idx + 0.5) * (90 + orb((co[root] ?? []).length) * 0.4);
+        const a = idx * g2;
+        place(root, Math.cos(a) * r, Math.sin(a) * r, 1);
+      });
     }
-    sigmaRef.current?.refresh();
+    sigmaRef.current?.scheduleRefresh();
   }, []);
 
   useEffect(() => {
@@ -223,7 +323,7 @@ export function GraphTab({ projectId }: { projectId: string }) {
         </div>
 
         {/* Sigma canvas */}
-        <div ref={containerRef} className="w-full h-full" />
+        <div ref={containerRef} className="absolute inset-0" />
 
         {/* Loading overlay */}
         {loading && (
