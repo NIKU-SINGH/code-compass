@@ -38,7 +38,7 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
 function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
   return (
     <TabsPrimitive.Content
-      className={cn("flex-1 overflow-hidden focus-visible:outline-none", className)}
+      className={cn("flex-1 flex flex-col overflow-hidden focus-visible:outline-none", className)}
       {...props}
     />
   );

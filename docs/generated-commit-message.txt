@@ -1,0 +1,13 @@
+feat(graph): improve project graph layout, styling, and import edge derivation
+
+- Add `.next/` to `.gitignore` to avoid committing Next.js build output.
+- Update graph filter color palettes and ensure the filter panel can fill available height.
+- Revamp graph rendering and layouts:
+  - introduce a hierarchical “solar system”/phyllotactic layout for CONTAINS trees
+  - add layout switching options (force/radial/custom) and improve Sigma lifecycle handling
+  - tweak edge/node styling and refresh scheduling for smoother interaction
+- Improve backend graph edge generation:
+  - dedupe graph edges to avoid duplicates
+  - add AST-based Python import edge extraction as a fallback when DB module naming is insufficient
+
+Co-authored-by: Kavia Code Assistant <kavia@kavia.ai>
