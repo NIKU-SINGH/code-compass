@@ -115,38 +115,28 @@ def _graph_edges(db: GraphDB) -> list[GraphEdge]:
         edges.append(GraphEdge(id=f"e{counter}", source=source, target=target, type=edge_type))
         counter += 1
 
-    for row in db.execute(
-        "MATCH (a:File)-[:CONTAINS]->(b:Class) RETURN a.path, b.id"
-    ).get_all():
+    for row in db.execute("MATCH (a:File)-[:CONTAINS]->(b:Class) RETURN a.path, b.id").get_all():
         _add(row[0], row[1], "CONTAINS")
 
-    for row in db.execute(
-        "MATCH (a:File)-[:CONTAINS]->(b:Function) RETURN a.path, b.id"
-    ).get_all():
+    for row in db.execute("MATCH (a:File)-[:CONTAINS]->(b:Function) RETURN a.path, b.id").get_all():
         _add(row[0], row[1], "CONTAINS")
 
-    for row in db.execute(
-        "MATCH (a:Class)-[:CONTAINS]->(b:Function) RETURN a.id, b.id"
-    ).get_all():
+    for row in db.execute("MATCH (a:Class)-[:CONTAINS]->(b:Function) RETURN a.id, b.id").get_all():
         _add(row[0], row[1], "CONTAINS")
 
-    for row in db.execute(
-        "MATCH (a:File)-[:IMPORTS]->(b:File) RETURN a.path, b.path"
-    ).get_all():
+    for row in db.execute("MATCH (a:File)-[:IMPORTS]->(b:File) RETURN a.path, b.path").get_all():
         _add(row[0], row[1], "IMPORTS")
 
     # DB IMPORTS is empty when module names weren't resolved at index time.
     # Fall back to parsing Python files directly with ast.
     if not any(e.type == "IMPORTS" for e in edges):
-        file_paths = [e.file_path for e in nodes if e.type == "File"] if False else []
+        file_paths = []
         for row in db.execute("MATCH (f:File) RETURN f.path, f.module_name").get_all():
             file_paths.append(row[0])
         for src, tgt in _ast_import_edges(file_paths):
             _add(src, tgt, "IMPORTS")
 
-    for row in db.execute(
-        "MATCH (a:Class)-[:INHERITS]->(b:Class) RETURN a.id, b.id"
-    ).get_all():
+    for row in db.execute("MATCH (a:Class)-[:INHERITS]->(b:Class) RETURN a.id, b.id").get_all():
         _add(row[0], row[1], "INHERITS")
 
     return edges

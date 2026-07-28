@@ -252,6 +252,7 @@ export function GraphTab({ projectId }: { projectId: string }) {
   const applyLayout = useCallback((layout: FilterState["layout"]) => {
     const graph = graphRef.current;
     if (!graph) return;
+    const g = graph;
     if (layout === "force") {
       forceAtlas2.assign(graph, {
         iterations: 150,
@@ -279,8 +280,8 @@ export function GraphTab({ projectId }: { projectId: string }) {
       const g2 = Math.PI * (3 - Math.sqrt(5));
       const orb = (n: number) => Math.max(25, Math.sqrt(n) * 12);
       function place(id: string, cx: number, cy: number, sc: number) {
-        graph.setNodeAttribute(id, "x", cx);
-        graph.setNodeAttribute(id, "y", cy);
+        g.setNodeAttribute(id, "x", cx);
+        g.setNodeAttribute(id, "y", cy);
         const kids = co[id] ?? [];
         if (!kids.length) return;
         const r = orb(kids.length) * sc;
