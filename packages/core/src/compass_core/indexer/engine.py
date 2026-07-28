@@ -36,6 +36,7 @@ import logging
 import os
 import subprocess
 import time
+import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -202,8 +203,6 @@ def _parse_worker(args: tuple[str, str]) -> ParsedFile | None:
     try:
         return extract_file(path, root=root)
     except Exception:
-        import traceback
-
         # Use print — worker processes don't share log handlers with the main process
         print(f"[compass] Failed to parse {path}: {traceback.format_exc()}")
         return None

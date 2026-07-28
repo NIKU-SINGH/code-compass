@@ -9,7 +9,13 @@ import typer
 
 from compass_cli import display
 from compass_cli.progress import RichProgressReporter
+from compass_core.graph.db import GraphDB
+from compass_core.graph.schema import create_schema
+from compass_core.graph.writer import write
+from compass_core.indexer.engine import parse_files, save_metadata
 from compass_core.logger import setup as setup_logging
+from compass_core.parser.file_walker import walk_python_files
+from compass_core.resolver.resolver import resolve
 from compass_core.settings import settings
 
 
@@ -50,13 +56,6 @@ def index(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
 ) -> None:
     """Index a repository for code intelligence."""
-    from compass_core.graph.db import GraphDB
-    from compass_core.graph.schema import create_schema
-    from compass_core.graph.writer import write
-    from compass_core.indexer.engine import parse_files, save_metadata
-    from compass_core.parser.file_walker import walk_python_files
-    from compass_core.resolver.resolver import resolve
-
     setup_logging(level="DEBUG" if verbose else "WARNING", show_path=verbose)
 
     repo_path = Path(path).resolve()
