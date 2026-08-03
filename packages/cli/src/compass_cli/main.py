@@ -42,7 +42,6 @@ app = typer.Typer(
 def main(ctx: typer.Context) -> None:
     """Code Compass — Navigate your codebase with ease."""
     if ctx.invoked_subcommand is None:
-        display.banner()
         display.help_commands()
 
 
