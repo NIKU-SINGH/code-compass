@@ -20,44 +20,8 @@ console = Console()
 
 
 # ---------------------------------------------------------------------------
-# Banner & help
+# Help
 # ---------------------------------------------------------------------------
-
-
-def banner() -> None:
-    """Print the Code Compass ASCII logo (left-aligned).
-
-    The banner includes a stylized "CODE COMPASS" title and a sub-title
-    rendered within a gold-bordered panel.
-    """
-    logo = r"""
-  ██████╗ ██████╗ ██████╗ ███████╗
- ██╔════╝██╔═══██╗██╔══██╗██╔════╝
- ██║     ██║   ██║██║  ██║█████╗
- ██║     ██║   ██║██║  ██║██╔══╝
- ╚██████╗╚██████╔╝██████╔╝███████╗
-  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
-
-  ██████╗ ██████╗ ███╗   ███╗██████╗  █████╗ ███████╗███████╗
- ██╔════╝██╔═══██╗████╗ ████║██╔══██╗██╔══██╗██╔════╝██╔════╝
- ██║     ██║   ██║██╔████╔██║██████╔╝███████║███████╗███████╗
- ██║     ██║   ██║██║╚██╔╝██║██╔═══╝ ██╔══██║╚════██║╚════██║
- ╚██████╗╚██████╔╝██║ ╚═╝ ██║██║     ██║  ██║███████║███████║
-  ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝  ╚═╝╚══════╝╚══════╝
-    """
-    clean = "\n".join(line.rstrip() for line in logo.strip("\n").split("\n"))
-    console.print(
-        Panel(
-            Text(clean, style=f"bold {_GOLD}", no_wrap=True, justify="left"),
-            subtitle=f"[bold {_GOLD}]Next-Gen Code Intelligence[/bold {_GOLD}]",
-            border_style=_GOLD,
-            padding=(1, 2),
-            expand=False,
-        )
-    )
-    console.print()
-    console.print(f"[bold {_GOLD}]Navigate your codebase with ease[/bold {_GOLD}]")
-    console.print()
 
 
 def help_commands() -> None:
@@ -66,6 +30,7 @@ def help_commands() -> None:
     Summarizes the base usage and primary subcommands (`index`, `serve`)
     with brief descriptions and formatting.
     """
+    console.print(f"[bold {_GOLD}]Code Compass[/bold {_GOLD}] — Navigate your codebase with ease\n")
     console.print("[bold]Usage:[/bold]  compass [OPTIONS] COMMAND [ARGS]...\n")
     console.print("[bold]Commands:[/bold]")
     console.print(

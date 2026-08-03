@@ -28,7 +28,7 @@
 - Consumes: Typer application `compass_cli.main.app` and `display.help_commands() -> None`.
 - Produces: concise terminal output from `runner.invoke(app, [])` without banner artwork.
 
-- [ ] **Step 1: Write the failing integration test**
+- [x] **Step 1: Write the failing integration test**
 
 ```python
 def test_cli_without_command_shows_concise_help():
@@ -42,13 +42,13 @@ def test_cli_without_command_shows_concise_help():
     assert "██████╗" not in result.output
 ```
 
-- [ ] **Step 2: Run the test and verify the red state**
+- [x] **Step 2: Run the test and verify the red state**
 
 Run: `uv run pytest packages/cli/tests/test_cli.py::test_cli_without_command_shows_concise_help -q`
 
 Expected: FAIL because the current default output contains `██████╗`.
 
-- [ ] **Step 3: Implement the minimal behavior change**
+- [x] **Step 3: Implement the minimal behavior change**
 
 In `packages/cli/src/compass_cli/main.py`, change the no-subcommand callback to call only:
 
@@ -58,7 +58,7 @@ display.help_commands()
 
 In `packages/cli/src/compass_cli/display.py`, remove the now-unused `banner()` function and imports used only by that function. Preserve `help_commands()` and all index-output helpers.
 
-- [ ] **Step 4: Verify the green state and regressions**
+- [x] **Step 4: Verify the green state and regressions**
 
 Run: `uv run pytest packages/cli/tests -q`
 
