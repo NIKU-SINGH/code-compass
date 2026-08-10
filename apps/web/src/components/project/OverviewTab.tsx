@@ -41,7 +41,7 @@ export function OverviewTab({ projectId }: { projectId: string }) {
         <p className="text-xs text-muted-foreground">
           Run{" "}
           <code className="bg-muted px-1.5 py-0.5 rounded text-xs">
-            compass index ./repo
+            compass ingest ./repo
           </code>{" "}
           first to index this repository.
         </p>
@@ -206,7 +206,7 @@ function ArchDiagram() {
       <circle cx="52" cy="80" r="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
       <text x="52" y="84" textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.4)">1</text>
       <line x1="65" y1="80" x2="210" y2="80" stroke="rgba(255,255,255,0.3)" strokeWidth="1" markerEnd="url(#arr-fwd)" />
-      <text x="137" y="74" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.4)">compass index ./repo</text>
+      <text x="137" y="74" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.4)">compass ingest ./repo</text>
 
       {/* Step 2: core → DB */}
       <circle cx="202" cy="112" r="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />

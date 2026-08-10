@@ -340,7 +340,7 @@ export function GraphTab({ projectId }: { projectId: string }) {
             <p className="text-xs text-muted-foreground">
               Run{" "}
               <code className="bg-muted px-1.5 py-0.5 rounded text-xs">
-                compass index ./repo
+                compass ingest ./repo
               </code>{" "}
               first.
             </p>

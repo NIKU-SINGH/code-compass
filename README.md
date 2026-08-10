@@ -11,7 +11,7 @@ code-compass/
 ├── Makefile
 │
 ├── apps/
-│   ├── cli/                      ← `compass index`, `compass ui`
+│   ├── cli/                      ← `compass ingest`, `compass ui`
 │   ├── mcp/                      ← Cursor/Claude Integration
 │   └── web/                      ← React + Vite UI
 │
@@ -28,8 +28,8 @@ make install
 # Install web dependencies
 make install-web
 
-# Index a repository
-compass index /path/to/repo
+# Ingest a repository
+compass ingest /path/to/repo
 
 # Launch the web UI
 compass ui
