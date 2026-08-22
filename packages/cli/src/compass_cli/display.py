@@ -1,6 +1,6 @@
 """Rich-based display rendering for the Code Compass CLI.
 
-All terminal output formatting lives here — main.py handles argument
+All terminal output formatting lives here — commands/ handles argument
 parsing and phase orchestration, this module handles how things look.
 """
 
@@ -13,6 +13,8 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
+
+from compass_cli.types import IngestSummary
 
 _GOLD = "color(214)"
 
@@ -27,14 +29,14 @@ console = Console()
 def help_commands() -> None:
     """Print the available CLI commands.
 
-    Summarizes the base usage and primary subcommands (`index`, `serve`)
+    Summarizes the base usage and primary subcommands (`ingest`, `serve`)
     with brief descriptions and formatting.
     """
     console.print(f"[bold {_GOLD}]Code Compass[/bold {_GOLD}] — Navigate your codebase with ease\n")
     console.print("[bold]Usage:[/bold]  compass [OPTIONS] COMMAND [ARGS]...\n")
     console.print("[bold]Commands:[/bold]")
     console.print(
-        f"  [bold {_GOLD}]index[/bold {_GOLD}]   Index a repository for code intelligence"
+        f"  [bold {_GOLD}]ingest[/bold {_GOLD}]  Ingest a repository for code intelligence"
     )
     console.print(
         f"  [bold {_GOLD}]serve[/bold {_GOLD}]   Start the API server and frontend dev server"
@@ -46,17 +48,17 @@ def help_commands() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Index command display helpers
+# Ingest command display helpers
 # ---------------------------------------------------------------------------
 
 
-def index_header(repo_path: Path) -> None:
-    """Print the opening line for an index run.
+def ingest_header(repo_path: Path) -> None:
+    """Print the opening line for an ingest run.
 
     Args:
-        repo_path: The filesystem path to the repository being indexed.
+        repo_path: The filesystem path to the repository being ingested.
     """
-    console.print(f"\n[dim]Indexing[/dim] [bold]{repo_path}[/bold]\n")
+    console.print(f"\n[dim]Ingesting[/dim] [bold]{repo_path}[/bold]\n")
 
 
 def phase_header(num: int, total: int, title: str) -> None:
@@ -102,30 +104,11 @@ def phase_done(message: str) -> None:
     console.print(f"\n  [green]✓[/green] {message}\n")
 
 
-def summary(
-    *,
-    file_count: int,
-    class_count: int,
-    function_count: int,
-    elapsed: float,
-    node_count: int,
-    edge_count: int,
-    db_path: Path,
-    db_size: int,
-    skipped: int,
-) -> None:
+def summary(summary: IngestSummary) -> None:
     """Print the final summary in a gold-bordered panel.
 
     Args:
-        file_count: Total number of files successfully indexed.
-        class_count: Total number of classes discovered.
-        function_count: Total number of functions/methods discovered.
-        elapsed: Time taken for the entire index run in seconds.
-        node_count: Total count of nodes inserted into the graph.
-        edge_count: Total count of edges (calls/imports) resolved.
-        db_path: Path to the generated SQLite database.
-        db_size: Size of the database in bytes.
-        skipped: Number of files tasks skipped due to errors or filters.
+        summary: Aggregate results of the ingest run to display.
     """
     table = Table.grid(padding=(0, 4))
     table.add_column(style="dim", min_width=18)
@@ -133,22 +116,22 @@ def summary(
     table.add_column(style="dim", min_width=18)
     table.add_column(style="bold")
 
-    table.add_row("Files indexed", str(file_count), "Nodes", f"{node_count:,}")
-    table.add_row("Classes", str(class_count), "Edges", f"{edge_count:,}")
-    table.add_row("Functions", str(function_count), "DB size", _fmt_size(db_size))
-    table.add_row("Skipped", str(skipped), "", "")
-    table.add_row("Elapsed", f"{elapsed:.1f}s", "", "")
+    table.add_row("Files indexed", str(summary.file_count), "Nodes", f"{summary.node_count:,}")
+    table.add_row("Classes", str(summary.class_count), "Edges", f"{summary.edge_count:,}")
+    table.add_row("Functions", str(summary.function_count), "DB size", _fmt_size(summary.db_size))
+    table.add_row("Skipped", str(summary.skipped), "", "")
+    table.add_row("Elapsed", f"{summary.elapsed:.1f}s", "", "")
 
     db_line = Text(no_wrap=True, overflow="fold")
     db_line.append("Database   ", style="dim")
-    db_line.append(str(db_path), style="bold")
+    db_line.append(str(summary.db_path), style="bold")
 
     content = Group(table, Text(""), db_line)
 
     console.print(
         Panel(
             content,
-            title=f"[bold {_GOLD}]compass index complete[/bold {_GOLD}]",
+            title=f"[bold {_GOLD}]compass ingest complete[/bold {_GOLD}]",
             border_style=_GOLD,
             padding=(1, 2),
             expand=True,
@@ -158,7 +141,7 @@ def summary(
 
 
 def next_steps() -> None:
-    """Print suggested next actions after a successful index.
+    """Print suggested next actions after a successful ingest.
 
     Includes the command to start the web UI.
     """
@@ -174,6 +157,15 @@ def next_steps() -> None:
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
+
+
+def error(message: str) -> None:
+    """Print a formatted error message.
+
+    Args:
+        message: The error text to display.
+    """
+    console.print(f"[bold red]Error:[/bold red] {message}")
 
 
 def _fmt_size(size_bytes: int) -> str:
