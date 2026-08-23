@@ -7,17 +7,64 @@ from pathlib import Path
 
 import typer
 
+import compass_core.languages.python  # noqa: F401 — registers the Python plugin
 from compass_cli import display
 from compass_cli.errors import handle_errors
 from compass_cli.progress import RichProgressReporter
 from compass_cli.types import IngestSummary
-from compass_core.graph.db import GraphDB
-from compass_core.graph.schema import create_schema
-from compass_core.graph.writer import write
-from compass_core.ingest.engine import parse_files, save_metadata
+from compass_core.ir.graph import ResolvedGraph
+from compass_core.ir.models import DefinitionKind
 from compass_core.logger import setup as setup_logging
-from compass_core.parser.file_walker import walk_python_files
-from compass_core.resolver.resolver import resolve
+from compass_core.phases.base import IngestContext
+from compass_core.phases.pipeline import Pipeline
+
+
+def _count_definitions(resolved_graph: ResolvedGraph) -> tuple[int, int]:
+    """Return (class_count, function_count) across all files in the graph."""
+    class_count = 0
+    function_count = 0
+    for pf in resolved_graph.files:
+        for d in pf.definitions:
+            if d.kind is DefinitionKind.CLASS:
+                class_count += 1
+            elif d.kind in (DefinitionKind.FUNCTION, DefinitionKind.METHOD):
+                function_count += 1
+    return class_count, function_count
+
+
+def _db_size(db_path: Path) -> int:
+    """Total bytes on disk for the database — a single file or a directory."""
+    if db_path.is_file():
+        return db_path.stat().st_size
+    if db_path.is_dir():
+        return sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file())
+    return 0
+
+
+def _relative_db_path(db_path: Path, repo_path: Path) -> Path:
+    """Express db_path relative to repo_path for display, falling back to the absolute path."""
+    try:
+        return db_path.relative_to(repo_path)
+    except ValueError:
+        return db_path
+
+
+def _display_ingest_stats(
+    ctx: IngestContext, display_db: Path, class_count: int, function_count: int
+) -> None:
+    """Print the post-ingest summary lines (file/def/edge counts, db path)."""
+    assert ctx.manifest is not None
+    assert ctx.resolved_graph is not None
+
+    display.step("Files indexed", f"{len(ctx.manifest.files)}")
+    display.step("Classes", f"{class_count}")
+    display.step("Functions", f"{function_count}")
+    display.step("Import edges", f"{len(ctx.resolved_graph.import_edges):,}")
+    display.step("Inheritance edges", f"{len(ctx.resolved_graph.inherit_edges):,}")
+    display.step("Call edges", f"{len(ctx.resolved_graph.call_edges):,}")
+    display.step("External calls", f"{len(ctx.resolved_graph.external_call_edges):,}")
+    display.step("Database", str(display_db))
+    display.phase_done("Done")
 
 
 def _run_ingest(
@@ -32,79 +79,28 @@ def _run_ingest(
 
     display.ingest_header(repo_path)
 
-    files = list(walk_python_files(repo_path))
-
     with RichProgressReporter(console=display.console) as reporter:
-        # ------------------------------------------------------------------
-        # Phase 1 — Ingestion
-        # ------------------------------------------------------------------
-        display.phase_header(1, 2, "Ingestion")
-        display.step("Discovered", f"{len(files)} Python files")
+        ctx = Pipeline(max_workers=workers).run(repo_path, db_path, reporter=reporter)
 
-        parsed, skipped_files = parse_files(
-            files, repo_path, max_workers=workers or None, reporter=reporter
-        )
-        graph = resolve(parsed, reporter=reporter)
+    assert ctx.manifest is not None
+    assert ctx.resolved_graph is not None
+    assert ctx.report is not None
+    assert ctx.write_result is not None
 
-        class_count = sum(len(pf.classes) for pf in parsed)
-        function_count = sum(
-            len(pf.functions) + sum(len(c.methods) for c in pf.classes) for pf in parsed
-        )
-        skipped = len(skipped_files)
-
-        display.step(
-            "Files parsed", f"{len(parsed)}" + (f"  ({skipped} skipped)" if skipped else "")
-        )
-        if verbose and skipped_files:
-            for f in skipped_files:
-                display.console.print(f"  [dim red]  skipped: {f}[/dim red]")
-        display.step("Classes", f"{class_count}")
-        display.step("Functions", f"{function_count}")
-        display.step("Import edges", f"{len(graph.import_edges):,}")
-        display.step("Inheritance edges", f"{len(graph.inherit_edges):,}")
-        display.step("Call edges", f"{len(graph.call_edges):,}")
-        display.step("External calls", f"{len(graph.external_call_edges):,}")
-        display.phase_done("Ingestion complete")
-
-        # ------------------------------------------------------------------
-        # Phase 2 — Persistence
-        # ------------------------------------------------------------------
-        display.phase_header(2, 2, "Persistence")
-
-        with GraphDB(db_path) as gdb:
-            create_schema(gdb)
-            write_result = write(gdb, graph, reporter=reporter)
-
-        try:
-            display_db = db_path.relative_to(repo_path)
-        except ValueError:
-            display_db = db_path
-        display.step("Database", str(display_db))
-        display.phase_done("Done")
-
-    # Metadata
-    save_metadata(repo_path)
-
-    elapsed = time.monotonic() - start
-
-    # DB size — single file or directory
-    if db_path.is_file():
-        db_size = db_path.stat().st_size
-    elif db_path.is_dir():
-        db_size = sum(f.stat().st_size for f in db_path.rglob("*") if f.is_file())
-    else:
-        db_size = 0
+    display_db = _relative_db_path(db_path, repo_path)
+    class_count, function_count = _count_definitions(ctx.resolved_graph)
+    _display_ingest_stats(ctx, display_db, class_count, function_count)
 
     return IngestSummary(
-        file_count=len(parsed),
+        file_count=len(ctx.manifest.files),
         class_count=class_count,
         function_count=function_count,
-        elapsed=elapsed,
-        node_count=write_result.node_count,
-        edge_count=write_result.edge_count,
+        elapsed=time.monotonic() - start,
+        node_count=ctx.write_result.node_count,
+        edge_count=ctx.write_result.edge_count,
         db_path=display_db,
-        db_size=db_size,
-        skipped=skipped,
+        db_size=_db_size(db_path),
+        skipped=ctx.report.degraded_file_count,
     )
 
 
