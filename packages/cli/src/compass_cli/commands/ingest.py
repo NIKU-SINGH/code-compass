@@ -10,7 +10,7 @@ import typer
 import compass_core.languages.python  # noqa: F401 — registers the Python plugin
 from compass_cli import display
 from compass_cli.errors import handle_errors
-from compass_cli.progress import RichProgressReporter
+from compass_cli.progress import IngestReporter
 from compass_cli.types import IngestSummary
 from compass_core.ir.graph import ResolvedGraph
 from compass_core.ir.models import DefinitionKind
@@ -41,6 +41,22 @@ def _db_size(db_path: Path) -> int:
     return 0
 
 
+def _resolved_pct(graph: ResolvedGraph) -> float:
+    """Overall resolved-call ratio across all languages (1.0 if no calls at all)."""
+    total_raw = sum(len(d.raw_calls) for pf in graph.files for d in pf.definitions)
+    if total_raw == 0:
+        return 1.0
+    return len(graph.call_edges) / total_raw
+
+
+def _language_counts(ctx: IngestContext) -> dict[str, int]:
+    assert ctx.manifest is not None
+    counts: dict[str, int] = {}
+    for f in ctx.manifest.files:
+        counts[f.language] = counts.get(f.language, 0) + 1
+    return counts
+
+
 def _relative_db_path(db_path: Path, repo_path: Path) -> Path:
     """Express db_path relative to repo_path for display, falling back to the absolute path."""
     try:
@@ -49,22 +65,67 @@ def _relative_db_path(db_path: Path, repo_path: Path) -> Path:
         return db_path
 
 
-def _display_ingest_stats(
-    ctx: IngestContext, display_db: Path, class_count: int, function_count: int
-) -> None:
-    """Print the post-ingest summary lines (file/def/edge counts, db path)."""
-    assert ctx.manifest is not None
-    assert ctx.resolved_graph is not None
+def _stage_result(
+    phase: str, ctx: IngestContext, *, repo_path: Path, db_path: Path
+) -> tuple[str, str, bool]:
+    """Build (primary, secondary, warn) display text for a just-finished phase."""
+    if phase == "discovery":
+        assert ctx.manifest is not None
+        m = ctx.manifest
+        num_languages = len(_language_counts(ctx))
+        language_word = "language" if num_languages == 1 else "languages"
+        primary = f"{len(m.files):,} files"
+        secondary = (
+            f"{num_languages} {language_word} · {m.dirs_scanned:,} dirs · {m.ignored_count:,} ignored"
+        )
+        return primary, secondary, False
 
-    display.step("Files indexed", f"{len(ctx.manifest.files)}")
-    display.step("Classes", f"{class_count}")
-    display.step("Functions", f"{function_count}")
-    display.step("Import edges", f"{len(ctx.resolved_graph.import_edges):,}")
-    display.step("Inheritance edges", f"{len(ctx.resolved_graph.inherit_edges):,}")
-    display.step("Call edges", f"{len(ctx.resolved_graph.call_edges):,}")
-    display.step("External calls", f"{len(ctx.resolved_graph.external_call_edges):,}")
-    display.step("Database", str(display_db))
-    display.phase_done("Done")
+    if phase == "parse":
+        assert ctx.parsed_files is not None
+        degraded = sum(1 for pf in ctx.parsed_files if pf.degraded)
+        primary = f"{len(ctx.parsed_files):,} parsed"
+        secondary = f"{degraded:,} degraded"
+        return primary, secondary, degraded > 0
+
+    if phase == "symbol_table":
+        assert ctx.symbol_table is not None
+        assert ctx.import_map is not None
+        primary = f"{len(ctx.symbol_table):,} symbols"
+        secondary = f"{len(ctx.import_map):,} import entries"
+        return primary, secondary, False
+
+    if phase == "resolution":
+        assert ctx.resolved_graph is not None
+        g = ctx.resolved_graph
+        total = (
+            len(g.import_edges) + len(g.inherit_edges) + len(g.call_edges) + len(g.external_call_edges)
+        )
+        primary = f"{total:,} edges"
+        secondary = (
+            f"import {len(g.import_edges):,} · call {len(g.call_edges):,} · "
+            f"external {len(g.external_call_edges):,} · inherit {len(g.inherit_edges):,}"
+        )
+        return primary, secondary, False
+
+    if phase == "validation":
+        assert ctx.report is not None
+        assert ctx.resolved_graph is not None
+        r = ctx.report
+        primary = f"{r.orphan_node_count:,} orphan nodes"
+        secondary = (
+            f"{r.dangling_import_count:,} dangling imports · {r.degraded_file_count:,} degraded files · "
+            f"{_resolved_pct(ctx.resolved_graph):.0%} resolved"
+        )
+        return primary, secondary, r.orphan_node_count > 0
+
+    if phase == "persistence":
+        assert ctx.write_result is not None
+        display_db = _relative_db_path(db_path, repo_path)
+        primary = f"{ctx.write_result.node_count:,} nodes · {ctx.write_result.edge_count:,} edges"
+        secondary = f"{display.fmt_size(_db_size(db_path))} · {display_db}"
+        return primary, secondary, False
+
+    return "", "", False
 
 
 def _run_ingest(
@@ -79,8 +140,17 @@ def _run_ingest(
 
     display.ingest_header(repo_path)
 
-    with RichProgressReporter(console=display.console) as reporter:
-        ctx = Pipeline(max_workers=workers).run(repo_path, db_path, reporter=reporter)
+    with IngestReporter(console=display.console) as reporter:
+
+        def _on_phase_complete(phase: str, ctx: IngestContext) -> None:
+            primary, secondary, warn = _stage_result(phase, ctx, repo_path=repo_path, db_path=db_path)
+            reporter.complete(phase, primary, secondary, warn=warn)
+
+        ctx = Pipeline(max_workers=workers).run(
+            repo_path, db_path, reporter=reporter, on_phase_complete=_on_phase_complete
+        )
+        reporter.finalize()
+    display.console.print()
 
     assert ctx.manifest is not None
     assert ctx.resolved_graph is not None
@@ -89,7 +159,6 @@ def _run_ingest(
 
     display_db = _relative_db_path(db_path, repo_path)
     class_count, function_count = _count_definitions(ctx.resolved_graph)
-    _display_ingest_stats(ctx, display_db, class_count, function_count)
 
     return IngestSummary(
         file_count=len(ctx.manifest.files),
@@ -101,6 +170,9 @@ def _run_ingest(
         db_path=display_db,
         db_size=_db_size(db_path),
         skipped=ctx.report.degraded_file_count,
+        resolved_pct=_resolved_pct(ctx.resolved_graph),
+        orphan_count=ctx.report.orphan_node_count,
+        language_counts=_language_counts(ctx),
     )
 
 

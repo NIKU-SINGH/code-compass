@@ -16,6 +16,9 @@ def test_ingest_summary_holds_all_fields():
         db_path=Path("graph.ladybug"),
         db_size=4096,
         skipped=1,
+        resolved_pct=0.75,
+        orphan_count=5,
+        language_counts={"python": 10},
     )
 
     assert summary.file_count == 10
@@ -27,3 +30,6 @@ def test_ingest_summary_holds_all_fields():
     assert summary.db_path == Path("graph.ladybug")
     assert summary.db_size == 4096
     assert summary.skipped == 1
+    assert summary.resolved_pct == 0.75
+    assert summary.orphan_count == 5
+    assert summary.language_counts == {"python": 10}
