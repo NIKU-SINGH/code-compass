@@ -30,6 +30,9 @@ jobs:
       - name: Run ruff (format check)
         run: uv run ruff format --check .
 
+      - name: Run mypy (compass_core)
+        run: cd packages/core && uv run mypy
+
   test:
     name: Test
     runs-on: ubuntu-latest
