@@ -20,7 +20,7 @@ app.add_middleware(
 
 
 @app.get("/health")
-def health_check():
+def health_check() -> dict[str, str]:
     """Basic health check route for the frontend to verify connection."""
     return {"status": "ok", "service": "Code Compass Core API", "version": "0.1.0"}
 

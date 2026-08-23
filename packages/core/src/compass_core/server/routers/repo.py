@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from compass_core.graph.db import GraphDB
+from compass_core.graph.db import GraphDB, as_row, as_rows
 from compass_core.settings import settings
 
 router = APIRouter(tags=["repo"])
@@ -61,12 +61,12 @@ _MAX_ENTRY_POINTS = 5
 
 def _count(db: GraphDB, query: str) -> int:
     result = db.execute(query)
-    return int(result.get_next()[0]) if result.has_next() else 0
+    return int(as_row(result)[0]) if result.has_next() else 0
 
 
 def _edge_count(db: GraphDB) -> int:
     result = db.execute("MATCH ()-[r]->() RETURN count(*)")
-    return int(result.get_next()[0]) if result.has_next() else 0
+    return int(as_row(result)[0]) if result.has_next() else 0
 
 
 def _entry_points(db: GraphDB) -> list[EntryPoint]:
@@ -78,23 +78,23 @@ def _entry_points(db: GraphDB) -> list[EntryPoint]:
         LIMIT {_MAX_ENTRY_POINTS}
         """
     )
-    rows = result.get_all()
+    rows = as_rows(result)
     return [EntryPoint(path=row[0], module_name=row[1]) for row in rows]
 
 
 def _graph_nodes(db: GraphDB) -> list[GraphNode]:
     nodes: list[GraphNode] = []
 
-    for row in db.execute("MATCH (f:File) RETURN f.path, f.path, 'File', f.path").get_all():
+    for row in as_rows(db.execute("MATCH (f:File) RETURN f.path, f.path, 'File', f.path")):
         path = row[0]
         nodes.append(GraphNode(id=path, label=path.split("/")[-1], type="File", file_path=path))
 
-    for row in db.execute("MATCH (c:Class) RETURN c.id, c.name, 'Class', c.file_path").get_all():
+    for row in as_rows(db.execute("MATCH (c:Class) RETURN c.id, c.name, 'Class', c.file_path")):
         nodes.append(GraphNode(id=row[0], label=row[1], type="Class", file_path=row[3]))
 
-    for row in db.execute(
-        "MATCH (fn:Function) RETURN fn.id, fn.name, fn.is_method, fn.file_path"
-    ).get_all():
+    for row in as_rows(
+        db.execute("MATCH (fn:Function) RETURN fn.id, fn.name, fn.is_method, fn.file_path")
+    ):
         node_type = "Method" if row[2] else "Function"
         nodes.append(GraphNode(id=row[0], label=row[1], type=node_type, file_path=row[3]))
 
@@ -115,28 +115,28 @@ def _graph_edges(db: GraphDB) -> list[GraphEdge]:
         edges.append(GraphEdge(id=f"e{counter}", source=source, target=target, type=edge_type))
         counter += 1
 
-    for row in db.execute("MATCH (a:File)-[:CONTAINS]->(b:Class) RETURN a.path, b.id").get_all():
+    for row in as_rows(db.execute("MATCH (a:File)-[:CONTAINS]->(b:Class) RETURN a.path, b.id")):
         _add(row[0], row[1], "CONTAINS")
 
-    for row in db.execute("MATCH (a:File)-[:CONTAINS]->(b:Function) RETURN a.path, b.id").get_all():
+    for row in as_rows(db.execute("MATCH (a:File)-[:CONTAINS]->(b:Function) RETURN a.path, b.id")):
         _add(row[0], row[1], "CONTAINS")
 
-    for row in db.execute("MATCH (a:Class)-[:CONTAINS]->(b:Function) RETURN a.id, b.id").get_all():
+    for row in as_rows(db.execute("MATCH (a:Class)-[:CONTAINS]->(b:Function) RETURN a.id, b.id")):
         _add(row[0], row[1], "CONTAINS")
 
-    for row in db.execute("MATCH (a:File)-[:IMPORTS]->(b:File) RETURN a.path, b.path").get_all():
+    for row in as_rows(db.execute("MATCH (a:File)-[:IMPORTS]->(b:File) RETURN a.path, b.path")):
         _add(row[0], row[1], "IMPORTS")
 
     # DB IMPORTS is empty when module names weren't resolved at index time.
     # Fall back to parsing Python files directly with ast.
     if not any(e.type == "IMPORTS" for e in edges):
         file_paths = []
-        for row in db.execute("MATCH (f:File) RETURN f.path, f.module_name").get_all():
+        for row in as_rows(db.execute("MATCH (f:File) RETURN f.path, f.module_name")):
             file_paths.append(row[0])
         for src, tgt in _ast_import_edges(file_paths):
             _add(src, tgt, "IMPORTS")
 
-    for row in db.execute("MATCH (a:Class)-[:INHERITS]->(b:Class) RETURN a.id, b.id").get_all():
+    for row in as_rows(db.execute("MATCH (a:Class)-[:INHERITS]->(b:Class) RETURN a.id, b.id")):
         _add(row[0], row[1], "INHERITS")
 
     return edges
@@ -185,10 +185,10 @@ def _ast_import_edges(file_paths: list[str]) -> list[tuple[str, str]]:
             tgt_path = suffix_to_path.get(mod)
             if not tgt_path or tgt_path == src_path or tgt_path not in path_set:
                 continue
-            key = (src_path, tgt_path)
-            if key not in seen:
-                seen.add(key)
-                results.append(key)
+            edge_key = (src_path, tgt_path)
+            if edge_key not in seen:
+                seen.add(edge_key)
+                results.append(edge_key)
 
     return results
 
@@ -199,7 +199,7 @@ def _ast_import_edges(file_paths: list[str]) -> list[tuple[str, str]]:
 
 
 @router.get("/repo")
-async def repo_info():
+async def repo_info() -> dict[str, str]:
     return {"message": "not implemented"}
 
 

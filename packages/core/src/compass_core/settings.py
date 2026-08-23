@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     FRONTEND_HOST: str = Field(default="localhost", description="Host of the frontend dev server")
     FRONTEND_PORT: int = Field(default=3000, description="Port of the frontend dev server")
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]  # known mypy/pydantic limitation: mypy flags any decorator stacked on @property before the pydantic plugin can special-case @computed_field
     @property
     def FRONTEND_URL(self) -> str:
         return f"http://{self.FRONTEND_HOST}:{self.FRONTEND_PORT}"

@@ -19,7 +19,16 @@ from __future__ import annotations
 
 from typing import Literal, Protocol
 
-Phase = Literal["parse", "resolve", "write_nodes", "write_edges"]
+Phase = Literal[
+    "discovery",
+    "parse",
+    "symbol_table",
+    "resolution",
+    "validation",
+    "resolve",
+    "write_nodes",
+    "write_edges",
+]
 
 
 class ProgressReporter(Protocol):

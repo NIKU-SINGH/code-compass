@@ -452,6 +452,18 @@ def test_module_name_nested_package(tmp_path: Path) -> None:
     assert pf.module_name == "pkg.sub"
 
 
+def test_module_name_strips_leading_src(tmp_path: Path) -> None:
+    """Src-layout repos (packages/<pkg>/src/<import_name>/...) import
+    relative to `src/`, not the repo root -- the dotted module name must
+    match that or intra-repo imports never resolve."""
+    pkg = tmp_path / "packages" / "core" / "src" / "compass_core" / "graph"
+    pkg.mkdir(parents=True)
+    p = pkg / "db.py"
+    p.write_text("x = 1\n", encoding="utf-8")
+    pf = parse(p, rel_path="packages/core/src/compass_core/graph/db.py")
+    assert pf.module_name == "compass_core.graph.db"
+
+
 def test_module_name_strips_trailing_init(tmp_path: Path) -> None:
     """A trailing __init__ path component is dropped so the package is
     referenced by its directory name, not literally `.__init__`."""
