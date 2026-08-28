@@ -19,6 +19,88 @@ from compass_core.phases.base import IngestContext
 from compass_core.phases.pipeline import Pipeline
 
 
+def _format_debug_section(phase: str, ctx: IngestContext) -> str:
+    """Human-readable dump of everything a phase produced, for --debug-log."""
+    lines: list[str] = [f"===== {phase} =====", ""]
+
+    if phase == "discovery":
+        assert ctx.manifest is not None
+        m = ctx.manifest
+        lines.append(f"dirs_scanned={m.dirs_scanned} ignored_count={m.ignored_count} files={len(m.files)}")
+        lines.append("")
+        for f in m.files:
+            lines.append(f"  {f.path}  [{f.language}]  {f.content_hash}")
+
+    elif phase == "parse":
+        assert ctx.parsed_files is not None
+        for pf in ctx.parsed_files:
+            lines.append(f"  {pf.path}  [{pf.language}]  module={pf.module_name}")
+            if pf.degraded:
+                lines.append(f"    DEGRADED: {pf.error}")
+            lines.append(
+                f"    definitions={len(pf.definitions)} imports={len(pf.imports)} "
+                f"call_sites={len(pf.call_sites)}"
+            )
+            for d in pf.definitions:
+                lines.append(f"      {d.kind.value}: {d.id}  (lines {d.line_start}-{d.line_end})")
+                if d.signature:
+                    lines.append(f"        signature: {d.signature}")
+                if d.docstring:
+                    lines.append(f"        docstring: {d.docstring!r}")
+                if d.raw_calls:
+                    lines.append(f"        raw_calls: {d.raw_calls}")
+                lines.append("        source:")
+                for src_line in d.source.splitlines():
+                    lines.append(f"          {src_line}")
+
+    elif phase == "symbol_table":
+        assert ctx.symbol_table is not None
+        assert ctx.import_map is not None
+        lines.append(f"symbol_table ({len(ctx.symbol_table)} entries):")
+        for key, value in ctx.symbol_table.items():
+            lines.append(f"  {key} -> {value}")
+        lines.append("")
+        lines.append(f"import_map ({len(ctx.import_map)} entries):")
+        for key, value in ctx.import_map.items():
+            lines.append(f"  {key} -> {value}")
+
+    elif phase == "resolution":
+        assert ctx.resolved_graph is not None
+        g = ctx.resolved_graph
+        lines.append(f"call_edges ({len(g.call_edges)}):")
+        for e in g.call_edges:
+            lines.append(f"  {e.caller_id} -> {e.callee_id}  [{e.call_type} conf={e.confidence}]")
+        lines.append("")
+        lines.append(f"external_call_edges ({len(g.external_call_edges)}):")
+        for e in g.external_call_edges:
+            lines.append(f"  {e.caller_id} -> {e.full_ref}  [{e.library}]")
+        lines.append("")
+        lines.append(f"import_edges ({len(g.import_edges)}):")
+        for e in g.import_edges:
+            lines.append(f"  {e.from_path} -> {e.to_path}")
+        lines.append("")
+        lines.append(f"inherit_edges ({len(g.inherit_edges)}):")
+        for e in g.inherit_edges:
+            lines.append(f"  {e.child_id} -> {e.parent_id}")
+
+    elif phase == "validation":
+        assert ctx.report is not None
+        r = ctx.report
+        lines.append(f"orphan_node_count={r.orphan_node_count}")
+        lines.append(f"dangling_import_count={r.dangling_import_count}")
+        lines.append(f"degraded_file_count={r.degraded_file_count}")
+        lines.append(f"resolved_by_language={r.resolved_by_language}")
+        lines.append(f"unresolved_by_language={r.unresolved_by_language}")
+
+    elif phase == "persistence":
+        assert ctx.write_result is not None
+        lines.append(f"node_count={ctx.write_result.node_count}")
+        lines.append(f"edge_count={ctx.write_result.edge_count}")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _count_definitions(resolved_graph: ResolvedGraph) -> tuple[int, int]:
     """Return (class_count, function_count) across all files in the graph."""
     class_count = 0
@@ -134,17 +216,25 @@ def _run_ingest(
     *,
     workers: int | None,
     verbose: bool,
+    debug_log: Path | None,
 ) -> IngestSummary:
     """Run the ingest pipeline and return its summary."""
     start = time.monotonic()
 
     display.ingest_header(repo_path)
 
+    if debug_log is not None:
+        debug_log.parent.mkdir(parents=True, exist_ok=True)
+        debug_log.write_text("", encoding="utf-8")
+
     with IngestReporter(console=display.console) as reporter:
 
         def _on_phase_complete(phase: str, ctx: IngestContext) -> None:
             primary, secondary, warn = _stage_result(phase, ctx, repo_path=repo_path, db_path=db_path)
             reporter.complete(phase, primary, secondary, warn=warn)
+            if debug_log is not None:
+                with debug_log.open("a", encoding="utf-8") as f:
+                    f.write(_format_debug_section(phase, ctx) + "\n")
 
         ctx = Pipeline(max_workers=workers).run(
             repo_path, db_path, reporter=reporter, on_phase_complete=_on_phase_complete
@@ -184,6 +274,9 @@ def ingest(
     ),
     workers: int | None = typer.Option(None, "--workers", help="Number of parallel parse workers"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
+    debug_log: bool = typer.Option(
+        False, "--debug-log", help="Append phase-by-phase output to .compass/ingest_debug.log"
+    ),
 ) -> None:
     """Ingest a repository for code intelligence."""
     setup_logging(level="DEBUG" if verbose else "WARNING", show_path=verbose)
@@ -191,8 +284,9 @@ def ingest(
     repo_path = Path(path).resolve()
     db_path = Path(db).resolve() if db else repo_path / ".compass" / "graph.ladybug"
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    debug_log_path = repo_path / ".compass" / "ingest_debug.log" if debug_log else None
 
-    summary = _run_ingest(repo_path, db_path, workers=workers, verbose=verbose)
+    summary = _run_ingest(repo_path, db_path, workers=workers, verbose=verbose, debug_log=debug_log_path)
 
     display.summary(summary)
     display.next_steps()
