@@ -24,6 +24,8 @@ class FileMetadata:
 @dataclass
 class FileManifest:
     files: list[FileMetadata]
+    dirs_scanned: int = 0
+    ignored_count: int = 0
 
 
 @dataclass

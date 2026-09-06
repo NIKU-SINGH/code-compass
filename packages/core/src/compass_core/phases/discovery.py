@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import pathspec
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 _SKIP_DIRS = frozenset(
     {
         ".git",
+        ".claude",
         "__pycache__",
         "node_modules",
         ".venv",
@@ -40,6 +42,16 @@ _SKIP_DIRS = frozenset(
 _MAX_BYTES = 500 * 1024
 
 
+@dataclass
+class _WalkStats:
+    """Counts skipped directories/files as a byproduct of the walk, so the
+    manifest can report how much of the repo was filtered out without a
+    second traversal."""
+
+    dirs_scanned: int = 0
+    ignored_count: int = 0
+
+
 class DiscoveryPhase:
     name = "discovery"
 
@@ -50,13 +62,16 @@ class DiscoveryPhase:
 
         spec = _load_ignore_spec(root)
         extensions = registry.registered_extensions()
+        stats = _WalkStats()
         files: list[FileMetadata] = []
-        for path in _walk(root, root, spec, extensions):
+        for path in _walk(root, root, spec, extensions, stats):
             language = registry.get_extractor_for_extension(path.suffix).language_id
             content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
             files.append(FileMetadata(path=path, language=language, content_hash=content_hash))
 
-        ctx.manifest = FileManifest(files=files)
+        ctx.manifest = FileManifest(
+            files=files, dirs_scanned=stats.dirs_scanned, ignored_count=stats.ignored_count
+        )
         ctx.repo_root = root
         if ctx.reporter is not None:
             ctx.reporter.update("discovery", len(files), len(files))
@@ -86,7 +101,11 @@ def _load_ignore_spec(root: Path) -> pathspec.PathSpec | None:
 
 
 def _walk(
-    current: Path, root: Path, spec: pathspec.PathSpec | None, extensions: set[str]
+    current: Path,
+    root: Path,
+    spec: pathspec.PathSpec | None,
+    extensions: set[str],
+    stats: _WalkStats,
 ) -> Iterator[Path]:
     """Recursively traverse directories to find files with a registered extension.
 
@@ -100,14 +119,17 @@ def _walk(
         logger.debug("Permission denied, skipping: %s (%s)", current, exc)
         return
 
+    stats.dirs_scanned += 1
     for entry in entries:
         if entry.is_dir():
             if _should_skip_dir(entry, root, spec):
+                stats.ignored_count += 1
                 continue
-            yield from _walk(entry, root, spec, extensions)
+            yield from _walk(entry, root, spec, extensions, stats)
 
         elif entry.is_file() and entry.suffix in extensions:
             if _should_skip_file(entry, root, spec):
+                stats.ignored_count += 1
                 continue
             yield entry
 

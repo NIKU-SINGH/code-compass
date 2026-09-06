@@ -1,0 +1,122 @@
+"""Orchestrates the 6 phases through IngestContext. Enables
+`compass ingest --stop-after <phase>` for debugging."""
+
+from __future__ import annotations
+
+import json
+import logging
+import subprocess
+import time
+from collections.abc import Callable
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
+
+from compass_core.graph.db import GraphDB
+from compass_core.graph.schema import create_schema
+from compass_core.phases.base import IngestContext
+from compass_core.phases.discovery import DiscoveryPhase
+from compass_core.phases.parse import ParsePhase
+from compass_core.phases.persistence import PersistencePhase
+from compass_core.phases.resolution import ResolutionPhase
+from compass_core.phases.symbol_table import SymbolTablePhase
+from compass_core.phases.validation import ValidationPhase
+from compass_core.progress import ProgressReporter
+
+logger = logging.getLogger(__name__)
+
+_PHASE_ORDER = ["discovery", "parse", "symbol_table", "resolution", "validation", "persistence"]
+
+_GRAMMAR_PACKAGES: dict[str, str] = {
+    "python": "tree-sitter-python",
+}
+
+
+class Pipeline:
+    def __init__(self, *, max_workers: int | None = None) -> None:
+        self._max_workers = max_workers
+
+    def run(
+        self,
+        repo_root: Path,
+        db_path: Path,
+        *,
+        reporter: ProgressReporter | None = None,
+        stop_after: str | None = None,
+        on_phase_complete: Callable[[str, IngestContext], None] | None = None,
+    ) -> IngestContext:
+        ctx = IngestContext(repo_root=repo_root, reporter=reporter)
+
+        phases = {
+            "discovery": DiscoveryPhase(),
+            "parse": ParsePhase(max_workers=self._max_workers),
+            "symbol_table": SymbolTablePhase(),
+            "resolution": ResolutionPhase(),
+            "validation": ValidationPhase(),
+        }
+
+        for phase_name in _PHASE_ORDER:
+            if phase_name == "persistence":
+                break
+            ctx = phases[phase_name].run(ctx)
+            if on_phase_complete is not None:
+                on_phase_complete(phase_name, ctx)
+            if stop_after == phase_name:
+                return ctx
+
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with GraphDB(db_path) as db:
+            create_schema(db)
+            ctx = PersistencePhase().run(ctx, db)
+        if on_phase_complete is not None:
+            on_phase_complete("persistence", ctx)
+
+        _save_metadata(repo_root)
+        return ctx
+
+
+def _save_metadata(repo_path: Path) -> None:
+    """Write .compass/metadata.json with indexed_commit, indexed_at, and the
+    grammar version of every registered language — moved from
+    ingest/engine.py::save_metadata + _get_git_commit + _save_metadata."""
+    commit = _get_git_commit(repo_path)
+    grammar_versions = _grammar_versions()
+
+    meta_dir = repo_path / ".compass"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "indexed_commit": commit,
+        "indexed_at": int(time.time()),
+        "grammar_versions": grammar_versions,
+    }
+    (meta_dir / "metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    logger.debug("Metadata written: %s", meta)
+
+
+def _get_git_commit(repo_path: Path) -> str:
+    """Return the HEAD commit hash, or 'unknown' on any failure."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    return "unknown"
+
+
+def _grammar_versions() -> dict[str, str]:
+    """Pin the installed grammar package version for every registered
+    language — an unpinned grammar version means incremental diffing would
+    trust stale data unknowingly."""
+    versions: dict[str, str] = {}
+    for language_id, package in _GRAMMAR_PACKAGES.items():
+        try:
+            versions[language_id] = version(package)
+        except PackageNotFoundError:
+            continue
+    return versions
