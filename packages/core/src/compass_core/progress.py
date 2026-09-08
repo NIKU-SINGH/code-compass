@@ -2,15 +2,15 @@
 
 Core modules call ``reporter.update(phase, current, total)`` without any
 dependency on display libraries. The CLI layer provides a concrete
-``RichProgressReporter`` implementation; tests can use a null or recording
-stub that satisfies the same protocol.
+``IngestReporter`` implementation (a live Rich table); tests can use a null
+or recording stub that satisfies the same protocol.
 
 Adding a new phase
 ------------------
 1. Add its name to the ``Phase`` literal.
 2. Call ``reporter.update("<new_phase>", current, total)`` in the relevant
    core module.
-3. Add a task entry in ``RichProgressReporter._TASKS``.
+3. Wire it up in ``compass_cli.progress.IngestReporter``.
 
 Nothing else needs to change.
 """

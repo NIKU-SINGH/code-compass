@@ -8,15 +8,37 @@ file in the codebase permitted to import real_ladybug directly.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 from types import TracebackType
-from typing import Any
+from typing import Any, cast
 
 import real_ladybug as lb
 
 from compass_core.settings import settings
 
 logger = logging.getLogger(__name__)
+
+
+def as_row(result: lb.QueryResult) -> Sequence[Any]:
+    """Return the next result row as a positionally-indexable sequence.
+
+    Every query executed through this module selects columns positionally
+    (never ``RETURN * AS map``), so ``QueryResult``'s ``list[Any] |
+    dict[str, Any]`` row type never actually resolves to the dict variant
+    here — that's the one shape ``row[0]``-style indexing can't handle.
+    """
+    row = result.get_next()
+    assert not isinstance(row, dict), "expected a positional row, got a dict-row result"
+    return row
+
+
+def as_rows(result: lb.QueryResult) -> list[Sequence[Any]]:
+    """Return every remaining result row as a positionally-indexable sequence. See `as_row`."""
+    rows = result.get_all()
+    for row in rows:
+        assert not isinstance(row, dict), "expected a positional row, got a dict-row result"
+    return cast("list[Sequence[Any]]", rows)
 
 
 class GraphDB:
@@ -59,9 +81,11 @@ class GraphDB:
         Returns:
             The raw Result object containing the query output.
         """
-        if params:
-            return self._conn.execute(query, params)
-        return self._conn.execute(query)
+        result = self._conn.execute(query, params) if params else self._conn.execute(query)
+        assert isinstance(result, lb.QueryResult), (
+            "a single-statement query must return a single QueryResult, not a list"
+        )
+        return result
 
     def execute_many(self, statements: list[str]) -> None:
         """Executes multiple Cypher statements in sequence.
@@ -93,7 +117,7 @@ class GraphDB:
         Returns:
             A list of strings representing the relationship table names.
         """
-        return self._conn._get_rel_table_names()
+        return [table["name"] for table in self._conn._get_rel_table_names()]
 
     # ------------------------------------------------------------------
     # Lifecycle
