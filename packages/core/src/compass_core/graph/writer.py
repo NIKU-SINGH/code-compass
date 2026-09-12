@@ -24,10 +24,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from compass_core.graph.db import GraphDB
-from compass_core.parser.models import ParsedClass, ParsedFile, ParsedFunction
+from compass_core.ir.graph import CallEdge, ExternalCallEdge, ImportEdge, InheritEdge, ResolvedGraph
+from compass_core.ir.models import Definition, DefinitionKind, ParsedFile
 from compass_core.progress import ProgressReporter
-from compass_core.resolver.models import ResolvedGraph
-from compass_core.resolver.symbol_table import class_id, function_id
 
 logger = logging.getLogger(__name__)
 
@@ -48,15 +47,12 @@ class WriteResult:
 def _calculate_expected_nodes(graph: ResolvedGraph) -> int:
     """Calculate the exact number of nodes the writer will attempt to persist.
 
-    Counts one File node per file, one Class node per class, one Function
-    node per top-level function and per method, and one ExternalFunction
-    node per unique ``full_ref`` across all external call edges.
+    Counts one File node per file, one Class/Function/Method node per
+    definition, and one ExternalFunction node per unique ``full_ref`` across
+    all external call edges.
     """
     unique_ext = {e.full_ref for e in graph.external_call_edges}
-    return sum(
-        1 + len(f.classes) + sum(len(c.methods) for c in f.classes) + len(f.functions)
-        for f in graph.files
-    ) + len(unique_ext)
+    return sum(1 + len(f.definitions) for f in graph.files) + len(unique_ext)
 
 
 def _calculate_expected_edges(graph: ResolvedGraph) -> int:
@@ -67,10 +63,7 @@ def _calculate_expected_edges(graph: ResolvedGraph) -> int:
     external call relationship.
     """
     return (
-        sum(
-            len(f.classes) + len(f.functions) + sum(len(c.methods) for c in f.classes)
-            for f in graph.files
-        )
+        sum(len(f.definitions) for f in graph.files)
         + len(graph.import_edges)
         + len(graph.inherit_edges)
         + len(graph.call_edges)
@@ -113,18 +106,17 @@ def write(
         if reporter:
             reporter.update("write_edges", edge_count, edge_total)
 
+    id_to_name: dict[str, str] = {d.id: d.name for f in graph.files for d in f.definitions}
+
     # --- Nodes first ---
     for pf in graph.files:
         _write_file(db, pf)
         _node()
-        for cls in pf.classes:
-            _write_class(db, cls)
-            _node()
-            for method in cls.methods:
-                _write_function(db, method)
-                _node()
-        for func in pf.functions:
-            _write_function(db, func)
+        for d in pf.definitions:
+            if d.kind is DefinitionKind.CLASS:
+                _write_class(db, d)
+            else:
+                _write_function(db, d, id_to_name)
             _node()
 
     seen_ext: set[str] = set()
@@ -138,45 +130,20 @@ def write(
     for pf in graph.files:
         _write_contains(db, pf, _edge)
 
-    for edge in graph.import_edges:
-        if _exec(
-            db,
-            "MATCH (a:File {path: $src}), (b:File {path: $dst}) CREATE (a)-[:IMPORTS]->(b)",
-            {"src": edge.from_path, "dst": edge.to_path},
-        ):
+    for import_edge in graph.import_edges:
+        if _write_import_edge(db, import_edge):
             _edge()
 
-    for edge in graph.inherit_edges:
-        if _exec(
-            db,
-            "MATCH (a:Class {id: $src}), (b:Class {id: $dst}) CREATE (a)-[:INHERITS]->(b)",
-            {"src": edge.child_id, "dst": edge.parent_id},
-        ):
+    for inherit_edge in graph.inherit_edges:
+        if _write_inherit_edge(db, inherit_edge):
             _edge()
 
-    for edge in graph.call_edges:
-        if _exec(
-            db,
-            """
-            MATCH (a:Function {id: $src}), (b:Function {id: $dst})
-            CREATE (a)-[:CALLS {confidence: $conf, call_type: $ctype, line: $line}]->(b)
-            """,
-            {
-                "src": edge.caller_id,
-                "dst": edge.callee_id,
-                "conf": edge.confidence,
-                "ctype": edge.call_type,
-                "line": edge.line,
-            },
-        ):
+    for call_edge in graph.call_edges:
+        if _write_call_edge(db, call_edge):
             _edge()
 
-    for edge in graph.external_call_edges:
-        if _exec(
-            db,
-            "MATCH (a:Function {id: $src}), (b:ExternalFunction {full_ref: $dst}) CREATE (a)-[:CALLS_EXTERN {line: $line}]->(b)",
-            {"src": edge.caller_id, "dst": edge.full_ref, "line": edge.line},
-        ):
+    for extern_call_edge in graph.external_call_edges:
+        if _write_external_call_edge(db, extern_call_edge):
             _edge()
 
     return WriteResult(node_count=node_count, edge_count=edge_count)
@@ -204,13 +171,13 @@ def _write_file(db: GraphDB, f: ParsedFile) -> None:
     )
 
 
-def _write_class(db: GraphDB, cls: ParsedClass) -> None:
+def _write_class(db: GraphDB, cls: Definition) -> None:
     """Persist a class node to the database.
 
     Args:
         db: Active database connection.
-        cls: The `ParsedClass` metadata, including 1-indexed line numbers
-            and source content.
+        cls: The `Definition` (kind=CLASS) metadata, including 1-indexed line
+            numbers and source content.
     """
     db.execute(
         """
@@ -225,7 +192,7 @@ def _write_class(db: GraphDB, cls: ParsedClass) -> None:
                       n.bases = $bases
         """,
         {
-            "id": class_id(cls),
+            "id": cls.id,
             "name": cls.name,
             "file_path": cls.file_path,
             "line_start": cls.line_start,
@@ -237,14 +204,18 @@ def _write_class(db: GraphDB, cls: ParsedClass) -> None:
     )
 
 
-def _write_function(db: GraphDB, func: ParsedFunction) -> None:
+def _write_function(db: GraphDB, func: Definition, id_to_name: dict[str, str]) -> None:
     """Persist a function or method node to the database.
 
     Args:
         db: Active database connection.
-        func: The `ParsedFunction` metadata, including 1-indexed line numbers,
-            signature details, and decorators.
+        func: The `Definition` (kind=FUNCTION or METHOD) metadata, including
+            1-indexed line numbers, signature details, and decorators.
+        id_to_name: Maps every `Definition.id` in the graph to its short name,
+            used to recover the parent class's short name from `func.parent_id`.
     """
+    is_method = func.kind is DefinitionKind.METHOD
+    parent_class = id_to_name.get(func.parent_id, "") if func.parent_id else ""
     db.execute(
         """
         MERGE (n:Function {id: $id})
@@ -262,16 +233,16 @@ def _write_function(db: GraphDB, func: ParsedFunction) -> None:
                       n.decorators = $decorators, n.raw_calls = $raw_calls
         """,
         {
-            "id": function_id(func),
+            "id": func.id,
             "name": func.name,
-            "signature": func.signature,
+            "signature": func.signature or "",
             "file_path": func.file_path,
             "line_start": func.line_start,
             "line_end": func.line_end,
             "source": func.source,
             "docstring": func.docstring or "",
-            "is_method": func.is_method,
-            "parent_class": func.parent_class or "",
+            "is_method": is_method,
+            "parent_class": parent_class,
             "decorators": func.decorators,
             "raw_calls": func.raw_calls,
         },
@@ -316,27 +287,114 @@ def _write_contains(db: GraphDB, f: ParsedFile, on_edge: Callable[[], None]) -> 
         f: The `ParsedFile` whose internal structure is being persisted.
         on_edge: Callback invoked once for each edge successfully written.
     """
-    for cls in f.classes:
-        if _exec(
-            db,
-            "MATCH (a:File {path: $src}), (b:Class {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
-            {"src": f.path, "dst": class_id(cls)},
-        ):
-            on_edge()
-        for method in cls.methods:
+    for d in f.definitions:
+        if d.kind is DefinitionKind.CLASS:
             if _exec(
                 db,
-                "MATCH (a:Class {id: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
-                {"src": class_id(cls), "dst": function_id(method)},
+                "MATCH (a:File {path: $src}), (b:Class {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+                {"src": f.path, "dst": d.id},
             ):
                 on_edge()
-    for func in f.functions:
-        if _exec(
-            db,
-            "MATCH (a:File {path: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
-            {"src": f.path, "dst": function_id(func)},
-        ):
-            on_edge()
+        elif d.kind is DefinitionKind.METHOD:
+            if d.parent_id is not None and _exec(
+                db,
+                "MATCH (a:Class {id: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+                {"src": d.parent_id, "dst": d.id},
+            ):
+                on_edge()
+        else:
+            if _exec(
+                db,
+                "MATCH (a:File {path: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+                {"src": f.path, "dst": d.id},
+            ):
+                on_edge()
+
+
+def _write_import_edge(db: GraphDB, edge: ImportEdge) -> bool:
+    """Write an IMPORTS edge (File -> File).
+
+    Args:
+        db: Active database connection.
+        edge: The `ImportEdge` describing the importing and imported files.
+
+    Returns:
+        ``True`` if the edge was written, ``False`` if either endpoint was
+        not found.
+    """
+    return _exec(
+        db,
+        "MATCH (a:File {path: $src}), (b:File {path: $dst}) CREATE (a)-[:IMPORTS]->(b)",
+        {"src": edge.from_path, "dst": edge.to_path},
+    )
+
+
+def _write_inherit_edge(db: GraphDB, edge: InheritEdge) -> bool:
+    """Write an INHERITS edge (Class -> Class).
+
+    Args:
+        db: Active database connection.
+        edge: The `InheritEdge` describing the child and parent classes.
+
+    Returns:
+        ``True`` if the edge was written, ``False`` if either endpoint was
+        not found.
+    """
+    return _exec(
+        db,
+        "MATCH (a:Class {id: $src}), (b:Class {id: $dst}) CREATE (a)-[:INHERITS]->(b)",
+        {"src": edge.child_id, "dst": edge.parent_id},
+    )
+
+
+def _write_call_edge(db: GraphDB, edge: CallEdge) -> bool:
+    """Write a CALLS edge (Function -> Function) for an internal call.
+
+    Args:
+        db: Active database connection.
+        edge: The `CallEdge` describing the caller, callee, and call metadata.
+
+    Returns:
+        ``True`` if the edge was written, ``False`` if either endpoint was
+        not found.
+    """
+    return _exec(
+        db,
+        """
+        MATCH (a:Function {id: $src}), (b:Function {id: $dst})
+        CREATE (a)-[:CALLS {confidence: $conf, call_type: $ctype, line: $line}]->(b)
+        """,
+        {
+            "src": edge.caller_id,
+            "dst": edge.callee_id,
+            "conf": edge.confidence,
+            "ctype": edge.call_type,
+            "line": edge.line,
+        },
+    )
+
+
+def _write_external_call_edge(db: GraphDB, edge: ExternalCallEdge) -> bool:
+    """Write a CALLS_EXTERN edge (Function -> ExternalFunction).
+
+    Args:
+        db: Active database connection.
+        edge: The `ExternalCallEdge` describing the caller and external target.
+
+    Returns:
+        ``True`` if the edge was written, ``False`` if either endpoint was
+        not found.
+    """
+    return _exec(
+        db,
+        "MATCH (a:Function {id: $src}), (b:ExternalFunction {full_ref: $dst}) "
+        "CREATE (a)-[:CALLS_EXTERN {line: $line}]->(b)",
+        {
+            "src": edge.caller_id,
+            "dst": edge.full_ref,
+            "line": edge.line,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +402,7 @@ def _write_contains(db: GraphDB, f: ParsedFile, on_edge: Callable[[], None]) -> 
 # ---------------------------------------------------------------------------
 
 
-def _exec(db: GraphDB, query: str, params: dict) -> bool:
+def _exec(db: GraphDB, query: str, params: dict[str, object]) -> bool:
     """Execute a database query, returning whether it succeeded.
 
     Failures in individual edge creation (e.g. due to unresolved MATCH targets)
