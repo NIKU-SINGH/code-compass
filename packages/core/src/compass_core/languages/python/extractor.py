@@ -223,7 +223,12 @@ def _parse_import_from_statement(node: Node, source_bytes: bytes) -> list[Import
     if not statements:
         statements.append(
             ImportStatement(
-                module=module, names=[], alias=None, is_relative=is_relative, is_from=True, line=line
+                module=module,
+                names=[],
+                alias=None,
+                is_relative=is_relative,
+                is_from=True,
+                line=line,
             )
         )
     return statements

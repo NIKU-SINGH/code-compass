@@ -26,7 +26,9 @@ def _format_debug_section(phase: str, ctx: IngestContext) -> str:
     if phase == "discovery":
         assert ctx.manifest is not None
         m = ctx.manifest
-        lines.append(f"dirs_scanned={m.dirs_scanned} ignored_count={m.ignored_count} files={len(m.files)}")
+        lines.append(
+            f"dirs_scanned={m.dirs_scanned} ignored_count={m.ignored_count} files={len(m.files)}"
+        )
         lines.append("")
         for f in m.files:
             lines.append(f"  {f.path}  [{f.language}]  {f.content_hash}")
@@ -157,9 +159,7 @@ def _stage_result(
         num_languages = len(_language_counts(ctx))
         language_word = "language" if num_languages == 1 else "languages"
         primary = f"{len(m.files):,} files"
-        secondary = (
-            f"{num_languages} {language_word} · {m.dirs_scanned:,} dirs · {m.ignored_count:,} ignored"
-        )
+        secondary = f"{num_languages} {language_word} · {m.dirs_scanned:,} dirs · {m.ignored_count:,} ignored"
         return primary, secondary, False
 
     if phase == "parse":
@@ -180,7 +180,10 @@ def _stage_result(
         assert ctx.resolved_graph is not None
         g = ctx.resolved_graph
         total = (
-            len(g.import_edges) + len(g.inherit_edges) + len(g.call_edges) + len(g.external_call_edges)
+            len(g.import_edges)
+            + len(g.inherit_edges)
+            + len(g.call_edges)
+            + len(g.external_call_edges)
         )
         primary = f"{total:,} edges"
         secondary = (
@@ -230,7 +233,9 @@ def _run_ingest(
     with IngestReporter(console=display.console) as reporter:
 
         def _on_phase_complete(phase: str, ctx: IngestContext) -> None:
-            primary, secondary, warn = _stage_result(phase, ctx, repo_path=repo_path, db_path=db_path)
+            primary, secondary, warn = _stage_result(
+                phase, ctx, repo_path=repo_path, db_path=db_path
+            )
             reporter.complete(phase, primary, secondary, warn=warn)
             if debug_log is not None:
                 with debug_log.open("a", encoding="utf-8") as f:
@@ -286,7 +291,9 @@ def ingest(
     db_path.parent.mkdir(parents=True, exist_ok=True)
     debug_log_path = repo_path / ".compass" / "ingest_debug.log" if debug_log else None
 
-    summary = _run_ingest(repo_path, db_path, workers=workers, verbose=verbose, debug_log=debug_log_path)
+    summary = _run_ingest(
+        repo_path, db_path, workers=workers, verbose=verbose, debug_log=debug_log_path
+    )
 
     display.summary(summary)
     display.next_steps()

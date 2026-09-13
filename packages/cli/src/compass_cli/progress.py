@@ -87,9 +87,7 @@ class IngestReporter:
     def __init__(self, console: Console | None = None) -> None:
         self._rows: dict[str, _StageRow] = {name: _StageRow() for name in _STAGE_ORDER}
         self._show_total = False
-        self._live = Live(
-            self._render(), console=console, refresh_per_second=8, transient=False
-        )
+        self._live = Live(self._render(), console=console, refresh_per_second=8, transient=False)
 
     def __enter__(self) -> IngestReporter:
         self._live.start()

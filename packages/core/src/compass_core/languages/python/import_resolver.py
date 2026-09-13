@@ -43,7 +43,9 @@ def _resolve_file_imports(pf: ParsedFile, module_to_path: dict[str, str]) -> dic
                     # package (try that first); fall back to the generic
                     # resolution (the base package's own file) for names
                     # that are attributes defined in its __init__.py itself.
-                    target = _resolve_bare_relative(imp.module, name, pf, module_to_path) or resolved
+                    target = (
+                        _resolve_bare_relative(imp.module, name, pf, module_to_path) or resolved
+                    )
                 mapping[local] = target
         else:
             # `import X` or `import X as Y`
@@ -52,7 +54,9 @@ def _resolve_file_imports(pf: ParsedFile, module_to_path: dict[str, str]) -> dic
     return mapping
 
 
-def _resolve_module(module: str, importer: ParsedFile, module_to_path: dict[str, str]) -> str | None:
+def _resolve_module(
+    module: str, importer: ParsedFile, module_to_path: dict[str, str]
+) -> str | None:
     """Resolve a dotted module name to an absolute file path.
 
     Returns the file path if the module is internal to the repo, or None
@@ -77,7 +81,9 @@ def _base_package_parts(module: str, importer: ParsedFile) -> list[str]:
     segment stripped. Each dot beyond the first walks up one more level.
     """
     level = len(module) - len(module.lstrip("."))
-    is_package_init = importer.path.endswith("__init__.py") or importer.path.endswith("__init__.pyi")
+    is_package_init = importer.path.endswith("__init__.py") or importer.path.endswith(
+        "__init__.pyi"
+    )
     parts = importer.module_name.split(".") if importer.module_name else []
     if not is_package_init:
         parts = parts[:-1]
