@@ -121,6 +121,31 @@ def test_init_reexport_chain_resolves_with_confidence_0_8(tmp_path: Path):
     assert edge.callee_id.endswith("inner::helper")
 
 
+def test_init_reexport_chain_resolves_relative_import_form(tmp_path: Path):
+    # Same re-export chain as test_init_reexport_chain_resolves_with_confidence_0_8,
+    # but pkg/__init__.py uses the idiomatic relative form (`from .inner import
+    # helper`) instead of the absolute one (`from pkg.inner import helper`).
+    # This is the form real packages actually use, and is a regression test
+    # for a bug where the inner re-export failed to resolve for relative
+    # imports specifically (see PythonImportResolver's relative-import fix).
+    ctx = _ctx_with(
+        tmp_path,
+        {
+            "pkg/__init__.py": "from .inner import helper\n",
+            "pkg/inner.py": "def helper():\n    pass\n",
+            "a.py": "from pkg import helper\n\ndef run():\n    helper()\n",
+        },
+    )
+    ctx = SymbolTablePhase().run(ctx)
+    ctx = ResolutionPhase().run(ctx)
+
+    assert len(ctx.resolved_graph.call_edges) == 1
+    edge = ctx.resolved_graph.call_edges[0]
+    assert edge.confidence == 0.8
+    assert edge.call_type == "RE_EXPORT"
+    assert edge.callee_id.endswith("inner::helper")
+
+
 def test_mro_single_level_base_walk_resolves_with_confidence_0_8(tmp_path: Path):
     ctx = _ctx_with(
         tmp_path,
@@ -189,6 +214,7 @@ def test_circular_reexport_detection_via_internal_helper(tmp_path: Path):
         file=pf,
         file_imports={"helper": "pkg/__init__.py"},
         symbol_table=ctx.symbol_table,
+        import_map=ctx.import_map,
         by_path={pf.path: pf},
         visited=frozenset({"pkg/__init__.py"}),
     )

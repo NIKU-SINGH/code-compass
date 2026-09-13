@@ -305,7 +305,7 @@ def _resolve_one(
 
     # Rule 4: __init__ chain -- re-export through a package __init__.py
     init_result = _resolve_via_init(
-        raw, head, tail, file, file_imports, symbol_table, by_path, visited
+        raw, head, tail, file, file_imports, symbol_table, import_map, by_path, visited
     )
     if init_result is not None:
         return init_result
@@ -349,35 +349,39 @@ def _resolve_via_init(
     file: ParsedFile,
     file_imports: dict[str, str | None],
     symbol_table: dict[str, str],
+    import_map: dict[str, dict[str, str | None]],
     by_path: dict[str, ParsedFile],
     visited: frozenset[str],
 ) -> CallResult | None:
-    """Rule 4: chase re-exports through a package __init__.py."""
+    """Rule 4: chase re-exports through a package __init__.py.
+
+    The __init__.py's own re-export is resolved via ``import_map`` (the same
+    per-file local_name -> file_path table SymbolTablePhase already built for
+    every file, including __init__.py itself) rather than re-deriving it from
+    raw ``ImportStatement.module`` text here. Re-deriving it used to mean a
+    second, hand-rolled copy of module-name resolution that didn't know an
+    __init__.py's relative imports (``from .inner import helper``) are
+    relative to its own module_name -- silently failing on the relative-import
+    style used by real `__init__.py` re-exports, unlike the plain absolute
+    form (`from pkg.inner import helper`) it happened to handle.
+    """
     resolved_path = file_imports.get(head)
     if not resolved_path or not resolved_path.endswith("__init__.py"):
         return None
     if resolved_path in visited:
         return CallResult(raw=raw, target_id=None, call_type="CIRCULAR", confidence=0.0)
 
-    init_file = by_path.get(resolved_path)
-    if init_file is None:
-        return None
-
     symbol = tail or head
-    module_to_path = {pf.module_name: pf.path for pf in by_path.values()}
-    for imp in init_file.imports:
-        if symbol not in imp.names:
-            continue
-        inner_path = _resolve_module_name(imp.module, module_to_path)
-        if inner_path and inner_path not in visited:
-            target_id = _lookup_symbol_in_file(symbol, inner_path, symbol_table, by_path)
-            if target_id:
-                return CallResult(
-                    raw=raw,
-                    target_id=target_id,
-                    call_type="RE_EXPORT",
-                    confidence=CONFIDENCE["RE_EXPORT"],
-                )
+    inner_path = import_map.get(resolved_path, {}).get(symbol)
+    if inner_path and inner_path not in visited:
+        target_id = _lookup_symbol_in_file(symbol, inner_path, symbol_table, by_path)
+        if target_id:
+            return CallResult(
+                raw=raw,
+                target_id=target_id,
+                call_type="RE_EXPORT",
+                confidence=CONFIDENCE["RE_EXPORT"],
+            )
     return None
 
 
@@ -509,13 +513,6 @@ def _find_definition_by_id(files_lookup: dict[str, ParsedFile], def_id: str) -> 
             if defn.id == def_id:
                 return defn
     return None
-
-
-def _resolve_module_name(module: str, module_to_path: dict[str, str]) -> str | None:
-    if module in module_to_path:
-        return module_to_path[module]
-    stripped = module.lstrip(".")
-    return module_to_path.get(stripped)
 
 
 def _has_wildcard(file: ParsedFile) -> bool:
