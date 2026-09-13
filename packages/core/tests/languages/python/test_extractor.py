@@ -306,6 +306,33 @@ def test_extract_import_from_alias(tmp_path: Path) -> None:
     assert imp.alias == "j"
 
 
+def test_extract_import_from_multiple_aliases(tmp_path: Path) -> None:
+    p = write_py(tmp_path, "f.py", "from x import a as b, c as d\n")
+    pf = parse(p)
+    # Each aliased name must keep its own alias -- a single shared `alias`
+    # field can't represent two different renames, so each becomes its own
+    # ImportStatement.
+    assert len(pf.imports) == 2
+    by_alias = {imp.alias: imp for imp in pf.imports}
+    assert set(by_alias) == {"b", "d"}
+    assert by_alias["b"].names == ["a"]
+    assert by_alias["b"].module == "x"
+    assert by_alias["d"].names == ["c"]
+    assert by_alias["d"].module == "x"
+
+
+def test_extract_import_from_mixed_plain_and_aliased(tmp_path: Path) -> None:
+    p = write_py(tmp_path, "f.py", "from x import a, b as c\n")
+    pf = parse(p)
+    plain = [imp for imp in pf.imports if imp.alias is None]
+    aliased = [imp for imp in pf.imports if imp.alias is not None]
+    assert len(plain) == 1
+    assert plain[0].names == ["a"]
+    assert len(aliased) == 1
+    assert aliased[0].names == ["b"]
+    assert aliased[0].alias == "c"
+
+
 def test_extract_import_wildcard(tmp_path: Path) -> None:
     p = write_py(tmp_path, "f.py", "from utils import *\n")
     pf = parse(p)
@@ -559,6 +586,57 @@ def test_parse_class_and_method_get_namespaced_ids(tmp_path: Path):
     assert len(method_defs) == 1
     assert method_defs[0].id == "py::mod::Foo.bar"
     assert method_defs[0].parent_id == "py::mod::Foo"
+
+
+def test_property_getter_and_setter_get_distinct_ids(tmp_path: Path):
+    p = write_py(
+        tmp_path,
+        "mod.py",
+        """
+        class Foo:
+            @property
+            def price(self):
+                return self._price
+
+            @price.setter
+            def price(self, value):
+                self._price = value
+        """,
+    )
+    pf = parse(p)
+    method_defs = methods(pf)
+    assert len(method_defs) == 2
+    ids = {d.id for d in method_defs}
+    assert ids == {"py::mod::Foo.price", "py::mod::Foo.price#setter"}
+    # both still carry their own distinct source/line info
+    getter = next(d for d in method_defs if d.id == "py::mod::Foo.price")
+    setter = next(d for d in method_defs if d.id == "py::mod::Foo.price#setter")
+    assert "return self._price" in getter.source
+    assert "self._price = value" in setter.source
+
+
+def test_property_getter_setter_deleter_all_get_distinct_ids(tmp_path: Path):
+    p = write_py(
+        tmp_path,
+        "mod.py",
+        """
+        class Foo:
+            @property
+            def x(self):
+                return self._x
+
+            @x.setter
+            def x(self, value):
+                self._x = value
+
+            @x.deleter
+            def x(self):
+                del self._x
+        """,
+    )
+    pf = parse(p)
+    ids = {d.id for d in methods(pf)}
+    assert ids == {"py::mod::Foo.x", "py::mod::Foo.x#setter", "py::mod::Foo.x#deleter"}
 
 
 def test_parse_top_level_function(tmp_path: Path):
