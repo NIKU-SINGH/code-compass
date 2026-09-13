@@ -13,7 +13,7 @@ from pathlib import Path
 
 from compass_core.graph.db import GraphDB
 from compass_core.graph.schema import create_schema
-from compass_core.phases.base import IngestContext
+from compass_core.phases.base import IngestContext, Phase
 from compass_core.phases.discovery import DiscoveryPhase
 from compass_core.phases.parse import ParsePhase
 from compass_core.phases.persistence import PersistencePhase
@@ -46,7 +46,7 @@ class Pipeline:
     ) -> IngestContext:
         ctx = IngestContext(repo_root=repo_root, reporter=reporter)
 
-        phases = {
+        phases: dict[str, Phase] = {
             "discovery": DiscoveryPhase(),
             "parse": ParsePhase(max_workers=self._max_workers),
             "symbol_table": SymbolTablePhase(),
