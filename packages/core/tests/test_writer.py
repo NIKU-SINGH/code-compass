@@ -13,16 +13,8 @@ import pytest
 from compass_core.graph.db import GraphDB
 from compass_core.graph.schema import create_schema
 from compass_core.graph.writer import write
-from compass_core.parser.models import Import, ParsedClass, ParsedFile, ParsedFunction
-from compass_core.resolver.models import (
-    RESOLVED,
-    CallEdge,
-    ExternalCallEdge,
-    ImportEdge,
-    InheritEdge,
-    ResolvedGraph,
-)
-from compass_core.resolver.symbol_table import class_id, function_id
+from compass_core.ir.graph import CallEdge, ExternalCallEdge, ImportEdge, InheritEdge, ResolvedGraph
+from compass_core.ir.models import Definition, DefinitionKind, ParsedFile
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -41,40 +33,42 @@ def db(tmp_path: Path) -> GraphDB:  # type: ignore[misc]
 def make_file(
     path: str = "/repo/mod.py",
     module_name: str = "mod",
-    imports: list[Import] | None = None,
-    classes: list[ParsedClass] | None = None,
-    functions: list[ParsedFunction] | None = None,
+    definitions: list[Definition] | None = None,
     content_hash: str = "abc123",
 ) -> ParsedFile:
     return ParsedFile(
         path=path,
+        language="python",
         module_name=module_name,
-        imports=imports or [],
-        classes=classes or [],
-        functions=functions or [],
         content_hash=content_hash,
+        definitions=definitions or [],
+        imports=[],
+        call_sites=[],
     )
 
 
 def make_function(
     name: str = "fn",
     file_path: str = "/repo/mod.py",
-    is_method: bool = False,
-    parent_class: str | None = None,
+    parent: Definition | None = None,
     raw_calls: list[str] | None = None,
-) -> ParsedFunction:
-    return ParsedFunction(
+) -> Definition:
+    is_method = parent is not None
+    node_id = f"{file_path}::{parent.name}.{name}" if parent else f"{file_path}::{name}"
+    return Definition(
+        id=node_id,
+        kind=DefinitionKind.METHOD if is_method else DefinitionKind.FUNCTION,
         name=name,
-        signature=f"def {name}():",
-        docstring=None,
+        file_path=file_path,
         line_start=1,
         line_end=3,
         source=f"def {name}():\n    pass\n",
-        file_path=file_path,
-        raw_calls=raw_calls or [],
+        docstring=None,
+        bases=[],
+        parent_id=parent.id if parent else None,
+        signature=f"def {name}():",
         decorators=[],
-        is_method=is_method,
-        parent_class=parent_class,
+        raw_calls=raw_calls or [],
     )
 
 
@@ -82,17 +76,21 @@ def make_class(
     name: str = "MyClass",
     file_path: str = "/repo/mod.py",
     bases: list[str] | None = None,
-    methods: list[ParsedFunction] | None = None,
-) -> ParsedClass:
-    return ParsedClass(
+) -> Definition:
+    return Definition(
+        id=f"{file_path}::{name}",
+        kind=DefinitionKind.CLASS,
         name=name,
-        bases=bases or [],
-        methods=methods or [],
-        docstring=None,
+        file_path=file_path,
         line_start=1,
         line_end=5,
         source=f"class {name}:\n    pass\n",
-        file_path=file_path,
+        docstring=None,
+        bases=bases or [],
+        parent_id=None,
+        signature=None,
+        decorators=[],
+        raw_calls=[],
     )
 
 
@@ -125,7 +123,7 @@ def test_write_file_node_fields(db: GraphDB) -> None:
 
 def test_write_class_node(db: GraphDB) -> None:
     cls = make_class(name="Foo", file_path="/repo/a.py")
-    pf = make_file(path="/repo/a.py", classes=[cls])
+    pf = make_file(path="/repo/a.py", definitions=[cls])
     write(db, ResolvedGraph(files=[pf]))
     count = _count(db, "MATCH (n:Class {name: 'Foo'}) RETURN count(n)")
     assert count == 1
@@ -133,18 +131,16 @@ def test_write_class_node(db: GraphDB) -> None:
 
 def test_write_function_node(db: GraphDB) -> None:
     fn = make_function(name="do_work", file_path="/repo/a.py")
-    pf = make_file(path="/repo/a.py", functions=[fn])
+    pf = make_file(path="/repo/a.py", definitions=[fn])
     write(db, ResolvedGraph(files=[pf]))
     count = _count(db, "MATCH (n:Function {name: 'do_work'}) RETURN count(n)")
     assert count == 1
 
 
 def test_write_method_node(db: GraphDB) -> None:
-    method = make_function(
-        name="run", file_path="/repo/a.py", is_method=True, parent_class="Worker"
-    )
-    cls = make_class(name="Worker", file_path="/repo/a.py", methods=[method])
-    pf = make_file(path="/repo/a.py", classes=[cls])
+    cls = make_class(name="Worker", file_path="/repo/a.py")
+    method = make_function(name="run", file_path="/repo/a.py", parent=cls)
+    pf = make_file(path="/repo/a.py", definitions=[cls, method])
     write(db, ResolvedGraph(files=[pf]))
     count = _count(db, "MATCH (n:Function {name: 'run', is_method: true}) RETURN count(n)")
     assert count == 1
@@ -157,7 +153,7 @@ def test_write_method_node(db: GraphDB) -> None:
 
 def test_file_to_class_contains_edge(db: GraphDB) -> None:
     cls = make_class(name="Foo", file_path="/repo/a.py")
-    pf = make_file(path="/repo/a.py", classes=[cls])
+    pf = make_file(path="/repo/a.py", definitions=[cls])
     write(db, ResolvedGraph(files=[pf]))
     count = _count(
         db,
@@ -168,7 +164,7 @@ def test_file_to_class_contains_edge(db: GraphDB) -> None:
 
 def test_file_to_function_contains_edge(db: GraphDB) -> None:
     fn = make_function(name="helper", file_path="/repo/a.py")
-    pf = make_file(path="/repo/a.py", functions=[fn])
+    pf = make_file(path="/repo/a.py", definitions=[fn])
     write(db, ResolvedGraph(files=[pf]))
     count = _count(
         db,
@@ -178,9 +174,9 @@ def test_file_to_function_contains_edge(db: GraphDB) -> None:
 
 
 def test_class_to_method_contains_edge(db: GraphDB) -> None:
-    method = make_function(name="act", file_path="/repo/a.py", is_method=True, parent_class="Agent")
-    cls = make_class(name="Agent", file_path="/repo/a.py", methods=[method])
-    pf = make_file(path="/repo/a.py", classes=[cls])
+    cls = make_class(name="Agent", file_path="/repo/a.py")
+    method = make_function(name="act", file_path="/repo/a.py", parent=cls)
+    pf = make_file(path="/repo/a.py", definitions=[cls, method])
     write(db, ResolvedGraph(files=[pf]))
     count = _count(
         db,
@@ -217,11 +213,11 @@ def test_imports_edge_between_files(db: GraphDB) -> None:
 def test_inherits_edge(db: GraphDB) -> None:
     base = make_class(name="Base", file_path="/repo/base.py")
     child = make_class(name="Child", file_path="/repo/child.py", bases=["Base"])
-    pf_base = make_file(path="/repo/base.py", module_name="base", classes=[base])
-    pf_child = make_file(path="/repo/child.py", module_name="child", classes=[child])
+    pf_base = make_file(path="/repo/base.py", module_name="base", definitions=[base])
+    pf_child = make_file(path="/repo/child.py", module_name="child", definitions=[child])
     graph = ResolvedGraph(
         files=[pf_base, pf_child],
-        inherit_edges=[InheritEdge(child_id=class_id(child), parent_id=class_id(base))],
+        inherit_edges=[InheritEdge(child_id=child.id, parent_id=base.id)],
     )
     write(db, graph)
     count = _count(
@@ -233,7 +229,7 @@ def test_inherits_edge(db: GraphDB) -> None:
 def test_inherits_edge_unknown_base_no_crash(db: GraphDB) -> None:
     """A class with an unknown base should write without crashing."""
     cls = make_class(name="Child", file_path="/repo/a.py", bases=["UnknownExternal"])
-    pf = make_file(path="/repo/a.py", classes=[cls])
+    pf = make_file(path="/repo/a.py", definitions=[cls])
     write(db, ResolvedGraph(files=[pf]))
     count = _count(db, "MATCH (n:Class {name: 'Child'}) RETURN count(n)")
     assert count == 1
@@ -248,15 +244,15 @@ def test_calls_edge_direct_import(db: GraphDB) -> None:
     """fn_a calls fn_b which is imported from b.py."""
     fn_a = make_function(name="fn_a", file_path="/repo/a.py", raw_calls=["fn_b"])
     fn_b = make_function(name="fn_b", file_path="/repo/b.py")
-    pf_a = make_file(path="/repo/a.py", module_name="a", functions=[fn_a])
-    pf_b = make_file(path="/repo/b.py", module_name="b", functions=[fn_b])
+    pf_a = make_file(path="/repo/a.py", module_name="a", definitions=[fn_a])
+    pf_b = make_file(path="/repo/b.py", module_name="b", definitions=[fn_b])
     graph = ResolvedGraph(
         files=[pf_a, pf_b],
         call_edges=[
             CallEdge(
-                caller_id=function_id(fn_a),
-                callee_id=function_id(fn_b),
-                call_type=RESOLVED,
+                caller_id=fn_a.id,
+                callee_id=fn_b.id,
+                call_type="DIRECT_IMPORT",
                 confidence=1.0,
                 line=0,
             )
@@ -273,7 +269,7 @@ def test_calls_edge_direct_import(db: GraphDB) -> None:
 def test_calls_edge_unresolved_no_crash(db: GraphDB) -> None:
     """An unresolved call (no edge) must not crash; function node is still written."""
     fn = make_function(name="fn", file_path="/repo/a.py", raw_calls=["totally_unknown_xyz"])
-    pf = make_file(path="/repo/a.py", functions=[fn])
+    pf = make_file(path="/repo/a.py", definitions=[fn])
     write(db, ResolvedGraph(files=[pf]))
     count = _count(db, "MATCH (n:Function {name: 'fn'}) RETURN count(n)")
     assert count == 1
@@ -282,12 +278,12 @@ def test_calls_edge_unresolved_no_crash(db: GraphDB) -> None:
 def test_calls_extern_edge(db: GraphDB) -> None:
     """Calls to external libraries should produce CALLS_EXTERN edges."""
     fn = make_function(name="fetch", file_path="/repo/a.py", raw_calls=["requests.get"])
-    pf = make_file(path="/repo/a.py", functions=[fn])
+    pf = make_file(path="/repo/a.py", definitions=[fn])
     graph = ResolvedGraph(
         files=[pf],
         external_call_edges=[
             ExternalCallEdge(
-                caller_id=function_id(fn),
+                caller_id=fn.id,
                 full_ref="requests.get",
                 library="requests",
                 line=0,
@@ -310,7 +306,7 @@ def test_calls_extern_edge(db: GraphDB) -> None:
 def test_idempotent_write(db: GraphDB) -> None:
     """Writing the same graph twice must not duplicate nodes."""
     fn = make_function(name="fn", file_path="/repo/a.py")
-    pf = make_file(path="/repo/a.py", functions=[fn])
+    pf = make_file(path="/repo/a.py", definitions=[fn])
     graph = ResolvedGraph(files=[pf])
     write(db, graph)
     write(db, graph)

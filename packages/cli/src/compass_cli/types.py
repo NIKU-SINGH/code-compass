@@ -19,3 +19,6 @@ class IngestSummary:
     db_path: Path
     db_size: int
     skipped: int
+    resolved_pct: float
+    orphan_count: int
+    language_counts: dict[str, int]

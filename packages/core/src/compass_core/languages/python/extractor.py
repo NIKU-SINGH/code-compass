@@ -1,64 +1,61 @@
-"""Tree-sitter based extraction of Python source files into ParsedFile objects.
+"""tree-sitter-python -> IR. Pure, side-effect-free: no DB calls, no module-
+level parser state -- a fresh Language + Parser is created on every call so
+this class is safe to use inside ProcessPoolExecutor worker processes
+(tree-sitter Parser/Language objects don't pickle cleanly).
 
-All functions are pure — no DB calls, no side effects, no module-level parser
-state. A fresh Language + Parser is created on every call so the module is
-safe to use inside ProcessPoolExecutor worker processes.
+Moved from compass_core.parser.extractor (Task 5). The tree-sitter
+node-walking helpers below (`_extract_signature` through `_unwrap_decorated`,
+plus `_make_parser`, `_extract_imports`) move verbatim/near-verbatim -- their
+internal logic (tree-sitter node type strings, byte-offset slicing) is
+unchanged. The outer assembly (`_extract_classes`, `_extract_top_level_functions`
+and the removed `_extract_class`/`_extract_function`/`_extract_methods`) is
+adapted to build `compass_core.ir.models` types directly instead of a nested
+`parser.models.ParsedClass`/`ParsedFunction` tree, with `Definition.id`
+namespaced `py::{module_name}::{name}` (class/function) or
+`py::{module_name}::{parent}.{name}` (method) at construction time.
 """
 
 from __future__ import annotations
 
 import ast
 import hashlib
-import logging
 from pathlib import Path
 
 import tree_sitter_python as tspython
 from tree_sitter import Language, Node, Parser
 
-from compass_core.parser.models import Import, ParsedClass, ParsedFile, ParsedFunction
-
-logger = logging.getLogger(__name__)
+from compass_core.ir.models import CallSite, Definition, DefinitionKind, ImportStatement, ParsedFile
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+class PythonExtractor:
+    language_id = "python"
+    file_extensions = {".py"}
 
+    def parse(self, source: bytes, file_path: Path) -> ParsedFile:
+        content_hash = hashlib.sha256(source).hexdigest()
+        module_name = _derive_module_name(file_path)
 
-def extract_file(path: Path, root: Path | None = None) -> ParsedFile:
-    """Parse a single .py file and return a fully populated ParsedFile.
+        _, parser = _make_parser()
+        tree = parser.parse(source)
+        root = tree.root_node
 
-    Creates a fresh tree-sitter Parser on every call — safe for use inside
-    worker processes spawned by ProcessPoolExecutor.
+        imports = _extract_imports(source, root)
+        definitions: list[Definition] = []
+        call_sites: list[CallSite] = []
+        _extract_classes(source, root, module_name, str(file_path), definitions, call_sites)
+        _extract_top_level_functions(
+            source, root, module_name, str(file_path), definitions, call_sites
+        )
 
-    Args:
-        path: Absolute path to the Python source file.
-        root: Optional repository root used to derive the dotted module name.
-              If None, falls back to the file stem.
-
-    Returns:
-        A ParsedFile dataclass with imports, classes, and top-level functions.
-    """
-    source_bytes = path.read_bytes()
-    content_hash = hashlib.sha256(source_bytes).hexdigest()
-    module_name = _derive_module_name(path, root)
-
-    _, parser = _make_parser()
-    tree = parser.parse(source_bytes)
-    root_node = tree.root_node
-
-    imports = _extract_imports(source_bytes, root_node)
-    classes = _extract_classes(source_bytes, root_node, str(path))
-    functions = _extract_top_level_functions(source_bytes, root_node, str(path))
-
-    return ParsedFile(
-        path=str(path),
-        module_name=module_name,
-        imports=imports,
-        classes=classes,
-        functions=functions,
-        content_hash=content_hash,
-    )
+        return ParsedFile(
+            path=str(file_path),
+            language="python",
+            module_name=module_name,
+            content_hash=content_hash,
+            definitions=definitions,
+            imports=imports,
+            call_sites=call_sites,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -73,28 +70,32 @@ def _make_parser() -> tuple[Language, Parser]:
     return lang, parser
 
 
-def _derive_module_name(path: Path, root: Path | None) -> str:
+def _derive_module_name(path: Path) -> str:
     """Convert a file path to a dotted Python module name.
 
-    Args:
-        path: The file path to convert.
-        root: Repository root. If provided, the module name is derived
-              relative to root; otherwise the file stem is used.
+    By calling convention, ``file_path`` passed into
+    ``LanguageExtractor.parse`` (and therefore into this helper) is already
+    relative to the repository root -- relativizing an absolute path is
+    Phase 1/parse's responsibility (a later task), not this extractor's.
+    Given a root-relative path, every path component becomes a dotted
+    segment, with a trailing ``__init__`` component stripped so packages are
+    referenced by their directory name.
 
-    Returns:
-        A dotted module name string, e.g. "compass_core.parser.models".
+    A leading ``src`` segment is also stripped: under the standard Python
+    src-layout (``packages/<pkg>/src/<import_name>/...``), imports are
+    written relative to ``src/``, not the repo root, so keeping ``src`` in
+    the dotted name would make every intra-repo import fail to resolve
+    against this module name (see PythonImportResolver._resolve_module).
+    Only the first ``src`` segment is stripped -- everything before it
+    (e.g. ``packages/core``) is dropped too, since it plays no part in the
+    actual import path.
     """
-    if root is not None:
-        try:
-            rel = path.resolve().relative_to(root.resolve())
-            parts = list(rel.with_suffix("").parts)
-            # Drop trailing __init__ so packages are referenced by their name
-            if parts and parts[-1] == "__init__":
-                parts = parts[:-1]
-            return ".".join(parts) if parts else path.stem
-        except ValueError:
-            pass
-    return path.stem
+    parts = list(path.with_suffix("").parts)
+    if "src" in parts:
+        parts = parts[parts.index("src") + 1 :]
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts) if parts else path.stem
 
 
 # ---------------------------------------------------------------------------
@@ -102,33 +103,35 @@ def _derive_module_name(path: Path, root: Path | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _extract_imports(source_bytes: bytes, root_node: Node) -> list[Import]:
+def _extract_imports(source_bytes: bytes, root_node: Node) -> list[ImportStatement]:
     """Extract all import statements from the module-level AST node.
 
     Handles both `import X` and `from X import Y` forms, including aliases
     and wildcard imports.
     """
-    imports: list[Import] = []
+    imports: list[ImportStatement] = []
     for node in root_node.children:
         if node.type == "import_statement":
             imports.extend(_parse_import_statement(node, source_bytes))
         elif node.type == "import_from_statement":
-            imports.append(_parse_import_from_statement(node, source_bytes))
+            imports.extend(_parse_import_from_statement(node, source_bytes))
     return imports
 
 
-def _parse_import_statement(node: Node, source_bytes: bytes) -> list[Import]:
+def _parse_import_statement(node: Node, source_bytes: bytes) -> list[ImportStatement]:
     """Parse `import X` and `import X as Y` nodes."""
-    result: list[Import] = []
+    result: list[ImportStatement] = []
     line = node.start_point[0] + 1
 
     for child in node.named_children:
         if child.type == "dotted_name":
+            module = _node_text(child, source_bytes)
             result.append(
-                Import(
-                    module=_node_text(child, source_bytes),
+                ImportStatement(
+                    module=module,
                     names=[],
                     alias=None,
+                    is_relative=module.startswith("."),
                     is_from=False,
                     line=line,
                 )
@@ -137,11 +140,13 @@ def _parse_import_statement(node: Node, source_bytes: bytes) -> list[Import]:
             # aliased_import: dotted_name "as" identifier
             name_node = child.child_by_field_name("name")
             alias_node = child.child_by_field_name("alias")
+            module = _node_text(name_node, source_bytes) if name_node else ""
             result.append(
-                Import(
-                    module=_node_text(name_node, source_bytes) if name_node else "",
+                ImportStatement(
+                    module=module,
                     names=[],
                     alias=_node_text(alias_node, source_bytes) if alias_node else None,
+                    is_relative=module.startswith("."),
                     is_from=False,
                     line=line,
                 )
@@ -149,37 +154,84 @@ def _parse_import_statement(node: Node, source_bytes: bytes) -> list[Import]:
     return result
 
 
-def _parse_import_from_statement(node: Node, source_bytes: bytes) -> Import:
-    """Parse `from X import Y` nodes including wildcards and aliases."""
+def _parse_import_from_statement(node: Node, source_bytes: bytes) -> list[ImportStatement]:
+    """Parse `from X import Y` nodes including wildcards and aliases.
+
+    `ImportStatement` carries one `alias` field, so a statement renaming
+    several names at once (`from x import a as b, c as d`) can't be
+    represented as a single entry without losing all but the last alias.
+    Each aliased name is therefore split into its own `ImportStatement`;
+    plain (non-aliased) names stay grouped together in one, matching the
+    pre-existing shape for the common `from x import a, b` case.
+    """
     line = node.start_point[0] + 1
     module = ""
-    names: list[str] = []
-    alias: str | None = None
 
     children = node.named_children
     if not children:
-        return Import(module=module, names=names, alias=alias, is_from=True, line=line)
+        return [
+            ImportStatement(
+                module=module, names=[], alias=None, is_relative=False, is_from=True, line=line
+            )
+        ]
 
     # First named child is the module (dotted_name or relative_import)
     first = children[0]
     if first.type in ("dotted_name", "relative_import"):
         module = _node_text(first, source_bytes)
+    is_relative = module.startswith(".") or first.type == "relative_import"
 
     # Remaining children are the imported names
+    plain_names: list[str] = []
+    aliased: list[tuple[str, str]] = []
     for child in children[1:]:
         if child.type == "wildcard_import":
-            names = ["*"]
+            plain_names = ["*"]
         elif child.type == "dotted_name":
-            names.append(_node_text(child, source_bytes))
+            plain_names.append(_node_text(child, source_bytes))
         elif child.type == "aliased_import":
             name_node = child.child_by_field_name("name")
             alias_node = child.child_by_field_name("alias")
-            if name_node:
-                names.append(_node_text(name_node, source_bytes))
-            if alias_node:
-                alias = _node_text(alias_node, source_bytes)
+            if name_node and alias_node:
+                aliased.append(
+                    (_node_text(name_node, source_bytes), _node_text(alias_node, source_bytes))
+                )
 
-    return Import(module=module, names=names, alias=alias, is_from=True, line=line)
+    statements: list[ImportStatement] = []
+    if plain_names:
+        statements.append(
+            ImportStatement(
+                module=module,
+                names=plain_names,
+                alias=None,
+                is_relative=is_relative,
+                is_from=True,
+                line=line,
+            )
+        )
+    for name, alias in aliased:
+        statements.append(
+            ImportStatement(
+                module=module,
+                names=[name],
+                alias=alias,
+                is_relative=is_relative,
+                is_from=True,
+                line=line,
+            )
+        )
+    if not statements:
+        statements.append(
+            ImportStatement(
+                module=module,
+                names=[],
+                alias=None,
+                is_relative=is_relative,
+                is_from=True,
+                line=line,
+            )
+        )
+    return statements
 
 
 # ---------------------------------------------------------------------------
@@ -187,23 +239,44 @@ def _parse_import_from_statement(node: Node, source_bytes: bytes) -> Import:
 # ---------------------------------------------------------------------------
 
 
-def _extract_classes(source_bytes: bytes, root_node: Node, file_path: str) -> list[ParsedClass]:
-    """Extract all top-level class definitions from the module."""
-    classes: list[ParsedClass] = []
+def _extract_classes(
+    source_bytes: bytes,
+    root_node: Node,
+    module_name: str,
+    file_path: str,
+    out_definitions: list[Definition],
+    out_call_sites: list[CallSite],
+) -> None:
+    """Extract all top-level class definitions from the module, appending
+    Definition(kind=CLASS) and Definition(kind=METHOD) entries directly into
+    out_definitions, and each method's raw-call CallSite entries into
+    out_call_sites."""
     for node in root_node.children:
         if node.type == "class_definition":
-            classes.append(_extract_class(node, source_bytes, file_path))
+            _extract_class(
+                node, source_bytes, module_name, file_path, out_definitions, out_call_sites
+            )
         elif node.type == "decorated_definition":
             inner = _unwrap_decorated(node)
             if inner and inner.type == "class_definition":
-                classes.append(_extract_class(inner, source_bytes, file_path))
-    return classes
+                _extract_class(
+                    inner, source_bytes, module_name, file_path, out_definitions, out_call_sites
+                )
 
 
-def _extract_class(node: Node, source_bytes: bytes, file_path: str) -> ParsedClass:
-    """Build a ParsedClass from a class_definition AST node."""
+def _extract_class(
+    node: Node,
+    source_bytes: bytes,
+    module_name: str,
+    file_path: str,
+    out_definitions: list[Definition],
+    out_call_sites: list[CallSite],
+) -> None:
+    """Build a Definition(kind=CLASS) from a class_definition AST node and
+    append it (and its methods) into out_definitions."""
     name_node = node.child_by_field_name("name")
     name = _node_text(name_node, source_bytes) if name_node else ""
+    class_id = f"py::{module_name}::{name}"
 
     # Bases: argument_list child named "superclasses"
     bases: list[str] = []
@@ -215,7 +288,6 @@ def _extract_class(node: Node, source_bytes: bytes, file_path: str) -> ParsedCla
 
     body_node = node.child_by_field_name("body")
     docstring = _extract_docstring(body_node, source_bytes) if body_node else None
-    methods = _extract_methods(source_bytes, body_node, file_path, name) if body_node else []
 
     # If wrapped in decorated_definition, source/line includes decorators
     container = node.parent if node.parent and node.parent.type == "decorated_definition" else node
@@ -223,39 +295,78 @@ def _extract_class(node: Node, source_bytes: bytes, file_path: str) -> ParsedCla
     line_end = container.end_point[0] + 1
     source = _slice_source(source_bytes, container.start_byte, container.end_byte)
 
-    return ParsedClass(
-        name=name,
-        bases=bases,
-        methods=methods,
-        docstring=docstring,
-        line_start=line_start,
-        line_end=line_end,
-        source=source,
-        file_path=file_path,
+    out_definitions.append(
+        Definition(
+            id=class_id,
+            kind=DefinitionKind.CLASS,
+            name=name,
+            file_path=file_path,
+            line_start=line_start,
+            line_end=line_end,
+            source=source,
+            docstring=docstring,
+            bases=bases,
+            parent_id=None,
+            signature=None,
+            decorators=[],
+            raw_calls=[],
+        )
     )
+
+    if body_node:
+        _extract_methods(
+            source_bytes,
+            body_node,
+            module_name,
+            file_path,
+            name,
+            class_id,
+            out_definitions,
+            out_call_sites,
+        )
 
 
 def _extract_methods(
-    source_bytes: bytes, body_node: Node, file_path: str, parent_class: str
-) -> list[ParsedFunction]:
+    source_bytes: bytes,
+    body_node: Node,
+    module_name: str,
+    file_path: str,
+    parent_class: str,
+    parent_id: str,
+    out_definitions: list[Definition],
+    out_call_sites: list[CallSite],
+) -> None:
     """Extract all method definitions from a class body node."""
-    methods: list[ParsedFunction] = []
+    seen_ids: dict[str, int] = {}
     for child in body_node.children:
         if child.type == "function_definition":
-            methods.append(
-                _extract_function(
-                    child, source_bytes, file_path, is_method=True, parent_class=parent_class
-                )
+            _extract_function(
+                child,
+                source_bytes,
+                module_name,
+                file_path,
+                out_definitions,
+                out_call_sites,
+                is_method=True,
+                parent_class=parent_class,
+                parent_id=parent_id,
+                seen_ids=seen_ids,
             )
         elif child.type == "decorated_definition":
             inner = _unwrap_decorated(child)
             if inner and inner.type == "function_definition":
-                methods.append(
-                    _extract_function(
-                        inner, source_bytes, file_path, is_method=True, parent_class=parent_class
-                    )
+                _extract_function(
+                    inner,
+                    source_bytes,
+                    module_name,
+                    file_path,
+                    out_definitions,
+                    out_call_sites,
+                    is_method=True,
+                    parent_class=parent_class,
+                    parent_id=parent_id,
+                    seen_ids=seen_ids,
                 )
-    return methods
 
 
 # ---------------------------------------------------------------------------
@@ -264,40 +375,94 @@ def _extract_methods(
 
 
 def _extract_top_level_functions(
-    source_bytes: bytes, root_node: Node, file_path: str
-) -> list[ParsedFunction]:
+    source_bytes: bytes,
+    root_node: Node,
+    module_name: str,
+    file_path: str,
+    out_definitions: list[Definition],
+    out_call_sites: list[CallSite],
+) -> None:
     """Extract all top-level (non-method) function definitions."""
-    functions: list[ParsedFunction] = []
+    seen_ids: dict[str, int] = {}
     for node in root_node.children:
         if node.type == "function_definition":
-            functions.append(
-                _extract_function(node, source_bytes, file_path, is_method=False, parent_class=None)
+            _extract_function(
+                node,
+                source_bytes,
+                module_name,
+                file_path,
+                out_definitions,
+                out_call_sites,
+                is_method=False,
+                parent_class=None,
+                parent_id=None,
+                seen_ids=seen_ids,
             )
         elif node.type == "decorated_definition":
             inner = _unwrap_decorated(node)
             if inner and inner.type == "function_definition":
-                functions.append(
-                    _extract_function(
-                        inner, source_bytes, file_path, is_method=False, parent_class=None
-                    )
+                _extract_function(
+                    inner,
+                    source_bytes,
+                    module_name,
+                    file_path,
+                    out_definitions,
+                    out_call_sites,
+                    is_method=False,
+                    seen_ids=seen_ids,
+                    parent_class=None,
+                    parent_id=None,
                 )
-    return functions
 
 
 def _extract_function(
     node: Node,
     source_bytes: bytes,
+    module_name: str,
     file_path: str,
+    out_definitions: list[Definition],
+    out_call_sites: list[CallSite],
     is_method: bool = False,
     parent_class: str | None = None,
-) -> ParsedFunction:
-    """Build a ParsedFunction from a function_definition AST node."""
+    parent_id: str | None = None,
+    seen_ids: dict[str, int] | None = None,
+) -> None:
+    """Build a Definition(kind=FUNCTION|METHOD) from a function_definition AST
+    node, appending it into out_definitions and its raw calls as CallSite
+    entries into out_call_sites.
+
+    `seen_ids`, when given, tracks how many definitions have already claimed
+    each base id within the enclosing scope (a class body or a module's
+    top level). Two defs can legitimately share a name+scope — most commonly
+    a `@property` getter and its `@x.setter`/`@x.deleter` — and without
+    disambiguation the later one would silently collide with (and overwrite)
+    the earlier one's node in the symbol table and graph. On a collision the
+    id is suffixed with the decorator that caused it (`#setter`, `#deleter`)
+    when recognizable, else a `#2`, `#3`, ... counter.
+    """
     # If inside decorated_definition, use the wrapper for source/line bounds
     container = node.parent if node.parent and node.parent.type == "decorated_definition" else node
     decorators = _extract_decorators(container, source_bytes) if container is not node else []
 
     name_node = node.child_by_field_name("name")
     name = _node_text(name_node, source_bytes) if name_node else ""
+
+    if is_method and parent_class is not None:
+        base_id = f"py::{module_name}::{parent_class}.{name}"
+    else:
+        base_id = f"py::{module_name}::{name}"
+
+    def_id = base_id
+    if seen_ids is not None:
+        occurrence = seen_ids.get(base_id, 0)
+        if occurrence:
+            if any(d.endswith(".setter") for d in decorators):
+                def_id = f"{base_id}#setter"
+            elif any(d.endswith(".deleter") for d in decorators):
+                def_id = f"{base_id}#deleter"
+            else:
+                def_id = f"{base_id}#{occurrence + 1}"
+        seen_ids[base_id] = occurrence + 1
 
     signature = _extract_signature(node, source_bytes)
 
@@ -309,19 +474,33 @@ def _extract_function(
     line_end = container.end_point[0] + 1
     source = _slice_source(source_bytes, container.start_byte, container.end_byte)
 
-    return ParsedFunction(
-        name=name,
-        signature=signature,
-        docstring=docstring,
-        line_start=line_start,
-        line_end=line_end,
-        source=source,
-        file_path=file_path,
-        raw_calls=raw_calls,
-        decorators=decorators,
-        is_method=is_method,
-        parent_class=parent_class,
+    out_definitions.append(
+        Definition(
+            id=def_id,
+            kind=DefinitionKind.METHOD if is_method else DefinitionKind.FUNCTION,
+            name=name,
+            file_path=file_path,
+            line_start=line_start,
+            line_end=line_end,
+            source=source,
+            docstring=docstring,
+            bases=[],
+            parent_id=parent_id,
+            signature=signature,
+            decorators=decorators,
+            raw_calls=raw_calls,
+        )
     )
+
+    for call in raw_calls:
+        out_call_sites.append(
+            CallSite(
+                callee_name=call,
+                receiver_expr=None,
+                line=line_start,
+                enclosing_definition_id=def_id,
+            )
+        )
 
 
 def _extract_signature(node: Node, source_bytes: bytes) -> str:

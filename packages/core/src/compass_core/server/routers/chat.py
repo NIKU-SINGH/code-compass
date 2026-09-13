@@ -6,5 +6,5 @@ router = APIRouter(tags=["chat"])
 
 
 @router.post("/chat")
-async def chat():
+async def chat() -> dict[str, str]:
     return {"message": "not implemented"}

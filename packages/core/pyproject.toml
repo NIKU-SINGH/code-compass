@@ -22,3 +22,8 @@ dependencies = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/compass_core"]
+
+[tool.mypy]
+strict = true
+files = ["src/compass_core"]
+plugins = ["pydantic.mypy"]

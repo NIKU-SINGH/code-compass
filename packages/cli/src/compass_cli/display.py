@@ -14,6 +14,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
+from compass_cli.progress import fmt_duration
 from compass_cli.types import IngestSummary
 
 _GOLD = "color(214)"
@@ -83,25 +84,23 @@ def phase_header(num: int, total: int, title: str) -> None:
     console.print()
 
 
-def step(label: str, value: str) -> None:
-    """Print a single key-value step line with consistent alignment.
+def _language_grid(language_counts: dict[str, int]) -> Table:
+    """Lay out a "Languages" label followed by a language -> file-count
+    breakdown, three columns wide."""
+    grid = Table.grid(padding=(0, 3))
+    grid.add_column(style="dim", min_width=13)
+    for _ in range(3):
+        grid.add_column(style="bold")
+        grid.add_column(style="dim", min_width=6)
 
-    Used for reporting discrete metrics or metadata during a phase.
-
-    Args:
-        label: The descriptive name of the step or metric.
-        value: The string value to display alongside the label.
-    """
-    console.print(f"  [dim]{label:<28}[/dim][bold]{value}[/bold]")
-
-
-def phase_done(message: str) -> None:
-    """Print a green check-mark completion line for the current phase.
-
-    Args:
-        message: The completion message to display (e.g., "Files parsed successfully").
-    """
-    console.print(f"\n  [green]✓[/green] {message}\n")
+    items = sorted(language_counts.items(), key=lambda kv: kv[1], reverse=True)
+    for i in range(0, len(items), 3):
+        row: list[str] = ["Languages" if i == 0 else ""]
+        for lang, count in items[i : i + 3]:
+            row += [lang, f"{count:,}"]
+        row += [""] * (7 - len(row))
+        grid.add_row(*row)
+    return grid
 
 
 def summary(summary: IngestSummary) -> None:
@@ -110,27 +109,42 @@ def summary(summary: IngestSummary) -> None:
     Args:
         summary: Aggregate results of the ingest run to display.
     """
-    table = Table.grid(padding=(0, 4))
-    table.add_column(style="dim", min_width=18)
-    table.add_column(style="bold", min_width=14)
-    table.add_column(style="dim", min_width=18)
-    table.add_column(style="bold")
+    left = Table.grid(padding=(0, 3))
+    left.add_column(style="dim", min_width=13)
+    left.add_column(style="bold")
+    left.add_row("Files indexed", f"{summary.file_count:,}")
+    left.add_row("Classes", f"{summary.class_count:,}")
+    left.add_row("Functions", f"{summary.function_count:,}")
+    left.add_row("Skipped", str(summary.skipped))
+    left.add_row("Elapsed", fmt_duration(summary.elapsed))
 
-    table.add_row("Files indexed", str(summary.file_count), "Nodes", f"{summary.node_count:,}")
-    table.add_row("Classes", str(summary.class_count), "Edges", f"{summary.edge_count:,}")
-    table.add_row("Functions", str(summary.function_count), "DB size", _fmt_size(summary.db_size))
-    table.add_row("Skipped", str(summary.skipped), "", "")
-    table.add_row("Elapsed", f"{summary.elapsed:.1f}s", "", "")
+    right = Table.grid(padding=(0, 3))
+    right.add_column(style="dim", min_width=9)
+    right.add_column(style="bold")
+    right.add_row("Nodes", f"{summary.node_count:,}")
+    right.add_row("Edges", f"{summary.edge_count:,}")
+    right.add_row("Resolved", f"{summary.resolved_pct:.0%}")
+    right.add_row("Orphans", f"{summary.orphan_count:,}")
+    right.add_row("DB size", fmt_size(summary.db_size))
+
+    columns = Table.grid(padding=(0, 6))
+    columns.add_column()
+    columns.add_column()
+    columns.add_row(left, right)
 
     db_line = Text(no_wrap=True, overflow="fold")
     db_line.append("Database   ", style="dim")
     db_line.append(str(summary.db_path), style="bold")
 
-    content = Group(table, Text(""), db_line)
+    parts: list[Table | Text] = [columns, Text("")]
+    if summary.language_counts:
+        parts.append(_language_grid(summary.language_counts))
+        parts.append(Text(""))
+    parts.append(db_line)
 
     console.print(
         Panel(
-            content,
+            Group(*parts),
             title=f"[bold {_GOLD}]compass ingest complete[/bold {_GOLD}]",
             border_style=_GOLD,
             padding=(1, 2),
@@ -168,7 +182,7 @@ def error(message: str) -> None:
     console.print(f"[bold red]Error:[/bold red] {message}")
 
 
-def _fmt_size(size_bytes: int) -> str:
+def fmt_size(size_bytes: int) -> str:
     """Format a byte count as a human-readable string.
 
     Args:
