@@ -24,7 +24,7 @@ function tagForModule(moduleName: string): string {
   return "core";
 }
 
-export function OverviewTab({ projectId }: { projectId: string }) {
+export function OverviewTab() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +32,7 @@ export function OverviewTab({ projectId }: { projectId: string }) {
     apiFetch<OverviewData>("/api/repo/overview")
       .then(setData)
       .catch((e: Error) => setError(e.message));
-  }, [projectId]);
+  }, []);
 
   if (error) {
     return (
@@ -132,111 +132,9 @@ export function OverviewTab({ projectId }: { projectId: string }) {
           </div>
         )}
 
-        {/* Architecture diagram */}
-        <div className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">
-            Architecture
-          </p>
-          <div className="border border-border rounded-lg bg-card p-5">
-            <ArchDiagram />
-          </div>
-        </div>
 
       </div>
     </div>
   );
 }
 
-function ArchDiagram() {
-  return (
-    <svg
-      viewBox="0 0 620 290"
-      width="100%"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ fontFamily: "inherit" }}
-    >
-      <defs>
-        <marker id="arr-fwd" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-          <path d="M0,1.5 L5,3 L0,4.5" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.35" />
-        </marker>
-        <marker id="arr-bwd" markerWidth="6" markerHeight="6" refX="1" refY="3" orient="auto">
-          <path d="M6,1.5 L1,3 L6,4.5" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.35" />
-        </marker>
-      </defs>
-
-      {/* Actor boxes */}
-      {[
-        { x: 10,  label: "compass-cli" },
-        { x: 160, label: "compass-core" },
-        { x: 310, label: "FastAPI" },
-        { x: 460, label: "React frontend" },
-      ].map(({ x, label }) => (
-        <g key={label}>
-          <rect x={x} y={10} width={110} height={34} rx="5"
-            fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.10)" strokeWidth="1" />
-          <text x={x + 55} y={31} textAnchor="middle" fontSize="11" fill="rgba(255,255,255,0.7)" fontWeight="500">
-            {label}
-          </text>
-        </g>
-      ))}
-
-      {/* LadybugDB header box */}
-      <rect x="235" y={10} width="110" height="34" rx="5"
-        fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.10)" strokeWidth="1" />
-      <text x="290" y={31} textAnchor="middle" fontSize="11" fill="rgba(255,255,255,0.7)" fontWeight="500">
-        LadybugDB
-      </text>
-
-      {/* Lifelines */}
-      {[65, 215, 365, 515].map((x) => (
-        <line key={x} x1={x} y1={44} x2={x} y2={255}
-          stroke="rgba(255,255,255,0.07)" strokeWidth="1" strokeDasharray="5,4" />
-      ))}
-      <line x1="290" y1={44} x2="290" y2={255}
-        stroke="rgba(255,255,255,0.07)" strokeWidth="1" strokeDasharray="5,4" />
-
-      {/* LadybugDB footer box */}
-      <rect x="235" y={255} width="110" height="34" rx="5"
-        fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.10)" strokeWidth="1" />
-      <text x="290" y={276} textAnchor="middle" fontSize="11" fill="rgba(255,255,255,0.7)" fontWeight="500">
-        LadybugDB
-      </text>
-
-      {/* Step 1: CLI → core */}
-      <circle cx="52" cy="80" r="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
-      <text x="52" y="84" textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.4)">1</text>
-      <line x1="65" y1="80" x2="210" y2="80" stroke="rgba(255,255,255,0.3)" strokeWidth="1" markerEnd="url(#arr-fwd)" />
-      <text x="137" y="74" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.4)">compass ingest ./repo</text>
-
-      {/* Step 2: core → DB */}
-      <circle cx="202" cy="112" r="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
-      <text x="202" y="116" textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.4)">2</text>
-      <line x1="215" y1="112" x2="278" y2="112" stroke="rgba(255,255,255,0.3)" strokeWidth="1" markerEnd="url(#arr-fwd)" />
-      <text x="246" y="106" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.4)">write graph</text>
-
-      {/* Step 3: CLI → FastAPI */}
-      <circle cx="52" cy="148" r="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
-      <text x="52" y="152" textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.4)">3</text>
-      <line x1="65" y1="148" x2="360" y2="148" stroke="rgba(255,255,255,0.3)" strokeWidth="1" markerEnd="url(#arr-fwd)" />
-      <text x="212" y="142" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.4)">compass serve</text>
-
-      {/* Step 4: React → FastAPI */}
-      <circle cx="503" cy="180" r="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
-      <text x="503" y="184" textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.4)">4</text>
-      <line x1="505" y1="180" x2="380" y2="180" stroke="rgba(255,255,255,0.3)" strokeWidth="1" markerEnd="url(#arr-bwd)" />
-      <text x="442" y="174" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.4)">GET /api/repo/graph</text>
-
-      {/* Step 5: FastAPI → DB */}
-      <circle cx="352" cy="214" r="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
-      <text x="352" y="218" textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.4)">5</text>
-      <line x1="357" y1="214" x2="303" y2="214" stroke="rgba(255,255,255,0.3)" strokeWidth="1" markerEnd="url(#arr-bwd)" />
-      <text x="330" y="208" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.4)">Cypher</text>
-
-      {/* Step 6: DB → FastAPI */}
-      <circle cx="278" cy="236" r="8" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
-      <text x="278" y="240" textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.4)">6</text>
-      <line x1="283" y1="236" x2="357" y2="236" stroke="rgba(255,255,255,0.3)" strokeWidth="1" markerEnd="url(#arr-fwd)" />
-      <text x="320" y="230" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.4)">graph data</text>
-    </svg>
-  );
-}

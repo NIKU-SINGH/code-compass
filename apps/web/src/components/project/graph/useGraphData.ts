@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
-export type NodeType = "File" | "Class" | "Function" | "Method" | "ExternalDep" | "Field";
+export type NodeType = "File" | "Class" | "Function" | "Method" | "ExternalDep";
 export type EdgeType = "CONTAINS" | "IMPORTS" | "INHERITS" | "CALLS" | "CALLS_EXTERN";
 
 export interface ApiNode {
@@ -23,7 +23,7 @@ export interface GraphData {
   edges: ApiEdge[];
 }
 
-export function useGraphData(projectId: string) {
+export function useGraphData() {
   const [data, setData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export function useGraphData(projectId: string) {
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, []);
 
   return { data, loading, error };
 }

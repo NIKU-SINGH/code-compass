@@ -6,7 +6,7 @@ import { NODE_COLOR, NODE_LABEL, EDGE_COLOR, EDGE_LABEL } from "./graphStyle";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
-const NODE_ORDER: NodeType[] = ["File", "Class", "Function", "Method", "ExternalDep", "Field"];
+const NODE_ORDER: NodeType[] = ["File", "Class", "Function", "Method", "ExternalDep"];
 const EDGE_ORDER: EdgeType[] = ["CONTAINS", "IMPORTS", "INHERITS", "CALLS", "CALLS_EXTERN"];
 
 interface Props {

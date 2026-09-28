@@ -17,8 +17,8 @@ const GraphCanvas3D = dynamic(
   { ssr: false }
 );
 
-export function GraphTab({ projectId }: { projectId: string }) {
-  const { data, loading, error } = useGraphData(projectId);
+export function GraphTab() {
+  const { data, loading, error } = useGraphData();
   const {
     visibleNodes,
     visibleEdges,

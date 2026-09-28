@@ -6,7 +6,6 @@ export const NODE_COLOR: Record<NodeType, string> = {
   Function: "#4ade80",
   Method: "#c084fc",
   ExternalDep: "#f87171",
-  Field: "#e879f9",
 };
 
 export const NODE_LABEL: Record<NodeType, string> = {
@@ -15,7 +14,6 @@ export const NODE_LABEL: Record<NodeType, string> = {
   Function: "Function",
   Method: "Method",
   ExternalDep: "External Dep",
-  Field: "Field",
 };
 
 export const NODE_SIZE: Record<NodeType, number> = {
@@ -24,7 +22,6 @@ export const NODE_SIZE: Record<NodeType, number> = {
   Function: 4,
   Method: 4,
   ExternalDep: 3,
-  Field: 3,
 };
 
 export const EDGE_COLOR: Record<EdgeType, string> = {
