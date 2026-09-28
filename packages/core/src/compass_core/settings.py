@@ -11,10 +11,6 @@ class Settings(BaseSettings):
     LADYBUG_DB_PATH: str = Field(
         default=".compass/graph.ladybug", description="Path to the LadybugDB graph database file"
     )
-    LLM_MODEL: str = Field(
-        default="gpt-4o-mini", description="LLM model identifier passed to LiteLLM"
-    )
-    LLM_API_KEY: str = Field(default="", description="API key for the configured LLM provider")
     REPO_ROOT: Path = Field(
         default=Path("."), description="Root path of the repository being analysed"
     )

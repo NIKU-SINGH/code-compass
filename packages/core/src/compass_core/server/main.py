@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from compass_core.server.routers.chat import router as chat_router
 from compass_core.server.routers.repo import router as repo_router
 from compass_core.settings import settings
 
@@ -26,5 +25,4 @@ def health_check() -> dict[str, str]:
 
 
 # Include routers
-app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(repo_router, prefix="/api", tags=["repo"])
