@@ -27,7 +27,6 @@ export function useExpandableGraph(data: GraphData | null) {
     Function: true,
     Method: true,
     ExternalDep: true,
-    Field: true,
   });
   const [edgeTypeVisibility, setEdgeTypeVisibility] = useState<Record<EdgeType, boolean>>({
     CONTAINS: true,
@@ -165,7 +164,6 @@ export function useExpandableGraph(data: GraphData | null) {
       Function: 0,
       Method: 0,
       ExternalDep: 0,
-      Field: 0,
     };
     revealed.forEach((id) => {
       const n = nodeById.get(id);

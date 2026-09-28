@@ -90,22 +90,6 @@ _NODE_TABLES: list[str] = [
         PRIMARY KEY(full_ref)
     )
     """,
-    # Field: A class-level attribute or data field.
-    #   - id (PK): Unique identifier, format: 'file_path::ClassName.field_name'.
-    #   - name: The name of the attribute.
-    #   - type_hint: Python type hint string if provided.
-    #   - file_path: Reference to the defining file.
-    #   - parent_class: The name of the owning class.
-    """
-    CREATE NODE TABLE IF NOT EXISTS Field(
-        id           STRING,
-        name         STRING,
-        type_hint    STRING,
-        file_path    STRING,
-        parent_class STRING,
-        PRIMARY KEY(id)
-    )
-    """,
 ]
 
 # ---------------------------------------------------------------------------
@@ -151,12 +135,6 @@ _REL_TABLES: list[str] = [
     CREATE REL TABLE IF NOT EXISTS CALLS_EXTERN(
         FROM Function TO ExternalFunction,
         line INT64
-    )
-    """,
-    # HAS_FIELD: Relationship representing class ownership of an attribute.
-    """
-    CREATE REL TABLE IF NOT EXISTS HAS_FIELD(
-        FROM Class TO Field
     )
     """,
 ]

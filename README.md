@@ -1,6 +1,6 @@
 # code-compass
 
-A codebase intelligence engine that maps, indexes, and queries your code using graph databases, Tree-sitter parsing, and LLMs.
+A codebase intelligence engine that maps, indexes, and queries your code using graph databases and Tree-sitter parsing.
 
 ## Project Structure
 

@@ -42,9 +42,7 @@ def serve(
     web_dir = Path(__file__).parents[5] / "apps" / "web"
     procs: list[subprocess.Popen] = []
 
-    # Derive project ID from the current working directory name.
-    project_id = Path.cwd().name
-    frontend_url = f"{settings.FRONTEND_URL}/project/{project_id}"
+    frontend_url = settings.FRONTEND_URL
 
     try:
         display.console.print(
