@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import type { ApiError, SearchHit, SymbolRef } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { errorCopy } from "./errorCopy";
+import { errorCopy } from "@/lib/errorCopy";
 import { KIND_STYLES, symbolLocation } from "./symbolKind";
 
 interface TargetPickerProps {

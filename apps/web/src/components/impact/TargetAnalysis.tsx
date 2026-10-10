@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { CaveatBanner } from "@/components/ui/CaveatBanner";
 import { InlineError } from "@/components/ui/InlineError";
 import { useWorkspaceView } from "@/components/shell/useWorkspaceView";
 import type { ImpactGroup } from "@/lib/api";
 import { DEFAULT_IMPACT_DEPTH, MAX_DEPTH } from "@/lib/limits";
 import { AffectedGroupList } from "./AffectedGroupList";
 import { DepthControl } from "./DepthControl";
-import { errorCopy } from "./errorCopy";
+import { errorCopy } from "@/lib/errorCopy";
 import {
   AmbiguousChooser,
-  CaveatBanner,
   EmptyResult,
   IdleHint,
   LoadingRows,

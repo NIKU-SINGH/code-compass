@@ -3,7 +3,7 @@
 import { LayoutDashboard, Orbit, Target } from "lucide-react";
 import { TargetAnalysis } from "@/components/impact/TargetAnalysis";
 import { GraphTab } from "@/components/project/GraphTab";
-import { OverviewTab } from "@/components/project/OverviewTab";
+import { InsightsDashboard } from "@/components/overview/InsightsDashboard";
 import { NavRail, type NavRailItem } from "@/components/shell/NavRail";
 import { useViewShortcuts } from "@/components/shell/useViewShortcuts";
 import { useWorkspaceView } from "@/components/shell/useWorkspaceView";
@@ -24,7 +24,7 @@ export function ActiveView() {
     <div className="flex flex-1 min-h-0 min-w-0">
       <NavRail items={NAV_ITEMS} active={view} onSelect={setView} />
       <div className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
-        {view === "overview" && <OverviewTab />}
+        {view === "overview" && <InsightsDashboard />}
         {view === "graph" && <GraphTab />}
         {view === "impact" && <TargetAnalysis />}
       </div>
