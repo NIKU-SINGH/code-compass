@@ -9,6 +9,8 @@ objects elsewhere, never raised as one of these.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 
 class CompassError(Exception):
     """Base exception for compass_core. Carries enough context to debug without re-running."""
@@ -51,3 +53,15 @@ class ValidationError(CompassError):
 
 class PersistenceError(CompassError):
     """Phase 5 failure — DB connection lost or write failed unrecoverably mid-batch."""
+
+
+class IndexNotFoundError(CompassError):
+    """No ``.compass/graph.ladybug`` was found walking up from ``searched_from``."""
+
+    def __init__(self, *, searched_from: Path) -> None:
+        super().__init__(f"No Compass index found from {searched_from}. Run `compass ingest`.")
+        self.searched_from = searched_from
+
+
+class IndexIncompatibleError(CompassError):
+    """The index or its metadata is unreadable or from an unsupported version."""

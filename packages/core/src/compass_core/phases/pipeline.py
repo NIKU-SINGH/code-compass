@@ -3,18 +3,18 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import shutil
 import subprocess
-import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from compass_core.graph.db import GraphDB
 from compass_core.graph.schema import create_schema
+from compass_core.index.metadata import IndexMetadata, save_metadata
 from compass_core.phases.base import IngestContext, Phase
 from compass_core.phases.discovery import DiscoveryPhase
 from compass_core.phases.parse import ParsePhase
@@ -23,6 +23,7 @@ from compass_core.phases.resolution import ResolutionPhase
 from compass_core.phases.symbol_table import SymbolTablePhase
 from compass_core.phases.validation import ValidationPhase
 from compass_core.progress import ProgressReporter
+from compass_core.query.types import Language
 
 logger = logging.getLogger(__name__)
 
@@ -97,20 +98,15 @@ def _remove_db(path: Path) -> None:
 
 
 def _save_metadata(repo_path: Path) -> None:
-    """Write .compass/metadata.json with indexed_commit, indexed_at, and the
-    grammar version of every registered language — moved from
-    ingest/engine.py::save_metadata + _get_git_commit + _save_metadata."""
+    """Write .compass/metadata.json (commit, time, grammar versions) via IndexMetadata."""
     commit = _get_git_commit(repo_path)
-    grammar_versions = _grammar_versions()
-
-    meta_dir = repo_path / ".compass"
-    meta_dir.mkdir(parents=True, exist_ok=True)
-    meta = {
-        "indexed_commit": commit,
-        "indexed_at": int(time.time()),
-        "grammar_versions": grammar_versions,
-    }
-    (meta_dir / "metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    meta = IndexMetadata(
+        indexed_commit=None if commit == "unknown" else commit,
+        indexed_at=datetime.now(UTC),
+        schema_version=1,
+        grammar_versions={Language(k): v for k, v in _grammar_versions().items()},
+    )
+    save_metadata(repo_path / ".compass" / "metadata.json", meta)
     logger.debug("Metadata written: %s", meta)
 
 
