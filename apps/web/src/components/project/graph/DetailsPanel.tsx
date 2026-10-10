@@ -36,7 +36,7 @@ export function DetailsPanel({ node, connectionCount, onClose, onShowImpact }: P
       </div>
 
       <div className="px-4 py-3 border-b border-border flex flex-col gap-1.5">
-        <Row label="path" value={node.filePath} />
+        <Row label="path" value={repoRelativePath(node.publicId)} />
         <Row label="id" value={node.publicId} />
         <Row
           label="connections"
@@ -53,6 +53,11 @@ export function DetailsPanel({ node, connectionCount, onClose, onShowImpact }: P
       </div>
     </Card>
   );
+}
+
+// The stored path may be absolute; the public id always carries the repo-relative one.
+function repoRelativePath(publicId: string): string {
+  return publicId.startsWith("file::") ? publicId.slice("file::".length) : publicId.split("::")[0];
 }
 
 function Row({ label, value }: { label: string; value: string }) {

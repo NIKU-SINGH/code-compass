@@ -1,14 +1,32 @@
 const SCHEME_QUERY = "(prefers-color-scheme: dark)";
-const FALLBACK = "#888888";
+const FALLBACK_TOKEN = "--muted-foreground";
+// Only reached when even the fallback token cannot be resolved (no DOM, no canvas, broken theme).
+const LAST_RESORT = "#808080";
 
 let cache = new Map<string, string>();
+let schemeVersion = 0;
 let swatch: CanvasRenderingContext2D | null = null;
 const listeners = new Set<() => void>();
 let media: MediaQueryList | null = null;
 
+/** Cache key: the colour depends on the active scheme, so a stale entry can never leak across schemes. */
+export function colorCacheKey(dark: boolean, varName: string): string {
+  return `${dark ? "dark" : "light"}:${varName}`;
+}
+
+function isDark(): boolean {
+  return window.matchMedia(SCHEME_QUERY).matches;
+}
+
 function handleSchemeChange() {
   cache = new Map();
+  schemeVersion += 1;
   listeners.forEach((l) => l());
+}
+
+/** Increments once per OS colour-scheme change observed while anything was subscribed. */
+export function getColorSchemeVersion(): number {
+  return schemeVersion;
 }
 
 function getSwatch(): CanvasRenderingContext2D | null {
@@ -33,12 +51,13 @@ function toHex(n: number): string {
  * variable is missing, unparsable, or no DOM is available (SSR).
  */
 export function resolveCssColor(varName: string): string {
-  if (typeof document === "undefined") return FALLBACK;
-  const hit = cache.get(varName);
+  if (typeof document === "undefined") return LAST_RESORT;
+  const key = colorCacheKey(isDark(), varName);
+  const hit = cache.get(key);
   if (hit) return hit;
   const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
   const ctx = getSwatch();
-  let hex = FALLBACK;
+  let hex: string | null = null;
   if (raw && ctx) {
     // An unparsable value leaves fillStyle untouched, so prime it with two different
     // sentinels and only trust the result when both runs agree.
@@ -51,11 +70,16 @@ export function resolveCssColor(varName: string): string {
     };
     const a = read("#000000");
     const b = read("#ffffff");
+    // The alpha channel is discarded: the colour tokens used by the graph are opaque.
     if (a[3] > 0 && a[0] === b[0] && a[1] === b[1] && a[2] === b[2]) {
       hex = `#${toHex(a[0])}${toHex(a[1])}${toHex(a[2])}`;
     }
   }
-  cache.set(varName, hex);
+  if (hex === null) {
+    // Not cached: the failure may be transient (e.g. stylesheet not applied yet).
+    return varName === FALLBACK_TOKEN ? LAST_RESORT : resolveCssColor(FALLBACK_TOKEN);
+  }
+  cache.set(key, hex);
   return hex;
 }
 
@@ -63,6 +87,8 @@ export function resolveCssColor(varName: string): string {
 export function onColorSchemeChange(listener: () => void): () => void {
   if (typeof window === "undefined") return () => {};
   if (listeners.size === 0) {
+    // Nothing was watching while unsubscribed, so anything cached may predate a scheme flip.
+    cache = new Map();
     media = window.matchMedia(SCHEME_QUERY);
     media.addEventListener("change", handleSchemeChange);
   }

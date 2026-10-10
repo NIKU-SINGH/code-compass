@@ -4,6 +4,7 @@ import { useEffect, useImperativeHandle, useRef, forwardRef } from "react";
 import ForceGraph3D, { ForceGraph3DInstance } from "3d-force-graph";
 import type { VisibleNode, VisibleEdge } from "./useExpandableGraph";
 import { NODE_SIZE, colorForEdge, colorForNode } from "./graphStyle";
+import { isPositionStable, type Point3 } from "./focusSettle";
 import { useColorSchemeVersion } from "./useColorSchemeVersion";
 import type { EdgeType } from "./useGraphData";
 import { mergeGraphData } from "./mergeGraphData";
@@ -45,13 +46,18 @@ function radiusForNodeCount(count: number) {
 }
 
 const FOCUS_DISTANCE = 140;
+const FOCUS_TWEEN_MS = 1000;
+const REAIM_MS = 300;
+const POLL_MS = 120;
+const MAX_POLLS = 25;
+const STABLE_EPS = 1;
 
 // Moves the camera along the node's radius so it sits in front of the node, looking at it.
 // Auto-rotate is stopped, otherwise it would immediately drag the view away again.
-function centreOnNode(graph: ForceGraph3DInstance, pos: { x: number; y: number; z: number }) {
+function centreOnNode(graph: ForceGraph3DInstance, pos: Point3, durationMs = FOCUS_TWEEN_MS) {
   const ratio = 1 + FOCUS_DISTANCE / (Math.hypot(pos.x, pos.y, pos.z) || 1);
   (graph.controls() as { autoRotate?: boolean }).autoRotate = false;
-  graph.cameraPosition({ x: pos.x * ratio, y: pos.y * ratio, z: pos.z * ratio }, pos, 1000);
+  graph.cameraPosition({ x: pos.x * ratio, y: pos.y * ratio, z: pos.z * ratio }, pos, durationMs);
 }
 
 interface Props {
@@ -157,24 +163,46 @@ export const GraphCanvas3D = forwardRef<GraphCanvasHandle, Props>(function Graph
       .linkColor((l) => colorForEdge((l as unknown as VisibleEdge).type as EdgeType));
   }, [schemeVersion]);
 
-  // Nodes only get coordinates after the first physics tick, so retry briefly.
+  // Centres on `focusId` once the force layout has settled around it: the node is usually
+  // revealed just before this runs, so early coordinates are still sliding. Sample every
+  // POLL_MS until two consecutive samples agree, then tween; give up waiting at the cap and
+  // use the last known position. The camera is re-aimed after the tween in case it drifted.
+  // Centring switches auto-rotate off (it would drag the view away); it is restored when the
+  // focus is cleared, otherwise it stays off.
   useEffect(() => {
-    if (!focusId) return;
+    const controls = graphRef.current?.controls() as { autoRotate?: boolean } | undefined;
+    if (!focusId) {
+      if (controls) controls.autoRotate = true;
+      return;
+    }
     let attempts = 0;
-    let timer: ReturnType<typeof setTimeout>;
-    const tryCentre = () => {
-      const graph = graphRef.current;
-      const node = nodeCacheRef.current.get(focusId) as unknown as
-        | { x?: number; y?: number; z?: number }
-        | undefined;
-      if (graph && node && node.x !== undefined) {
-        centreOnNode(graph, { x: node.x, y: node.y ?? 0, z: node.z ?? 0 });
-      } else if (attempts++ < 30) {
-        timer = setTimeout(tryCentre, 100);
-      }
+    let prev: Point3 | null = null;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const position = (): Point3 | null => {
+      const n = nodeCacheRef.current.get(focusId) as unknown as Partial<Point3> | undefined;
+      return n && n.x !== undefined ? { x: n.x, y: n.y ?? 0, z: n.z ?? 0 } : null;
     };
-    tryCentre();
-    return () => clearTimeout(timer);
+    const centre = (pos: Point3) => {
+      const graph = graphRef.current;
+      if (!graph) return;
+      centreOnNode(graph, pos);
+      timers.push(
+        setTimeout(() => {
+          const latest = position();
+          if (latest && graphRef.current) centreOnNode(graphRef.current, latest, REAIM_MS);
+        }, FOCUS_TWEEN_MS + 50)
+      );
+    };
+    const poll = () => {
+      const pos = position();
+      attempts += 1;
+      if (pos && isPositionStable(prev, pos, STABLE_EPS)) return centre(pos);
+      if (attempts >= MAX_POLLS) return pos ? centre(pos) : undefined;
+      if (pos) prev = pos;
+      timers.push(setTimeout(poll, POLL_MS));
+    };
+    poll();
+    return () => timers.forEach(clearTimeout);
   }, [focusId]);
 
   useEffect(() => {

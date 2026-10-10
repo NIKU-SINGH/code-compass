@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { useGraphData } from "./useGraphData";
+import { useGraphData, type NodeType } from "./useGraphData";
 import { useExpandableGraph, VisibleNode } from "./useExpandableGraph";
 import type { GraphCanvasHandle } from "./GraphCanvas3D";
 import { GraphLegend } from "./GraphLegend";
@@ -49,6 +49,7 @@ export function ExplorerPanel() {
 
   const focusedNode = useMemo(() => findFocusedNode(data?.nodes ?? [], focus), [data, focus]);
   const focusMissing = Boolean(focus?.trim()) && Boolean(data) && !focusedNode;
+  const focusHidden = Boolean(focusedNode) && !typeVisibility[focusedNode!.type as NodeType];
 
   const canvasRef = useRef<GraphCanvasHandle>(null);
 
@@ -103,6 +104,12 @@ export function ExplorerPanel() {
             placeholder="Search nodes…"
             className="h-8 text-xs w-56 bg-card/80 backdrop-blur-md"
           />
+          {focusHidden && (
+            <Alert role="status" className="py-2 w-auto">
+              <Info className="size-4" aria-hidden />
+              <AlertDescription>Hidden by the current filters</AlertDescription>
+            </Alert>
+          )}
           {focusMissing && (
             <Alert role="status" className="py-2 w-auto">
               <Info className="size-4" aria-hidden />
