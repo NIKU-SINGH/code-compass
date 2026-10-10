@@ -98,6 +98,7 @@ def _format_debug_section(phase: str, ctx: IngestContext) -> str:
         assert ctx.write_result is not None
         lines.append(f"node_count={ctx.write_result.node_count}")
         lines.append(f"edge_count={ctx.write_result.edge_count}")
+        lines.append(f"dropped_edges={ctx.write_result.dropped_edges}")
 
     lines.append("")
     return "\n".join(lines)
@@ -208,7 +209,10 @@ def _stage_result(
         display_db = _relative_db_path(db_path, repo_path)
         primary = f"{ctx.write_result.node_count:,} nodes · {ctx.write_result.edge_count:,} edges"
         secondary = f"{display.fmt_size(_db_size(db_path))} · {display_db}"
-        return primary, secondary, False
+        dropped = ctx.write_result.dropped_edges
+        if dropped:
+            secondary = f"{dropped:,} skipped · {secondary}"
+        return primary, secondary, dropped > 0
 
     return "", "", False
 
@@ -268,6 +272,7 @@ def _run_ingest(
         resolved_pct=_resolved_pct(ctx.resolved_graph),
         orphan_count=ctx.report.orphan_node_count,
         language_counts=_language_counts(ctx),
+        dropped_edges=ctx.write_result.dropped_edges,
     )
 
 

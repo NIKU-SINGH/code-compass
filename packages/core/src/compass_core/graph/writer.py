@@ -15,6 +15,11 @@ before the edges that connect them:
   7. INHERITS edges
   8. CALLS edges (Internal)
   9. CALLS_EXTERN edges (External)
+
+Every edge is written with ``MATCH (a ...), (b ...) CREATE ... RETURN
+count(*)``. When an endpoint was never stored as a node the MATCH yields no
+row and the CREATE silently does nothing, so the writer checks the returned
+count and reports such edges as dropped instead of written.
 """
 
 from __future__ import annotations
@@ -23,7 +28,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from compass_core.graph.db import GraphDB
+from compass_core.graph.db import GraphDB, as_row
 from compass_core.ir.graph import CallEdge, ExternalCallEdge, ImportEdge, InheritEdge, ResolvedGraph
 from compass_core.ir.models import Definition, DefinitionKind, ParsedFile
 from compass_core.progress import ProgressReporter
@@ -37,11 +42,23 @@ class WriteResult:
 
     Attributes:
         node_count: Number of nodes successfully written to the DB.
-        edge_count: Number of edges successfully written to the DB.
+        edge_count: Number of edges actually stored in the DB (verified per
+            statement, so it equals ``MATCH ()-[r]->() RETURN count(r)`` on
+            a fresh database).
+        dropped_edges: Number of edges in the resolved graph that could not be
+            stored, because an endpoint is not a stored node of the required
+            label (e.g. a resolved call whose callee is a class constructor:
+            CALLS only connects ``Function`` nodes) or the write failed.
+
+    Example:
+        A graph with ``run() -> helper()`` and ``build() -> Widget()``
+        (``Widget`` a class) plus four CONTAINS edges yields
+        ``WriteResult(node_count=..., edge_count=5, dropped_edges=1)``.
     """
 
     node_count: int
     edge_count: int
+    dropped_edges: int = 0
 
 
 def _calculate_expected_nodes(graph: ResolvedGraph) -> int:
@@ -87,7 +104,8 @@ def write(
 
     Returns:
         WriteResult with final node and edge counts. Counts reflect rows
-        actually written — failed DB writes are not included.
+        actually written — failed DB writes and edges whose endpoints do not
+        exist are not included; they are counted in ``dropped_edges``.
     """
     node_total = _calculate_expected_nodes(graph)
     edge_total = _calculate_expected_edges(graph)
@@ -146,7 +164,12 @@ def write(
         if _write_external_call_edge(db, extern_call_edge):
             _edge()
 
-    return WriteResult(node_count=node_count, edge_count=edge_count)
+    dropped = edge_total - edge_count
+    if dropped:
+        logger.info(
+            "%d of %d edges were not stored (endpoint not a stored node)", dropped, edge_total
+        )
+    return WriteResult(node_count=node_count, edge_count=edge_count, dropped_edges=dropped)
 
 
 # ---------------------------------------------------------------------------
@@ -291,21 +314,24 @@ def _write_contains(db: GraphDB, f: ParsedFile, on_edge: Callable[[], None]) -> 
         if d.kind is DefinitionKind.CLASS:
             if _exec(
                 db,
-                "MATCH (a:File {path: $src}), (b:Class {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+                "MATCH (a:File {path: $src}), (b:Class {id: $dst}) CREATE (a)-[:CONTAINS]->(b) "
+                "RETURN count(*)",
                 {"src": f.path, "dst": d.id},
             ):
                 on_edge()
         elif d.kind is DefinitionKind.METHOD:
             if d.parent_id is not None and _exec(
                 db,
-                "MATCH (a:Class {id: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+                "MATCH (a:Class {id: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b) "
+                "RETURN count(*)",
                 {"src": d.parent_id, "dst": d.id},
             ):
                 on_edge()
         else:
             if _exec(
                 db,
-                "MATCH (a:File {path: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b)",
+                "MATCH (a:File {path: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b) "
+                "RETURN count(*)",
                 {"src": f.path, "dst": d.id},
             ):
                 on_edge()
@@ -319,12 +345,13 @@ def _write_import_edge(db: GraphDB, edge: ImportEdge) -> bool:
         edge: The `ImportEdge` describing the importing and imported files.
 
     Returns:
-        ``True`` if the edge was written, ``False`` if either endpoint was
-        not found.
+        ``True`` if the edge was stored, ``False`` if either endpoint was
+        not found or the write failed.
     """
     return _exec(
         db,
-        "MATCH (a:File {path: $src}), (b:File {path: $dst}) CREATE (a)-[:IMPORTS]->(b)",
+        "MATCH (a:File {path: $src}), (b:File {path: $dst}) CREATE (a)-[:IMPORTS]->(b) "
+        "RETURN count(*)",
         {"src": edge.from_path, "dst": edge.to_path},
     )
 
@@ -337,12 +364,13 @@ def _write_inherit_edge(db: GraphDB, edge: InheritEdge) -> bool:
         edge: The `InheritEdge` describing the child and parent classes.
 
     Returns:
-        ``True`` if the edge was written, ``False`` if either endpoint was
-        not found.
+        ``True`` if the edge was stored, ``False`` if either endpoint was
+        not found or the write failed.
     """
     return _exec(
         db,
-        "MATCH (a:Class {id: $src}), (b:Class {id: $dst}) CREATE (a)-[:INHERITS]->(b)",
+        "MATCH (a:Class {id: $src}), (b:Class {id: $dst}) CREATE (a)-[:INHERITS]->(b) "
+        "RETURN count(*)",
         {"src": edge.child_id, "dst": edge.parent_id},
     )
 
@@ -350,19 +378,26 @@ def _write_inherit_edge(db: GraphDB, edge: InheritEdge) -> bool:
 def _write_call_edge(db: GraphDB, edge: CallEdge) -> bool:
     """Write a CALLS edge (Function -> Function) for an internal call.
 
+    A resolved call whose callee is a class (constructor or exception call)
+    has no ``Function`` node to match, so it is not stored and is reported
+    as dropped. OPEN DESIGN DECISION: storing calls to classes (a CALLS
+    Function -> Class relation, or mapping the call to ``__init__``) needs a
+    schema and impact-walker change and is deliberately out of scope here.
+
     Args:
         db: Active database connection.
         edge: The `CallEdge` describing the caller, callee, and call metadata.
 
     Returns:
-        ``True`` if the edge was written, ``False`` if either endpoint was
-        not found.
+        ``True`` if the edge was stored, ``False`` if either endpoint was
+        not found or the write failed.
     """
     return _exec(
         db,
         """
         MATCH (a:Function {id: $src}), (b:Function {id: $dst})
         CREATE (a)-[:CALLS {confidence: $conf, call_type: $ctype, line: $line}]->(b)
+        RETURN count(*)
         """,
         {
             "src": edge.caller_id,
@@ -382,13 +417,13 @@ def _write_external_call_edge(db: GraphDB, edge: ExternalCallEdge) -> bool:
         edge: The `ExternalCallEdge` describing the caller and external target.
 
     Returns:
-        ``True`` if the edge was written, ``False`` if either endpoint was
-        not found.
+        ``True`` if the edge was stored, ``False`` if either endpoint was
+        not found or the write failed.
     """
     return _exec(
         db,
         "MATCH (a:Function {id: $src}), (b:ExternalFunction {full_ref: $dst}) "
-        "CREATE (a)-[:CALLS_EXTERN {line: $line}]->(b)",
+        "CREATE (a)-[:CALLS_EXTERN {line: $line}]->(b) RETURN count(*)",
         {
             "src": edge.caller_id,
             "dst": edge.full_ref,
@@ -403,24 +438,30 @@ def _write_external_call_edge(db: GraphDB, edge: ExternalCallEdge) -> bool:
 
 
 def _exec(db: GraphDB, query: str, params: dict[str, object]) -> bool:
-    """Execute a database query, returning whether it succeeded.
+    """Execute an edge ``MATCH ... CREATE ... RETURN count(*)``; report if it stored one.
 
-    Failures in individual edge creation (e.g. due to unresolved MATCH targets)
-    do not abort the batch. Errors are logged at DEBUG level.
+    A MATCH that finds no endpoint yields no row, so the CREATE silently
+    does nothing and ``count(*)`` is 0 (verified against LadybugDB: a
+    matching statement returns ``[[1]]``, a non-matching one ``[[0]]``).
+    Neither a missing endpoint nor a DB error aborts the batch; both are
+    logged at DEBUG level.
 
     Args:
         db: Active database connection.
-        query: The Cypher query string to execute.
+        query: The Cypher edge statement, ending in ``RETURN count(*)``.
         params: Key-value pairs for query parameterization.
 
     Returns:
-        ``True`` if the query executed without error, ``False`` otherwise.
+        ``True`` if exactly one edge was created, ``False`` otherwise.
     """
     try:
-        db.execute(query, params)
-        return True
+        row = as_row(db.execute(query, params))
     except Exception:
         logger.debug(
             "DB write failed — query: %s | params: %s", query.strip(), params, exc_info=True
         )
         return False
+    stored = int(row[0]) == 1
+    if not stored:
+        logger.debug("Edge not stored (endpoint missing) — params: %s", params)
+    return stored

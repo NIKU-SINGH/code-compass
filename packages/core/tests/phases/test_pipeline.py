@@ -89,3 +89,31 @@ def test_failed_ingest_leaves_old_db_untouched(tmp_path: Path, monkeypatch):
 
     assert _edge_count(db_path) == before
     assert not db_path.with_name(db_path.name + ".building").exists()
+
+
+def _calls_count(db_path: Path) -> int:
+    with GraphDB(db_path) as db:
+        return int(as_row(db.execute("MATCH ()-[r:CALLS]->() RETURN count(r)"))[0])
+
+
+def test_write_result_counts_only_stored_edges(tmp_path: Path):
+    """A resolved call to a class constructor has no Function callee, so the
+    writer cannot store it: it must be reported as dropped, not as written."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "lib.py").write_text("class Widget:\n    pass\n\n\ndef helper():\n    pass\n")
+    (repo / "app.py").write_text(
+        "from lib import Widget, helper\n\n\n"
+        "def build():\n    return Widget()\n\n\n"
+        "def run():\n    helper()\n"
+    )
+    db_path = tmp_path / "graph.ladybug"
+
+    ctx = Pipeline().run(repo, db_path)
+
+    assert ctx.resolved_graph is not None
+    assert len(ctx.resolved_graph.call_edges) == 2
+    assert ctx.write_result is not None
+    assert _calls_count(db_path) == 1
+    assert ctx.write_result.dropped_edges == 1
+    assert ctx.write_result.edge_count == _edge_count(db_path)

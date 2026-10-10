@@ -22,3 +22,4 @@ class IngestSummary:
     resolved_pct: float
     orphan_count: int
     language_counts: dict[str, int]
+    dropped_edges: int = 0
