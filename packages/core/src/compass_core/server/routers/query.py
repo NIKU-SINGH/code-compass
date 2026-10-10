@@ -43,13 +43,16 @@ _LOOKUP_ERRORS: dict[int | str, dict[str, Any]] = {
 def get_index() -> IndexLocation:
     """Locate the index: ``LADYBUG_DB_PATH`` if it exists, else walk up from the cwd.
 
+    The configured path is resolved so ``repo_root`` is absolute regardless of the
+    cwd. A configured path that does not exist falls back to the cwd search.
+
     Returns:
         The index location.
 
     Raises:
         IndexNotFoundError: If no index can be found.
     """
-    configured = Path(settings.LADYBUG_DB_PATH)
+    configured = Path(settings.LADYBUG_DB_PATH).resolve()
     if configured.exists():
         return require_index(Path.cwd(), override=configured)
     return require_index(Path.cwd())

@@ -12,6 +12,7 @@ from compass_core.errors import IndexBusyError, IndexNotFoundError, QueryTimeout
 from compass_core.index.locate import IndexLocation
 from compass_core.server.main import app
 from compass_core.server.routers.query import get_index
+from compass_core.settings import settings
 
 QUERY_ROUTES = ("/api/search", "/api/impact", "/api/overview")
 
@@ -162,3 +163,38 @@ def test_openapi_covers_routes(client: TestClient) -> None:
 
 def test_existing_routes_unchanged(client: TestClient) -> None:
     assert client.get("/health").json()["status"] == "ok"
+
+
+ORIGIN = settings.FRONTEND_URL
+
+
+def test_unexpected_error_500_carries_cors_headers() -> None:
+    c = _client_raising(RuntimeError("boom"))
+    r = c.get("/api/overview", headers={"Origin": ORIGIN})
+    assert r.status_code == 500
+    assert r.headers["access-control-allow-origin"] == ORIGIN
+    assert r.json()["code"] == "INTERNAL"
+    assert "boom" not in r.text
+
+
+def test_other_error_statuses_carry_cors_headers(client: TestClient) -> None:
+    h = {"Origin": ORIGIN}
+    responses = [
+        client.get("/api/impact", params={"ref": "run"}, headers=h),
+        client.get("/api/impact", params={"ref": "decode"}, headers=h),
+        client.get("/api/impact", params={"ref": "x", "depth": "0"}, headers=h),
+        _client_raising(IndexBusyError(retry_after_s=2)).get("/api/overview", headers=h),
+    ]
+    assert [r.status_code for r in responses] == [409, 404, 422, 503]
+    assert all(r.headers["access-control-allow-origin"] == ORIGIN for r in responses)
+
+
+def test_get_index_repo_root_is_absolute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    db = tmp_path / ".compass" / "graph.ladybug"
+    db.parent.mkdir()
+    db.touch()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(settings, "LADYBUG_DB_PATH", "./.compass/graph.ladybug")
+    location = get_index()
+    assert location.repo_root.is_absolute()
+    assert location.db_path.is_absolute()

@@ -10,6 +10,9 @@ app = FastAPI(
     title="Code Compass API", description="Backend for the Code Compass visual knowledge graph."
 )
 
+# Registered first so CORS (added last, hence outermost) decorates 500 responses too.
+register_error_handlers(app)
+
 # Allow the Vite dev server (localhost:5173) to talk to FastAPI (localhost:8000)
 app.add_middleware(
     CORSMiddleware,
@@ -18,8 +21,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-register_error_handlers(app)
 
 
 @app.get("/health")
