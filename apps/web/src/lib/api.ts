@@ -71,10 +71,20 @@ export function isAbortError(e: unknown): e is DOMException {
   return e instanceof DOMException && e.name === "AbortError";
 }
 
+/** True when a failure is the caller's abort (native error or custom abort reason). */
+function isAbort(e: unknown, signal?: AbortSignal): boolean {
+  return signal?.aborted === true || isAbortError(e);
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
+/**
+ * Deliberately permissive: unknown (future) codes pass through, so consumers
+ * switching on `ApiError.code` must keep a default branch rather than rely on
+ * `never`-exhaustiveness.
+ */
 function isErrorResponse(v: unknown): v is ErrorResponse {
   return (
     isRecord(v) &&
@@ -84,37 +94,71 @@ function isErrorResponse(v: unknown): v is ErrorResponse {
   );
 }
 
-async function readJson(res: Response): Promise<unknown> {
+/** Parses a JSON body; returns undefined for unparsable bodies, rethrows aborts. */
+async function readJson(res: Response, signal?: AbortSignal): Promise<unknown> {
+  let text: string;
   try {
-    return await res.json();
-  } catch {
-    return undefined;
+    text = await res.text();
+  } catch (e) {
+    if (isAbort(e, signal)) throw e;
+    throw new ApiError("NETWORK", "Connection lost while reading the response", 0);
   }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text.length > 0 ? { __raw: text.slice(0, 200) } : undefined;
+  }
+}
+
+function rawSnippet(body: unknown): string {
+  return isRecord(body) && typeof body.__raw === "string" ? `: ${body.__raw}` : "";
 }
 
 function toApiError(res: Response, body: unknown): ApiError {
   if (isErrorResponse(body)) {
     return new ApiError(body.code, body.message, res.status, body.details);
   }
-  // Non-ErrorResponse body (proxy page, missing route): surface as INTERNAL.
-  return new ApiError("INTERNAL", `Unexpected response (HTTP ${res.status})`, res.status);
+  const text = res.statusText ? ` ${res.statusText}` : "";
+  return new ApiError(
+    "INTERNAL",
+    `Unexpected response (HTTP ${res.status}${text})${rawSnippet(body)}`.slice(0, 300),
+    res.status,
+  );
 }
 
-/** Performs a GET; the native AbortError propagates, other failures become NETWORK. */
+function unexpected(path: string, res: Response, body: unknown): ApiError {
+  return new ApiError(
+    "INTERNAL",
+    `Unexpected response from ${path} (is NEXT_PUBLIC_API_URL correct?)${rawSnippet(body)}`.slice(0, 300),
+    res.status,
+  );
+}
+
+function isOk(body: unknown, operation: string): boolean {
+  return isRecord(body) && body.outcome === "ok" && body.operation === operation;
+}
+
+/** Performs a GET; aborts propagate natively, other failures become NETWORK. */
 async function request(path: string, params: URLSearchParams, signal?: AbortSignal): Promise<Response> {
   const qs = params.toString();
   try {
     return await fetch(`${API_BASE}${path}${qs ? `?${qs}` : ""}`, { signal });
   } catch (e) {
-    if (isAbortError(e)) throw e;
+    if (isAbort(e, signal)) throw e;
     throw new ApiError("NETWORK", "Could not reach the Compass backend", 0);
   }
 }
 
-async function getOk<T>(path: string, params: URLSearchParams, signal?: AbortSignal): Promise<T> {
+async function getOk<T>(
+  path: string,
+  params: URLSearchParams,
+  operation: string,
+  signal?: AbortSignal,
+): Promise<T> {
   const res = await request(path, params, signal);
-  const body = await readJson(res);
+  const body = await readJson(res, signal);
   if (!res.ok) throw toApiError(res, body);
+  if (!isOk(body, operation)) throw unexpected(path, res, body);
   return body as T;
 }
 
@@ -125,7 +169,7 @@ export function searchSymbols(
   const params = new URLSearchParams({ q });
   if (opts.kind !== undefined) params.set("kind", opts.kind);
   if (opts.limit !== undefined) params.set("limit", String(opts.limit));
-  return getOk<SearchResult>("/api/search", params, opts.signal);
+  return getOk<SearchResult>("/api/search", params, "FIND", opts.signal);
 }
 
 export async function getImpact(
@@ -136,9 +180,13 @@ export async function getImpact(
   if (opts.depth !== undefined) params.set("depth", String(opts.depth));
   if (opts.minConfidence !== undefined) params.set("min_confidence", String(opts.minConfidence));
   if (opts.limit !== undefined) params.set("limit", String(opts.limit));
-  const res = await request("/api/impact", params, opts.signal);
-  const body = await readJson(res);
-  if (res.ok) return { status: "ok", data: body as ImpactResult };
+  const path = "/api/impact";
+  const res = await request(path, params, opts.signal);
+  const body = await readJson(res, opts.signal);
+  if (res.ok) {
+    if (!isOk(body, "IMPACT")) throw unexpected(path, res, body);
+    return { status: "ok", data: body as ImpactResult };
+  }
   // 404 is also used for errors on unknown routes, so check the discriminator.
   if (res.status === 409 && isRecord(body) && body.outcome === "ambiguous") {
     return { status: "ambiguous", data: body as AmbiguousReference };
@@ -150,5 +198,5 @@ export async function getImpact(
 }
 
 export function getOverview(opts: { signal?: AbortSignal } = {}): Promise<OverviewResult> {
-  return getOk<OverviewResult>("/api/overview", new URLSearchParams(), opts.signal);
+  return getOk<OverviewResult>("/api/overview", new URLSearchParams(), "OVERVIEW", opts.signal);
 }
