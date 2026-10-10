@@ -109,6 +109,45 @@ def split_stored_id(stored_id: str, file_path: str) -> tuple[str, str]:
     return module_from_path(file_path), tail
 
 
+def public_definition_id(stored_id: str, stored_path: str, repo_root: Path) -> SymbolId:
+    """Build the public id of a function, method or class from its stored columns.
+
+    Args:
+        stored_id: Stored id such as ``"py::app.models::User.save"``.
+        stored_path: Path as stored in the graph; absolute or repo-relative.
+        repo_root: Absolute repository root.
+
+    Returns:
+        ``<repo-relative POSIX path>::<[Class.]name>``.
+
+    Raises:
+        IndexIncompatibleError: The stored id has no ``::`` separator.
+
+    Example:
+        ``public_definition_id("py::app.models::User.save", "app/models.py", root)`` returns
+        ``"app/models.py::User.save"``.
+    """
+    file_path = to_repo_path(stored_path, repo_root)
+    _, tail = split_stored_id(stored_id, file_path)
+    return SymbolId(f"{file_path}{_SEP}{tail}")
+
+
+def public_file_id(stored_path: str, repo_root: Path) -> SymbolId:
+    """Build the public id of a file from its stored path.
+
+    Args:
+        stored_path: Path as stored in the graph; absolute or repo-relative.
+        repo_root: Absolute repository root.
+
+    Returns:
+        ``file::<repo-relative POSIX path>``.
+
+    Example:
+        ``public_file_id("/r/app/auth.py", Path("/r"))`` returns ``"file::app/auth.py"``.
+    """
+    return SymbolId(f"file{_SEP}{to_repo_path(stored_path, repo_root)}")
+
+
 def symbol_from_row(row: Sequence[Any], kind: SymbolKind, repo_root: Path) -> SymbolRef:
     """Build a function or class ``SymbolRef`` from a graph row.
 
@@ -141,7 +180,7 @@ def symbol_from_row(row: Sequence[Any], kind: SymbolKind, repo_root: Path) -> Sy
     if kind is SymbolKind.CLASS:
         signature = None
     return SymbolRef(
-        id=SymbolId(f"{file_path}{_SEP}{tail}"),
+        id=public_definition_id(stored_id, stored_path, repo_root),
         kind=kind,
         name=name,
         qualified_name=QualifiedName(qualified),
@@ -169,7 +208,7 @@ def file_from_row(row: Sequence[Any], repo_root: Path) -> SymbolRef:
     file_path = to_repo_path(_text(row[0], "path"), repo_root)
     module = _text(row[1], "module_name")
     return SymbolRef(
-        id=SymbolId(f"file{_SEP}{file_path}"),
+        id=public_file_id(_text(row[0], "path"), repo_root),
         kind=SymbolKind.FILE,
         name=PurePosixPath(file_path).name,
         qualified_name=QualifiedName(module),

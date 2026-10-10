@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from compass_core.graph.db import GraphDB, as_row, as_rows
+from compass_core.query.rows import public_definition_id, public_file_id
 from compass_core.settings import settings
 
 router = APIRouter(tags=["repo"])
@@ -35,6 +38,7 @@ class GraphNode(BaseModel):
     label: str
     type: str
     file_path: str
+    public_id: str
 
 
 class GraphEdge(BaseModel):
@@ -80,20 +84,45 @@ def _entry_points(db: GraphDB) -> list[EntryPoint]:
 
 
 def _graph_nodes(db: GraphDB) -> list[GraphNode]:
+    repo_root = Path(settings.REPO_ROOT).resolve()
     nodes: list[GraphNode] = []
 
     for row in as_rows(db.execute("MATCH (f:File) RETURN f.path, f.path, 'File', f.path")):
         path = row[0]
-        nodes.append(GraphNode(id=path, label=path.split("/")[-1], type="File", file_path=path))
+        nodes.append(
+            GraphNode(
+                id=path,
+                label=path.split("/")[-1],
+                type="File",
+                file_path=path,
+                public_id=public_file_id(path, repo_root),
+            )
+        )
 
     for row in as_rows(db.execute("MATCH (c:Class) RETURN c.id, c.name, 'Class', c.file_path")):
-        nodes.append(GraphNode(id=row[0], label=row[1], type="Class", file_path=row[3]))
+        nodes.append(
+            GraphNode(
+                id=row[0],
+                label=row[1],
+                type="Class",
+                file_path=row[3],
+                public_id=public_definition_id(row[0], row[3], repo_root),
+            )
+        )
 
     for row in as_rows(
         db.execute("MATCH (fn:Function) RETURN fn.id, fn.name, fn.is_method, fn.file_path")
     ):
         node_type = "Method" if row[2] else "Function"
-        nodes.append(GraphNode(id=row[0], label=row[1], type=node_type, file_path=row[3]))
+        nodes.append(
+            GraphNode(
+                id=row[0],
+                label=row[1],
+                type=node_type,
+                file_path=row[3],
+                public_id=public_definition_id(row[0], row[3], repo_root),
+            )
+        )
 
     return nodes
 

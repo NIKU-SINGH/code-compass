@@ -223,6 +223,8 @@ export interface components {
             type: string;
             /** File Path */
             file_path: string;
+            /** Public Id */
+            public_id: string;
         };
         /** GraphResponse */
         GraphResponse: {
