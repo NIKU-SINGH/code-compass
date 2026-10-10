@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from compass_core.errors import (
     ErrorCode,
@@ -70,16 +71,18 @@ class ErrorResponse:
     details: tuple[ErrorDetail, ...]
 
 
-ERROR_MAPPINGS: Mapping[ErrorCode, ErrorMapping] = {
-    ErrorCode.INVALID_ARGUMENT: ErrorMapping(exit_code=2, http_status=422, mcp_is_error=True),
-    ErrorCode.NOT_FOUND: ErrorMapping(exit_code=3, http_status=404, mcp_is_error=False),
-    ErrorCode.AMBIGUOUS: ErrorMapping(exit_code=4, http_status=409, mcp_is_error=False),
-    ErrorCode.INDEX_NOT_FOUND: ErrorMapping(exit_code=5, http_status=503, mcp_is_error=True),
-    ErrorCode.INDEX_BUSY: ErrorMapping(exit_code=6, http_status=503, mcp_is_error=True),
-    ErrorCode.INDEX_INCOMPATIBLE: ErrorMapping(exit_code=7, http_status=503, mcp_is_error=True),
-    ErrorCode.QUERY_TIMEOUT: ErrorMapping(exit_code=8, http_status=504, mcp_is_error=True),
-    ErrorCode.INTERNAL: ErrorMapping(exit_code=1, http_status=500, mcp_is_error=True),
-}
+ERROR_MAPPINGS: Mapping[ErrorCode, ErrorMapping] = MappingProxyType(
+    {
+        ErrorCode.INVALID_ARGUMENT: ErrorMapping(exit_code=2, http_status=422, mcp_is_error=True),
+        ErrorCode.NOT_FOUND: ErrorMapping(exit_code=3, http_status=404, mcp_is_error=False),
+        ErrorCode.AMBIGUOUS: ErrorMapping(exit_code=4, http_status=409, mcp_is_error=False),
+        ErrorCode.INDEX_NOT_FOUND: ErrorMapping(exit_code=5, http_status=503, mcp_is_error=True),
+        ErrorCode.INDEX_BUSY: ErrorMapping(exit_code=6, http_status=503, mcp_is_error=True),
+        ErrorCode.INDEX_INCOMPATIBLE: ErrorMapping(exit_code=7, http_status=503, mcp_is_error=True),
+        ErrorCode.QUERY_TIMEOUT: ErrorMapping(exit_code=8, http_status=504, mcp_is_error=True),
+        ErrorCode.INTERNAL: ErrorMapping(exit_code=1, http_status=500, mcp_is_error=True),
+    }
+)
 
 
 def _details(exc: QueryError) -> tuple[ErrorDetail, ...]:

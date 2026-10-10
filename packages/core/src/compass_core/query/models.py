@@ -204,3 +204,9 @@ class IndexStatus:
     schema_version: int
     stale_file_count: int
     new_file_count: int | None
+
+    def __post_init__(self) -> None:
+        if self.indexed_at.tzinfo is None or self.indexed_at.utcoffset() is None:
+            raise ValueError("indexed_at must be timezone-aware")
+        if not self.repo_root.is_absolute():
+            raise ValueError(f"repo_root must be absolute, got {self.repo_root}")

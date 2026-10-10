@@ -90,3 +90,91 @@ def test_positive_distance_requires_via():
 def test_negative_distance_rejected():
     with pytest.raises(ValueError):
         ResultItem(symbol=_sym(), distance=-1, via=None, min_confidence=None)
+
+
+def _edge(**kw):
+    base = dict(
+        source_id=SymbolId("a"),
+        target_id=SymbolId("b"),
+        type=EdgeType.CALLS,
+        confidence=1.0,
+        call_type=CallType.DIRECT_IMPORT,
+        line=3,
+    )
+    return EdgeRef(**{**base, **kw})
+
+
+def _via():
+    return Via(kind=ViaKind.CALLS, symbol=_sym())
+
+
+def test_negative_distance_with_valid_via_rejected():
+    with pytest.raises(ValueError, match="distance must be >= 0"):
+        ResultItem(symbol=_sym(), distance=-1, via=_via(), min_confidence=None)
+
+
+def test_edge_line_must_be_one_indexed():
+    with pytest.raises(ValueError, match="line must be"):
+        _edge(line=0)
+
+
+@pytest.mark.parametrize("conf", [1.5, -0.1])
+def test_result_item_min_confidence_range(conf):
+    with pytest.raises(ValueError, match="min_confidence"):
+        ResultItem(symbol=_sym(), distance=1, via=_via(), min_confidence=conf)
+
+
+def test_line_end_one_indexed_without_start():
+    with pytest.raises(ValueError, match="line_end must be >= 1"):
+        _sym(line_start=None, line_end=0)
+
+
+def test_call_type_without_calls_edge_rejected():
+    with pytest.raises(ValueError, match="call_type"):
+        _edge(type=EdgeType.IMPORTS, confidence=None, call_type=CallType.MRO, line=None)
+
+
+def test_calls_edge_confidence_without_call_type_rejected():
+    with pytest.raises(ValueError, match="call_type"):
+        _edge(call_type=None)
+
+
+def test_calls_edge_call_type_without_confidence_rejected():
+    with pytest.raises(ValueError, match="confidence"):
+        _edge(confidence=None)
+
+
+def test_negative_confidence_rejected():
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        _edge(confidence=-0.1)
+
+
+def _status(**kw):
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from compass_core.query.models import IndexStatus
+
+    base = dict(
+        repo_root=Path("/repo"),
+        indexed_at=datetime(2026, 1, 1, tzinfo=UTC),
+        indexed_commit=None,
+        schema_version=1,
+        stale_file_count=0,
+        new_file_count=None,
+    )
+    return IndexStatus(**{**base, **kw})
+
+
+def test_index_status_requires_aware_datetime():
+    from datetime import datetime
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        _status(indexed_at=datetime(2026, 1, 1))
+
+
+def test_index_status_requires_absolute_root():
+    from pathlib import Path
+
+    with pytest.raises(ValueError, match="absolute"):
+        _status(repo_root=Path("rel/repo"))

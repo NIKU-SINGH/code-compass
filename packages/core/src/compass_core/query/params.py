@@ -18,18 +18,26 @@ MAX_LIMIT = 500
 """Largest allowed result limit."""
 
 
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _check_limit(limit: int) -> None:
-    if not 1 <= limit <= MAX_LIMIT:
+    if not _is_int(limit) or not 1 <= limit <= MAX_LIMIT:
         raise InvalidArgumentError(argument="limit", reason=f"must be between 1 and {MAX_LIMIT}")
 
 
 def _check_depth(depth: int) -> None:
-    if not 1 <= depth <= MAX_DEPTH:
+    if not _is_int(depth) or not 1 <= depth <= MAX_DEPTH:
         raise InvalidArgumentError(argument="depth", reason=f"must be between 1 and {MAX_DEPTH}")
 
 
 def _check_confidence(min_confidence: float) -> None:
-    if not 0.0 <= min_confidence <= 1.0:
+    if (
+        isinstance(min_confidence, bool)
+        or not isinstance(min_confidence, (int, float))
+        or not 0.0 <= min_confidence <= 1.0
+    ):
         raise InvalidArgumentError(argument="min_confidence", reason="must be between 0 and 1")
 
 
@@ -51,7 +59,7 @@ class SearchParams:
     limit: int = 50
 
     def __post_init__(self) -> None:
-        if not self.query.strip():
+        if not isinstance(self.query, str) or not self.query.strip():
             raise InvalidArgumentError(argument="query", reason="must not be empty")
         _check_limit(self.limit)
 
