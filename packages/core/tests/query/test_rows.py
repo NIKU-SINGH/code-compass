@@ -98,3 +98,9 @@ def test_text_list_value_reads_lists_and_null() -> None:
 
 def test_line_value_maps_zero_to_none() -> None:
     assert line_value(0, "line") is None and line_value(4, "line") == 4
+
+
+def test_confidence_value_normalises_float32_noise() -> None:
+    assert confidence_value(0.800000011920929) == 0.8
+    assert confidence_value(0.8999999761581421) == 0.9
+    assert confidence_value(1) == 1.0

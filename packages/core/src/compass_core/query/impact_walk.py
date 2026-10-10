@@ -4,7 +4,13 @@ Each walk expands one distance level at a time with a fixed set of parameterized
 single-hop queries (``WHERE x IN $ids``), so the cost is one query per level per edge
 family, never one per node. Nodes are keyed by their stored id (definitions) or stored
 path (files); a node is visited once, at its shortest distance, so cycles terminate and
-the target never lists itself. ``CALLS`` edges below ``min_confidence`` are not traversed.
+the target never lists itself. ``CALLS`` edges below ``min_confidence`` are not traversed;
+stored confidences are float32, so the threshold is compared with a ``1e-6`` tolerance
+(a stored ``0.9`` reads back as ``0.8999999761``).
+
+The recorded edges are every edge traversed from an affected node, including non-tree
+edges (a second, equally short or longer route) and, for file targets, the function- and
+class-level edges behind a file dependency, so an edge endpoint may not be an item.
 
 When several edges reach a new node at the same distance, the winner is chosen by via
 kind (``IMPORTS`` before ``CALLS`` before ``INHERITS``), then by the higher path
@@ -48,6 +54,11 @@ _CALLERS_OF_METHODS = (
     "WHERE c.id IN $ids AND r.confidence >= $minc "
     f"RETURN {_FN.format(v='a')}, {_FN.format(v='b')}, {_CALL}, c.id"
 )
+# Callers of the given external functions: [caller x7, line].
+_CALLERS_OF_EXTERNALS = (
+    "MATCH (a:Function)-[r:CALLS_EXTERN]->(e:ExternalFunction) WHERE e.full_ref IN $ids "
+    f"RETURN {_FN.format(v='a')}, r.line"
+)
 # Direct subclasses of the given classes: [child x6, parent x6].
 _SUBCLASSES_OF = (
     "MATCH (a:Class)-[:INHERITS]->(b:Class) WHERE b.id IN $ids "
@@ -70,6 +81,12 @@ _SUBCLASSES_IN_FILES = (
 _FILES = "MATCH (f:File) WHERE f.path IN $paths RETURN f.path, f.module_name"
 
 _PRIORITY = {ViaKind.IMPORTS: 0, ViaKind.CALLS: 1, ViaKind.INHERITS: 2}
+_CONFIDENCE_TOLERANCE = 1e-6
+
+
+def _threshold(min_confidence: float) -> float:
+    """The ``$minc`` parameter: ``min_confidence`` lowered by the float32 tolerance."""
+    return min_confidence - _CONFIDENCE_TOLERANCE
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -224,7 +241,7 @@ def stored_target_key(db: GraphDB, target: SymbolRef, repo_root: Path) -> str:
 
     Args:
         db: Open graph database.
-        target: A resolved file, class, function or method.
+        target: A resolved file, class, function, method or external function.
         repo_root: Absolute repository root.
 
     Returns:
@@ -235,10 +252,17 @@ def stored_target_key(db: GraphDB, target: SymbolRef, repo_root: Path) -> str:
 
     Example:
         ``<app/auth.py::parse>`` maps to ``"py::app.auth::parse"``; ``<file::app/a.py>``
-        maps to ``"app/a.py"`` (or its absolute spelling, if stored that way).
+        maps to ``"app/a.py"`` (or its absolute spelling, if stored that way);
+        ``<ext::json.dumps>`` maps to ``"json.dumps"``.
     """
     paths = stored_paths(target.file_path or "", repo_root)
-    if target.kind is SymbolKind.FILE:
+    if target.kind is SymbolKind.EXTERNAL:
+        rows = _rows(
+            db,
+            "MATCH (e:ExternalFunction) WHERE e.full_ref = $ref RETURN e.full_ref",
+            {"ref": target.id.removeprefix("ext::")},
+        )
+    elif target.kind is SymbolKind.FILE:
         rows = _rows(db, _FILES, {"paths": paths})
     else:
         label = "Class" if target.kind is SymbolKind.CLASS else "Function"
@@ -265,18 +289,22 @@ def walk_symbols(
 
     A function or method in the frontier pulls in its callers (``Via(CALLS, callee)``).
     A class in the frontier pulls in its subclasses (``Via(INHERITS, class)``) and the
-    callers of its methods (``Via(CALLS, method)``).
+    callers of its methods (``Via(CALLS, method)``). An external target pulls in its
+    callers over ``CALLS_EXTERN`` (``Via(CALLS, external)``, no confidence); the walk then
+    continues over reverse ``CALLS``. Each item's ``min_confidence`` is that of the chosen
+    shortest path, not the best path overall.
 
     Args:
         db: Open graph database.
-        target: The resolved class, function or method.
-        target_key: Its stored id.
+        target: The resolved class, function, method or external function.
+        target_key: Its stored id (``full_ref`` for an external).
         depth: Maximum distance.
         min_confidence: ``CALLS`` edges below this are not traversed.
         repo_root: Absolute repository root.
 
     Returns:
-        The affected symbols and the edges traversed.
+        The affected symbols and every edge traversed from them; an edge endpoint may
+        not be an item (non-tree edges, or the target's class methods).
 
     Raises:
         IndexIncompatibleError: A stored row does not have the expected shape.
@@ -288,14 +316,19 @@ def walk_symbols(
     walker = _Walker(target_key, target)
     frontier = [target_key]
     for distance in range(1, depth + 1):
-        functions = [k for k in frontier if walker.symbols[k].kind is not SymbolKind.CLASS]
-        classes = [k for k in frontier if walker.symbols[k].kind is SymbolKind.CLASS]
+        kinds = {k: walker.symbols[k].kind for k in frontier}
+        functions = [k for k in frontier if kinds[k] in (SymbolKind.FUNCTION, SymbolKind.METHOD)]
+        classes = [k for k in frontier if kinds[k] is SymbolKind.CLASS]
+        externals = [k for k in frontier if kinds[k] is SymbolKind.EXTERNAL]
+        if externals:
+            for row in _rows(db, _CALLERS_OF_EXTERNALS, {"ids": externals}):
+                _offer_external_caller(walker, row, distance, target_key, repo_root)
         if functions:
-            params: QueryParams = {"ids": functions, "minc": min_confidence}
+            params: QueryParams = {"ids": functions, "minc": _threshold(min_confidence)}
             for row in _rows(db, _CALLERS_OF_FUNCTIONS, params):
                 _offer_caller(walker, row, distance, text_value(row[7], "id"), repo_root)
         if classes:
-            params = {"ids": classes, "minc": min_confidence}
+            params = {"ids": classes, "minc": _threshold(min_confidence)}
             for row in _rows(db, _CALLERS_OF_METHODS, params):
                 _offer_caller(walker, row, distance, text_value(row[17], "id"), repo_root)
             for row in _rows(db, _SUBCLASSES_OF, {"ids": classes}):
@@ -320,6 +353,25 @@ def _offer_caller(
     caller_key = text_value(row[0], "id")
     via = Via(kind=ViaKind.CALLS, symbol=callee)
     walker.offer(caller_key, caller, distance, via, parent_key, confidence)
+    walker.edge(caller_key, edge)
+
+
+def _offer_external_caller(
+    walker: _Walker, row: Row, distance: int, external_key: str, repo_root: Path
+) -> None:
+    caller = function_from_row(row[:7], repo_root)
+    external = walker.symbols[external_key]
+    caller_key = text_value(row[0], "id")
+    via = Via(kind=ViaKind.CALLS, symbol=external)
+    walker.offer(caller_key, caller, distance, via, external_key, None)
+    edge = EdgeRef(
+        source_id=caller.id,
+        target_id=external.id,
+        type=EdgeType.CALLS_EXTERN,
+        confidence=None,
+        call_type=None,
+        line=line_value(row[7], "line"),
+    )
     walker.edge(caller_key, edge)
 
 
@@ -348,7 +400,8 @@ def walk_files(
 
     Returns:
         The affected files and the edges traversed (``IMPORTS`` between files,
-        ``CALLS`` and ``INHERITS`` between the definitions involved).
+        ``CALLS`` and ``INHERITS`` between the definitions involved). Endpoints of the
+        ``CALLS`` and ``INHERITS`` edges are functions and classes, never items here.
 
     Raises:
         IndexIncompatibleError: A stored row does not have the expected shape.
@@ -373,7 +426,7 @@ def walk_files(
             via = Via(kind=ViaKind.IMPORTS, symbol=imported)
             pending.append((owner, via, text_value(row[2], "path"), None))
             walker.edge(owner, _structural_edge(importer, imported, EdgeType.IMPORTS))
-        params: QueryParams = {"paths": frontier, "minc": min_confidence}
+        params: QueryParams = {"paths": frontier, "minc": _threshold(min_confidence)}
         for row in _rows(db, _CALLERS_IN_FILES, params):
             caller = function_from_row(row[:7], repo_root)
             callee = function_from_row(row[7:14], repo_root)

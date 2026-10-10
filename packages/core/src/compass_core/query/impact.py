@@ -24,13 +24,14 @@ from compass_core.query.rows import count_value, text_list_value, text_value
 from compass_core.query.status import index_status
 from compass_core.query.types import CaveatCode, RepoPath, SymbolKind
 
-# Functions whose raw calls mention a name, with how many resolved CALLS reach a
-# function of that name. The substring prefilter is refined in Python by bare name.
-_MENTIONS = (
-    "MATCH (f:Function) WHERE list_to_string(' ', f.raw_calls) CONTAINS $name "
-    "OPTIONAL MATCH (f)-[:CALLS]->(g:Function) WHERE g.name = $name "
-    "RETURN f.id, f.raw_calls, count(g)"
+# Every function with raw calls, with the names its resolved CALLS / CALLS_EXTERN reach.
+_RAW_CALLERS = (
+    "MATCH (f:Function) WHERE size(f.raw_calls) > 0 "
+    "OPTIONAL MATCH (f)-[:CALLS]->(g:Function) WITH f, collect(g.name) AS internal "
+    "OPTIONAL MATCH (f)-[:CALLS_EXTERN]->(x:ExternalFunction) "
+    "RETURN f.id, f.raw_calls, internal, collect(x.name)"
 )
+_METHOD_NAMES = "MATCH (c:Class)-[:CONTAINS]->(m:Function) WHERE c.id IN $ids RETURN m.name"
 # Raw calls versus resolved outgoing edges for a set of functions.
 _RESOLVED_COUNTS = (
     "MATCH (f:Function) WHERE {where} "
@@ -38,7 +39,6 @@ _RESOLVED_COUNTS = (
     "OPTIONAL MATCH (f)-[e:CALLS_EXTERN]->(:ExternalFunction) "
     "RETURN f.id, f.raw_calls, internal, count(e)"
 )
-_DEFINITION_KINDS = (SymbolKind.FUNCTION, SymbolKind.METHOD, SymbolKind.CLASS)
 
 
 def bare_call_name(raw_call: str) -> str:
@@ -66,14 +66,28 @@ def bare_call_name(raw_call: str) -> str:
     return "".join(kept).rsplit(".", 1)[-1].strip()
 
 
-def _unresolved_callers(db: GraphDB, target: SymbolRef, target_key: str) -> set[str]:
-    """(a) Functions that call the target's bare name without a resolved edge to it."""
+def _watched_names(db: GraphDB, target: SymbolRef, target_key: str, walk: Walk) -> set[str]:
+    """Bare names whose unresolved calls may hide callers: the target, every affected
+    symbol and the methods of the target and affected classes."""
+    names = {target.name} | {r.item.symbol.name for r in walk.reached}
+    classes = [r.key for r in walk.reached if r.item.symbol.kind is SymbolKind.CLASS]
+    if target.kind is SymbolKind.CLASS:
+        classes.append(target_key)
+    if classes:
+        rows = as_rows(db.execute(_METHOD_NAMES, {"ids": sorted(classes)}))
+        names |= {text_value(row[0], "name") for row in rows}
+    return names
+
+
+def _unresolved_callers(db: GraphDB, names: set[str], target_key: str) -> set[str]:
+    """(a) Functions with a raw call to one of ``names`` that resolved to no edge to a
+    function (or external) of that name. The target itself is not counted."""
     found: set[str] = set()
-    for row in as_rows(db.execute(_MENTIONS, {"name": target.name})):
+    for row in as_rows(db.execute(_RAW_CALLERS)):
         key = text_value(row[0], "id")
-        calls = text_list_value(row[1], "raw_calls")
-        mentions = any(bare_call_name(c) == target.name for c in calls)
-        if key != target_key and mentions and count_value(row[2]) == 0:
+        resolved = set(text_list_value(row[2], "name")) | set(text_list_value(row[3], "name"))
+        called = {bare_call_name(c) for c in text_list_value(row[1], "raw_calls")}
+        if key != target_key and (called & names) - resolved:
             found.add(key)
     return found
 
@@ -130,8 +144,6 @@ def _walk(
     db: GraphDB, target: SymbolRef, params: ImpactParams, repo_root: Path
 ) -> tuple[Walk, set[str]]:
     """Run the walk for ``target`` and collect the functions behind its caveat."""
-    if target.kind not in (SymbolKind.FILE, *_DEFINITION_KINDS):
-        return Walk(reached=(), edges=()), set()  # externals have no reverse CALLS
     key = stored_target_key(db, target, repo_root)
     depth, min_confidence = params.depth, params.min_confidence
     if target.kind is SymbolKind.FILE:
@@ -146,7 +158,7 @@ def _walk(
         db, target, key, depth=depth, min_confidence=min_confidence, repo_root=repo_root
     )
     functions = sorted(r.key for r in walk.reached if r.item.symbol.kind is not SymbolKind.CLASS)
-    unresolved = _unresolved_callers(db, target, key)
+    unresolved = _unresolved_callers(db, _watched_names(db, target, key, walk), key)
     if functions:
         unresolved |= _partially_resolved(db, "f.id IN $ids", {"ids": functions})
     return walk, unresolved
@@ -168,16 +180,24 @@ def impact(
         resolution. Groups are ordered by distance then file path, items by name.
         ``total`` counts items before the limit; ``affected_file_count`` counts the
         distinct files of all items. A symbol target lists affected functions, methods
-        and classes; a file target lists one ``FILE`` item per affected file.
+        and classes; a file target lists one ``FILE`` item per affected file. An
+        external target (``ext::json.dumps``) lists its ``CALLS_EXTERN`` callers at
+        distance 1 (``min_confidence`` ``None``) and walks reverse ``CALLS`` from there.
+        Each item's ``min_confidence`` is that of the chosen shortest path (see
+        ``impact_walk`` for tie-breaks), not the best path overall. ``edges`` are the
+        edges traversed from the returned items; their endpoints may not be items
+        (non-tree edges, and function/class-level edges behind a file dependency).
 
     Raises:
         IndexIncompatibleError: A stored row or the index metadata is unreadable.
 
     Note:
-        ``UNRESOLVED_CALLS`` counts functions that (a) call the target's bare name with
-        no resolved edge to a function of that name (symbol targets only), or (b) are
-        affected and have more raw calls than resolved outgoing edges. Overrides
-        (``Via(OVERRIDES)``) are not walked, and an external target has no dependents.
+        ``UNRESOLVED_CALLS`` counts functions that (a) have a raw call to the bare name
+        of the target, an affected symbol, or a method of the target or an affected
+        class, with no resolved edge to a function or external of that name (symbol
+        targets only), or (b) are affected and have more raw calls than resolved
+        outgoing edges. ``min_confidence`` is compared with a ``1e-6`` tolerance because
+        stored confidences are float32. Overrides (``Via(OVERRIDES)``) are not walked.
 
     Example:
         ``impact(db, loc, "app/auth.py::decode_token", ImpactParams(depth=2))`` returns

@@ -21,6 +21,7 @@ from compass_core.query.models import SymbolRef
 from compass_core.query.types import CallType, QualifiedName, RepoPath, SymbolId, SymbolKind
 
 _SEP = "::"
+_CONFIDENCE_DIGITS = 6
 
 
 def _text(value: Any, column: str) -> str:
@@ -332,17 +333,18 @@ def confidence_value(value: Any) -> float:
         value: Raw column value.
 
     Returns:
-        The confidence as a ``float`` in ``[0, 1]``.
+        The confidence as a ``float`` in ``[0, 1]``, rounded to 6 decimals: the column
+        is float32, so a written ``0.9`` reads back as ``0.8999999761581421``.
 
     Raises:
         IndexIncompatibleError: The value is not a number in ``[0, 1]``.
 
     Example:
-        ``confidence_value(0.800000011920929)`` returns it unchanged (stored as FLOAT).
+        ``confidence_value(0.800000011920929)`` returns ``0.8``.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
         raise IndexIncompatibleError(f"unexpected value for confidence: {value!r}")
-    return float(value)
+    return round(float(value), _CONFIDENCE_DIGITS)
 
 
 def call_type_value(value: Any) -> CallType:

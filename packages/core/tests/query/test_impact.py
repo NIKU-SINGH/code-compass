@@ -92,7 +92,7 @@ def test_file_target_walks_transitively_and_sorts(
     assert scheduler.via is not None and scheduler.via.symbol.id == "file::app/jobs.py"
 
 
-def test_file_target_via_calls_when_no_import(
+def test_file_target_ignores_same_file_calls_and_finds_only_importer(
     fixture_db: GraphDB, fixture_index: IndexLocation
 ) -> None:
     # models.py is imported only by api.py; User.save -> Base.save is a same-file call, so
@@ -190,9 +190,9 @@ def test_mro_edge_confidence_propagates(fixture_db: GraphDB, fixture_index: Inde
     item = res.groups[0].items[0]
     assert (distance, sid) == (1, "app/models.py::User.save")
     assert item.via is not None and item.via.kind is ViaKind.CALLS
-    assert item.min_confidence == pytest.approx(0.8)
+    assert item.min_confidence == 0.8  # float32 0.800000011920929 is normalised
     (edge,) = res.edges
-    assert edge.call_type is CallType.MRO
+    assert edge.call_type is CallType.MRO and edge.confidence == 0.8
 
 
 def test_min_confidence_excludes_weaker_edges(
@@ -260,6 +260,49 @@ def test_class_target_depth_one_excludes_grandchildren(
         ("app/models.py::User", "app/models.py::Base")
     ]
     assert inherits[0].confidence is None and inherits[0].call_type is None
+
+
+def test_class_target_caveat_counts_unresolved_method_calls(
+    fixture_db: GraphDB, fixture_index: IndexLocation
+) -> None:
+    # handle's raw call User().save (bare name "save", a method of Base and User) has no
+    # resolved edge; it is the only such function (User.save's super().save resolves).
+    res = _run(fixture_db, fixture_index, "app/models.py::User")
+    (caveat,) = [c for c in res.caveats if c.code is CaveatCode.UNRESOLVED_CALLS]
+    assert caveat.count == 1
+
+
+def test_external_target_lists_extern_callers(
+    fixture_db: GraphDB, fixture_index: IndexLocation
+) -> None:
+    res = _run(fixture_db, fixture_index, "ext::json.dumps", depth=1)
+    assert res.target.kind is SymbolKind.EXTERNAL
+    assert _items(res) == [(1, "app/auth.py", "app/auth.py::parse")]
+    item = res.groups[0].items[0]
+    assert item.via is not None and item.via.kind is ViaKind.CALLS
+    assert item.via.symbol.id == "ext::json.dumps" and item.min_confidence is None
+    (edge,) = res.edges
+    assert edge.type is EdgeType.CALLS_EXTERN and edge.confidence is None
+    assert (edge.source_id, edge.target_id) == ("app/auth.py::parse", "ext::json.dumps")
+
+
+def test_external_target_deeper_walk_stops_at_unresolved_call(
+    fixture_db: GraphDB, fixture_index: IndexLocation
+) -> None:
+    # decode_token -> parse is a same-file call with no edge, so depth 3 adds nothing,
+    # and the caveat reports decode_token's unresolved call to parse.
+    res = _run(fixture_db, fixture_index, "ext::json.dumps", depth=3)
+    assert _items(res) == [(1, "app/auth.py", "app/auth.py::parse")]
+    (caveat,) = [c for c in res.caveats if c.code is CaveatCode.UNRESOLVED_CALLS]
+    assert caveat.count == 1
+
+
+def test_unknown_external_is_not_found(fixture_db: GraphDB, fixture_index: IndexLocation) -> None:
+    # ExternalFunction nodes are written only from CALLS_EXTERN edges, so an external
+    # without callers cannot exist; an unknown one is not found.
+    assert isinstance(
+        impact(fixture_db, fixture_index, "ext::nope.missing", ImpactParams()), SymbolNotFound
+    )
 
 
 # --- references and params ----------------------------------------------------------------
@@ -339,3 +382,56 @@ def test_stale_index_adds_caveat(tmp_path: Path) -> None:
 )
 def test_bare_call_name(raw: str, name: str) -> None:
     assert bare_call_name(raw) == name
+
+
+def test_module_attr_confidence_meets_its_own_threshold(tmp_path: Path) -> None:
+    # import m; m.f() resolves as MODULE_ATTR with confidence 0.9, stored as float32
+    # 0.8999999761581421. A 0.9 threshold must keep it, and report exactly 0.9.
+    repo = tmp_path / "modattr"
+    repo.mkdir()
+    (repo / "m.py").write_text("def f():\n    return 1\n")
+    (repo / "g.py").write_text("import m\n\n\ndef g():\n    return m.f()\n")
+    location = _ingest(repo)
+
+    with GraphDB(location.db_path, read_only=True) as db:
+        res = _ok(impact(db, location, "m.py::f", ImpactParams(min_confidence=0.9)))
+        stricter = _ok(impact(db, location, "m.py::f", ImpactParams(min_confidence=0.95)))
+
+    assert _items(res) == [(1, "g.py", "g.py::g")]
+    assert res.groups[0].items[0].min_confidence == 0.9
+    (edge,) = res.edges
+    assert edge.call_type is CallType.MODULE_ATTR and edge.confidence == 0.9
+    assert stricter.groups == ()
+
+
+def test_diamond_keeps_shortest_distance_and_smallest_via(tmp_path: Path) -> None:
+    # t <- a, b, c; c also calls a and b; e calls a and b.
+    repo = tmp_path / "diamond"
+    repo.mkdir()
+    (repo / "t.py").write_text("def t():\n    return 1\n")
+    for name in ("a", "b"):
+        (repo / f"{name}.py").write_text(f"from t import t\n\n\ndef {name}():\n    return t()\n")
+    (repo / "c.py").write_text(
+        "from a import a\nfrom b import b\nfrom t import t\n\n\n"
+        "def c():\n    a()\n    b()\n    return t()\n"
+    )
+    (repo / "e.py").write_text(
+        "from a import a\nfrom b import b\n\n\ndef e():\n    a()\n    return b()\n"
+    )
+    location = _ingest(repo)
+
+    with GraphDB(location.db_path, read_only=True) as db:
+        res = _ok(impact(db, location, "t.py::t", ImpactParams(depth=3)))
+
+    assert _items(res) == [
+        (1, "a.py", "a.py::a"),
+        (1, "b.py", "b.py::b"),
+        (1, "c.py", "c.py::c"),
+        (2, "e.py", "e.py::e"),
+    ]
+    by_id = {i.symbol.id: i for g in res.groups for i in g.items}
+    assert by_id["c.py::c"].via is not None and by_id["c.py::c"].via.symbol.id == "t.py::t"
+    assert by_id["e.py::e"].via is not None and by_id["e.py::e"].via.symbol.id == "a.py::a"
+    # Non-tree edges (c -> a, c -> b, e -> b) are still reported.
+    pairs = {(e.source_id, e.target_id) for e in res.edges}
+    assert {("c.py::c", "a.py::a"), ("c.py::c", "b.py::b"), ("e.py::e", "b.py::b")} <= pairs
