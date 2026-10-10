@@ -1,12 +1,12 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import type { SearchHit, SymbolRef } from "@/lib/api";
+import type { ApiError, SearchHit, SymbolRef } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { errorCopy } from "./errorCopy";
 import { KIND_STYLES, symbolLocation } from "./symbolKind";
 
 interface TargetPickerProps {
@@ -14,16 +14,26 @@ interface TargetPickerProps {
   onQueryChange: (query: string) => void;
   results: ReadonlyArray<SearchHit>;
   loading: boolean;
+  error?: ApiError | null;
   onPick: (symbol: SymbolRef) => void;
   autoFocus?: boolean;
 }
 
-export function TargetPicker({ query, onQueryChange, results, loading, onPick, autoFocus }: TargetPickerProps) {
+export function TargetPicker({ query, onQueryChange, results, loading, error, onPick, autoFocus }: TargetPickerProps) {
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const showList = open && query.trim().length > 0;
   const activeIndex = Math.min(active, Math.max(results.length - 1, 0));
+
+  // A new result list starts with its first row highlighted.
+  useEffect(() => setActive(0), [results]);
+
+  useEffect(() => {
+    if (!showList) return;
+    const el = document.getElementById(`${listId}-${activeIndex}`);
+    if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });
+  }, [showList, activeIndex, listId]);
 
   const pick = (hit: SearchHit) => {
     setOpen(false);
@@ -33,8 +43,8 @@ export function TargetPicker({ query, onQueryChange, results, loading, onPick, a
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setOpen(true);
-      setActive(Math.min(activeIndex + 1, results.length - 1));
+      if (!showList) setOpen(true);
+      else setActive(Math.min(activeIndex + 1, Math.max(results.length - 1, 0)));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive(Math.max(activeIndex - 1, 0));
@@ -71,8 +81,11 @@ export function TargetPicker({ query, onQueryChange, results, loading, onPick, a
         onKeyDown={onKeyDown}
       />
       {showList && (
-        <div className="absolute inset-x-0 top-full z-20 mt-1 rounded-md border border-border bg-popover text-popover-foreground shadow-md">
-          <ScrollArea className="max-h-72">
+        <div
+          // keep input focus while interacting with the list or its scrollbar
+          onMouseDown={(e) => e.preventDefault()}
+          className="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md"
+        >
             <ul id={listId} role="listbox" aria-label="Matching symbols" className="p-1">
               {results.map((hit, i) => {
                 const kind = KIND_STYLES[hit.symbol.kind];
@@ -108,10 +121,9 @@ export function TargetPicker({ query, onQueryChange, results, loading, onPick, a
             </ul>
             {results.length === 0 && (
               <p className="px-3 py-2 text-xs text-muted-foreground" role="status">
-                {loading ? "Searching…" : "No matches"}
+                {error ? `Search unavailable. ${errorCopy(error).message}` : loading ? "Searching…" : "No matches"}
               </p>
             )}
-          </ScrollArea>
         </div>
       )}
     </div>

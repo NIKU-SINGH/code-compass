@@ -40,9 +40,9 @@ export function AffectedGroupList({ groups, onRetarget }: AffectedGroupListProps
           </div>
           <div className="flex flex-col gap-3">
             {section.files.map((g) => (
-              <div key={g.file_path ?? "(unknown)"} className="overflow-hidden rounded-lg border border-border">
+              <div key={g.file_path} className="overflow-hidden rounded-lg border border-border">
                 <div className="border-b border-border bg-muted px-3.5 py-1.5 font-mono text-xs text-muted-foreground">
-                  {g.file_path ?? "(no file)"}
+                  {g.file_path}
                 </div>
                 <div className="flex flex-col gap-px bg-border">
                   {g.items.map((item) => (

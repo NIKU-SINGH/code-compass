@@ -23,7 +23,8 @@ import { useImpactQuery } from "./useImpactQuery";
 import { useSymbolSearch } from "./useSymbolSearch";
 
 export function TargetAnalysis() {
-  const { focus, setView } = useWorkspaceView();
+  const { focus: rawFocus, setView } = useWorkspaceView();
+  const focus = rawFocus?.trim() || null;
   const [depth, setDepth] = useState(DEFAULT_IMPACT_DEPTH);
   const [query, setQuery] = useState("");
   const search = useSymbolSearch(query);
@@ -48,6 +49,7 @@ export function TargetAnalysis() {
           onQueryChange={setQuery}
           results={search.results}
           loading={search.loading}
+          error={search.error}
           onPick={pick}
           autoFocus={focus === null}
         />

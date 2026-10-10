@@ -13,14 +13,14 @@ export function errorCopy(error: ApiError): ErrorCopy {
     case "NETWORK":
       return {
         title: "Backend unreachable",
-        message: "Can't reach the Code Compass backend. Is `compass serve` running?",
+        message: "Can't reach the Code Compass backend. Is compass serve running?",
         retryable: true,
       };
     case "INDEX_NOT_FOUND":
       return {
         title: "No index",
-        message: "No index found. Run `compass ingest` in your repository.",
-        retryable: false,
+        message: "No index found. Run compass ingest in your repository.",
+        retryable: true,
       };
     case "INDEX_BUSY":
       return {
@@ -31,7 +31,7 @@ export function errorCopy(error: ApiError): ErrorCopy {
     case "INDEX_INCOMPATIBLE":
       return {
         title: "Incompatible index",
-        message: "The index was created by an incompatible version. Re-run `compass ingest`.",
+        message: "The index was created by an incompatible version. Re-run compass ingest.",
         retryable: false,
       };
     case "QUERY_TIMEOUT":

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { searchSymbols, type SearchHit } from "@/lib/api";
+import { ApiError, searchSymbols, type SearchHit } from "@/lib/api";
 
 const DEBOUNCE_MS = 200;
 const RESULT_LIMIT = 12;
@@ -10,14 +10,17 @@ const RESULT_LIMIT = 12;
 export function useSymbolSearch(query: string): {
   results: ReadonlyArray<SearchHit>;
   loading: boolean;
+  error: ApiError | null;
 } {
   const [results, setResults] = useState<ReadonlyArray<SearchHit>>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
   const trimmed = query.trim();
 
   useEffect(() => {
     if (trimmed.length < 1) {
       setResults([]);
+      setError(null);
       setLoading(false);
       return;
     }
@@ -28,10 +31,12 @@ export function useSymbolSearch(query: string): {
         .then((res) => {
           if (controller.signal.aborted) return;
           setResults(res.hits);
+          setError(null);
           setLoading(false);
         })
-        .catch(() => {
+        .catch((e: unknown) => {
           if (controller.signal.aborted) return;
+          setError(e instanceof ApiError ? e : new ApiError("INTERNAL", "Search failed", 0));
           setResults([]);
           setLoading(false);
         });
@@ -42,5 +47,5 @@ export function useSymbolSearch(query: string): {
     };
   }, [trimmed]);
 
-  return { results, loading };
+  return { results, loading, error };
 }

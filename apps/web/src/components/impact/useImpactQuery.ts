@@ -22,41 +22,68 @@ function toApiError(e: unknown): ApiError {
   return new ApiError("INTERNAL", e instanceof Error ? e.message : "Unexpected error", 0);
 }
 
+interface QueryInputs {
+  target: string | null;
+  depth: number;
+  attempt: number;
+}
+
+interface StoredState {
+  inputs: QueryInputs;
+  state: ImpactQueryState;
+}
+
+/**
+ * Pure: a stored state is only exposed while it belongs to the current inputs;
+ * otherwise (new target/depth/retry not yet settled) the view is loading, so a
+ * stale result for another target is never rendered.
+ */
+export function deriveQueryState(stored: StoredState | null, current: QueryInputs): ImpactQueryState {
+  if (current.target === null) return { status: "idle" };
+  if (
+    stored === null ||
+    stored.inputs.target !== current.target ||
+    stored.inputs.depth !== current.depth ||
+    stored.inputs.attempt !== current.attempt
+  ) {
+    return { status: "loading" };
+  }
+  return stored.state;
+}
+
 /** Fetches impact for `target` at `depth`; each change aborts the in-flight request. */
 export function useImpactQuery(
   target: string | null,
   depth: number,
 ): ImpactQueryState & { retry: () => void } {
-  const [state, setState] = useState<ImpactQueryState>({ status: "idle" });
+  const [stored, setStored] = useState<StoredState | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (target === null) {
-      setState({ status: "idle" });
-      return;
-    }
+    if (target === null) return;
+    const inputs: QueryInputs = { target, depth, attempt };
+    const settle = (state: ImpactQueryState) => setStored({ inputs, state });
     const controller = new AbortController();
-    setState({ status: "loading" });
     getImpact(target, { depth, signal: controller.signal })
       .then((outcome) => {
         if (controller.signal.aborted) return;
         switch (outcome.status) {
           case "ok":
-            return setState({ status: "ok", result: outcome.data });
+            return settle({ status: "ok", result: outcome.data });
           case "ambiguous":
-            return setState({ status: "ambiguous", result: outcome.data });
+            return settle({ status: "ambiguous", result: outcome.data });
           case "not_found":
-            return setState({ status: "not_found", result: outcome.data });
+            return settle({ status: "not_found", result: outcome.data });
         }
       })
       .catch((e: unknown) => {
         if (controller.signal.aborted) return;
-        setState({ status: "error", error: toApiError(e) });
+        settle({ status: "error", error: toApiError(e) });
       });
     // Cleanup aborts on target/depth change and on unmount.
     return () => controller.abort();
   }, [target, depth, attempt]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
-  return { ...state, retry };
+  return { ...deriveQueryState(stored, { target, depth, attempt }), retry };
 }
