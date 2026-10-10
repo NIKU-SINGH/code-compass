@@ -5,6 +5,7 @@ import type { GraphData, NodeType, EdgeType } from "./useGraphData";
 
 export interface VisibleNode {
   id: string;
+  publicId: string;
   label: string;
   type: NodeType;
   filePath: string;
@@ -134,6 +135,7 @@ export function useExpandableGraph(data: GraphData | null) {
       if (!typeVisibility[type]) return;
       out.push({
         id: n.id,
+        publicId: n.public_id,
         label: n.label,
         type,
         filePath: n.file_path,
