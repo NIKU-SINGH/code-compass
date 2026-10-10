@@ -1,7 +1,7 @@
 "use client";
 
 import { LayoutDashboard, Orbit, Target } from "lucide-react";
-import { ImpactPlaceholder } from "@/components/impact/ImpactPlaceholder";
+import { TargetAnalysis } from "@/components/impact/TargetAnalysis";
 import { GraphTab } from "@/components/project/GraphTab";
 import { OverviewTab } from "@/components/project/OverviewTab";
 import { NavRail, type NavRailItem } from "@/components/shell/NavRail";
@@ -26,7 +26,7 @@ export function ActiveView() {
       <div className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
         {view === "overview" && <OverviewTab />}
         {view === "graph" && <GraphTab />}
-        {view === "impact" && <ImpactPlaceholder />}
+        {view === "impact" && <TargetAnalysis />}
       </div>
     </div>
   );
