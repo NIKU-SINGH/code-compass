@@ -9,7 +9,7 @@ from compass_core.graph.db import GraphDB
 from compass_core.index.locate import IndexLocation, require_index
 from compass_core.phases.pipeline import Pipeline
 
-FIXTURE = Path(__file__).parent.parent / "fixtures" / "sample_repo"
+FIXTURE = Path(__file__).parent / "fixtures" / "sample_repo"
 
 
 @pytest.fixture(scope="session")

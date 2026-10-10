@@ -92,9 +92,13 @@ class GraphDB:
             if "Could not set lock on file" in str(exc):
                 raise IndexBusyError(retry_after_s=2) from exc
             raise
-        self._conn = lb.Connection(self._db)
         self._timeout_ms = timeout_ms or settings.QUERY_TIMEOUT_MS
-        self._conn.set_query_timeout(self._timeout_ms)
+        try:
+            self._conn = lb.Connection(self._db)
+            self._conn.set_query_timeout(self._timeout_ms)
+        except BaseException:
+            self._db.close()
+            raise
 
     # ------------------------------------------------------------------
     # Core query interface

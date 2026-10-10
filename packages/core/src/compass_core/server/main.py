@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from compass_core.server.errors import register_error_handlers
+from compass_core.server.routers.query import router as query_router
 from compass_core.server.routers.repo import router as repo_router
 from compass_core.settings import settings
 
@@ -17,6 +19,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+register_error_handlers(app)
+
 
 @app.get("/health")
 def health_check() -> dict[str, str]:
@@ -26,3 +30,4 @@ def health_check() -> dict[str, str]:
 
 # Include routers
 app.include_router(repo_router, prefix="/api", tags=["repo"])
+app.include_router(query_router, prefix="/api")
