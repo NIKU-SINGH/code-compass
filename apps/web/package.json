@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "gen:api": "openapi-typescript ../../.build/openapi.json -o src/lib/api-types.ts"
   },
   "dependencies": {
     "3d-force-graph": "^1.80.0",
@@ -31,6 +32,7 @@
     "@types/node": "^25.5.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "openapi-typescript": "7.13.0",
     "typescript": "^5.6.0"
   }
 }

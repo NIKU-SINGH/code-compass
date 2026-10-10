@@ -40,3 +40,6 @@ Thumbs.db
 .superpowers
 
 .next/
+
+# Generated OpenAPI dump
+.build/
