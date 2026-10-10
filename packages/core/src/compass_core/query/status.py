@@ -24,7 +24,9 @@ def index_status(location: IndexLocation, db: GraphDB) -> IndexStatus:
 
     A file is stale when it no longer exists or its mtime is later than the ingest
     time. Metadata stores whole seconds, so mtimes are compared at second resolution
-    to keep a just-ingested file from looking stale.
+    to keep a just-ingested file from looking stale. Consequently an edit made within
+    the same second as the ingest is invisible (a false negative). Every indexed file
+    is stat'ed on each call, so callers may want to cache the result.
 
     Args:
         location: Where the index lives.

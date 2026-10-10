@@ -11,7 +11,7 @@ import logging
 from collections.abc import Sequence
 from pathlib import Path
 from types import TracebackType
-from typing import Any, cast
+from typing import Any, TypeAlias, cast
 
 import real_ladybug as lb
 
@@ -19,6 +19,10 @@ from compass_core.errors import IndexBusyError, QueryTimeoutError
 from compass_core.settings import settings
 
 logger = logging.getLogger(__name__)
+
+
+QueryParams: TypeAlias = dict[str, Any]
+"""Prepared-statement parameters for ``GraphDB.execute``."""
 
 
 def as_row(result: lb.QueryResult) -> Sequence[Any]:
@@ -93,7 +97,7 @@ class GraphDB:
     # Core query interface
     # ------------------------------------------------------------------
 
-    def execute(self, query: str, params: dict[str, Any] | None = None) -> lb.QueryResult:
+    def execute(self, query: str, params: QueryParams | None = None) -> lb.QueryResult:
         """Executes a single Cypher query.
 
         Args:

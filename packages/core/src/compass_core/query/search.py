@@ -9,9 +9,8 @@ then classified (see ``SearchMatch``) and ranked by match class, fan-in, then na
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
-from compass_core.graph.db import GraphDB, as_rows
+from compass_core.graph.db import GraphDB, QueryParams, as_rows
 from compass_core.index.locate import IndexLocation
 from compass_core.query.models import SymbolRef
 from compass_core.query.params import SearchParams
@@ -81,7 +80,7 @@ def _classify_file(symbol: SymbolRef, query: str) -> SearchMatch | None:
 def _definition_hits(
     db: GraphDB, kind: SymbolKind | None, text: str, repo_root: Path
 ) -> list[SearchHit]:
-    params: dict[str, Any] = {"last": text.rsplit(".", 1)[-1]}
+    params: QueryParams = {"last": text.rsplit(".", 1)[-1]}
     lowered = text.lower()
     hits: list[SearchHit] = []
 
@@ -132,6 +131,14 @@ def find_symbols(db: GraphDB, location: IndexLocation, params: SearchParams) -> 
     Raises:
         IndexIncompatibleError: A stored row or the index metadata is unreadable.
 
+    Note:
+        Cost is O(matches of the last dotted segment of the query) because an exact
+        ``total`` is required. Qualified-prefix queries such as ``auth.decode`` are not
+        supported: dotted queries match only exactly or as a suffix of the qualified
+        name. A query whose last dotted segment is empty (``"."``, ``"a."``) matches
+        nothing. ``index_status`` stats every indexed file per call; callers may cache.
+        Fan-in counts edges (not distinct callers), as in ``references``.
+
     Example:
         ``find_symbols(db, loc, SearchParams(query="User.save"))`` returns
         ``app/models.py::User.save`` first with ``SearchMatch.QUALIFIED_SUFFIX``.
@@ -139,9 +146,18 @@ def find_symbols(db: GraphDB, location: IndexLocation, params: SearchParams) -> 
     repo_root = location.repo_root.resolve()
     text = params.query.strip()
     hits: list[SearchHit] = []
+    if text.endswith("."):
+        # Empty last segment: a CONTAINS '' scan would match everything.
+        return _result(db, location, params, hits)
     if params.kind in (None, SymbolKind.FILE):
         hits += _file_hits(db, text, repo_root)
     hits += _definition_hits(db, params.kind, text, repo_root)
+    return _result(db, location, params, hits)
+
+
+def _result(
+    db: GraphDB, location: IndexLocation, params: SearchParams, hits: list[SearchHit]
+) -> SearchResult:
     hits.sort(key=lambda h: (_RANK[h.match], -h.fan_in, h.symbol.name, h.symbol.id))
     return SearchResult(
         index=index_status(location, db),

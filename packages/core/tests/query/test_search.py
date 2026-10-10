@@ -1,15 +1,26 @@
+from pathlib import Path
+
 import pytest
 
+import compass_core.languages.python  # noqa: F401
 from compass_core.graph.db import GraphDB
-from compass_core.index.locate import IndexLocation
+from compass_core.index.locate import IndexLocation, require_index
+from compass_core.phases.pipeline import Pipeline
 from compass_core.query.params import SearchParams
+from compass_core.query.references import _fan_in
 from compass_core.query.results import SearchResult
 from compass_core.query.search import find_symbols
 from compass_core.query.types import SearchMatch, SymbolKind
 
 
-def _find(db: GraphDB, loc: IndexLocation, query: str, **kw: object) -> SearchResult:
-    return find_symbols(db, loc, SearchParams(query=query, **kw))  # type: ignore[arg-type]
+def _find(
+    db: GraphDB,
+    loc: IndexLocation,
+    query: str,
+    kind: SymbolKind | None = None,
+    limit: int = 50,
+) -> SearchResult:
+    return find_symbols(db, loc, SearchParams(query=query, kind=kind, limit=limit))
 
 
 def test_exact_name_ranks_first(fixture_db: GraphDB, fixture_index: IndexLocation) -> None:
@@ -27,16 +38,6 @@ def test_match_class_outranks_higher_fan_in(
     assert summary[:2] == [(SearchMatch.PREFIX, 0)] * 2
     assert (SearchMatch.SUBSTRING, 4) in summary[2:]
     assert [h.symbol.name for h in res.hits[:2]] == ["handle", "helper"]
-
-
-def test_fan_in_then_name_within_match_class(
-    fixture_db: GraphDB, fixture_index: IndexLocation
-) -> None:
-    res = _find(fixture_db, fixture_index, "t", limit=100)
-    rank = list(SearchMatch).index
-    keys = [(rank(h.match), -h.fan_in, h.symbol.name, h.symbol.id) for h in res.hits]
-    assert keys == sorted(keys)
-    assert [h.fan_in for h in res.hits[:2]] == [4, 3]
 
 
 def test_exact_methods_ordered_by_fan_in(fixture_db: GraphDB, fixture_index: IndexLocation) -> None:
@@ -147,3 +148,51 @@ def test_underscore_query_is_literal_text(
     assert res.hits and all(
         "_" in h.symbol.name or "_" in (h.symbol.file_path or "") for h in res.hits
     )
+
+
+def test_all_four_match_classes_in_hard_coded_order(tmp_path: Path) -> None:
+    # Scratch repo: "a.run" is EXACT for a.py::run (fan_in 0), a QUALIFIED_SUFFIX of
+    # pkg.a.run (fan_in 2), a PREFIX of file a.run.py and a SUBSTRING of file ba.run.py.
+    # The suffix hit has the highest fan-in, so a fan-in-first sort would put it first.
+    repo = tmp_path / "repo"
+    (repo / "pkg").mkdir(parents=True)
+    (repo / "a.py").write_text("def run():\n    pass\n")
+    (repo / "pkg" / "__init__.py").write_text("")
+    (repo / "pkg" / "a.py").write_text("def run():\n    pass\n")
+    (repo / "a.run.py").write_text("x = 1\n")
+    (repo / "ba.run.py").write_text("x = 1\n")
+    (repo / "c.py").write_text(
+        "from pkg.a import run\n\ndef c1():\n    run()\n\ndef c2():\n    run()\n"
+    )
+    Pipeline().run(repo, repo / ".compass" / "graph.ladybug")
+    loc = require_index(repo)
+    with GraphDB(loc.db_path, read_only=True) as db:
+        res = _find(db, loc, "a.run")
+    assert [(h.match.value, h.symbol.id, h.fan_in) for h in res.hits] == [
+        ("EXACT", "a.py::run", 0),
+        ("QUALIFIED_SUFFIX", "pkg/a.py::run", 2),
+        ("PREFIX", "file::a.run.py", 0),
+        ("SUBSTRING", "file::ba.run.py", 0),
+    ]
+
+
+@pytest.mark.parametrize("query", [".", "a.", "app."])
+def test_empty_last_segment_matches_nothing(
+    fixture_db: GraphDB, fixture_index: IndexLocation, query: str
+) -> None:
+    res = _find(fixture_db, fixture_index, query)
+    assert res.hits == () and res.total == 0 and not res.truncated
+
+
+def test_fan_in_agrees_with_reference_resolver(
+    fixture_db: GraphDB, fixture_index: IndexLocation
+) -> None:
+    res = _find(fixture_db, fixture_index, "e", limit=100)
+    callable_hits = [
+        h for h in res.hits if h.symbol.kind in (SymbolKind.FUNCTION, SymbolKind.METHOD)
+    ]
+    expected = _fan_in(fixture_db, [h.symbol for h in callable_hits], fixture_index.repo_root)
+    assert callable_hits and any(expected.values())
+    assert {h.symbol.id: h.fan_in for h in callable_hits} == {
+        h.symbol.id: expected.get(h.symbol.id, 0) for h in callable_hits
+    }

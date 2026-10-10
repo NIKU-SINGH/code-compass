@@ -16,9 +16,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-from compass_core.graph.db import GraphDB, as_rows
+from compass_core.graph.db import GraphDB, QueryParams, as_rows
 from compass_core.query.models import SymbolRef
 from compass_core.query.results import AmbiguousReference, Lookup, SymbolNotFound
 from compass_core.query.rows import (
@@ -59,9 +58,7 @@ class ResolvedReference:
     rule: MatchRule
 
 
-def _definitions(
-    db: GraphDB, where: str, params: dict[str, Any], repo_root: Path
-) -> list[SymbolRef]:
+def _definitions(db: GraphDB, where: str, params: QueryParams, repo_root: Path) -> list[SymbolRef]:
     """Classes and functions satisfying a constant ``where`` template over node ``n``."""
     classes = [
         symbol_from_row(r, SymbolKind.CLASS, repo_root)
@@ -97,7 +94,7 @@ def _by_path_and_tail(
 ) -> list[SymbolRef]:
     """Definitions in ``path`` (or any file whose path ends with it) named ``tail``."""
     where = "(n.file_path IN $paths" + (" OR n.file_path ENDS WITH $suffix)" if suffix else ")")
-    params: dict[str, Any] = {
+    params: QueryParams = {
         "paths": _stored_paths(path, repo_root),
         "suffix": "/" + path,
         "tail": _SEP + tail,

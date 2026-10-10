@@ -47,3 +47,15 @@ def test_modified_file_is_stale(private_index: IndexLocation) -> None:
 def test_deleted_file_is_stale(private_index: IndexLocation) -> None:
     (private_index.repo_root / "app" / "util.py").unlink()
     assert _status(private_index) == 1
+
+
+def test_whole_second_boundary(private_index: IndexLocation) -> None:
+    target = private_index.repo_root / "app" / "auth.py"
+    with GraphDB(private_index.db_path, read_only=True) as db:
+        indexed_at = int(index_status(private_index, db).indexed_at.timestamp())
+    os.utime(target, (indexed_at, indexed_at))
+    assert _status(private_index) == 0
+    os.utime(target, (indexed_at + 0.9, indexed_at + 0.9))
+    assert _status(private_index) == 0  # same second as ingest: invisible by design
+    os.utime(target, (indexed_at + 1, indexed_at + 1))
+    assert _status(private_index) == 1
