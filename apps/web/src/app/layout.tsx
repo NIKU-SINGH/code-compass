@@ -17,12 +17,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="h-full">
-      <body
-        className={`${geist.variable} ${jetbrainsMono.variable} font-sans h-svh overflow-hidden flex flex-col`}
-      >
-        {children}
-      </body>
+    <html lang="en" className={`${geist.variable} ${jetbrainsMono.variable} h-full`}>
+      <body className="font-sans h-svh overflow-hidden flex flex-col">{children}</body>
     </html>
   );
 }

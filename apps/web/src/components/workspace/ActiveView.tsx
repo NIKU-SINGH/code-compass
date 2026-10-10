@@ -21,9 +21,9 @@ export function ActiveView() {
   useViewShortcuts(CHORD_KEYS, setView);
 
   return (
-    <div className="flex flex-1 min-w-0">
+    <div className="flex flex-1 min-h-0 min-w-0">
       <NavRail items={NAV_ITEMS} active={view} onSelect={setView} />
-      <div className="flex-1 min-w-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
         {view === "overview" && <OverviewTab />}
         {view === "graph" && <GraphTab />}
         {view === "impact" && <ImpactPlaceholder />}

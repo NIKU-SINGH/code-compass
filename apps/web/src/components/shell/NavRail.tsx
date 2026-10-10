@@ -24,7 +24,7 @@ export function NavRail({ items, active, onSelect }: NavRailProps) {
     <TooltipProvider delayDuration={100}>
       <nav
         aria-label="Workspace views"
-        className="flex w-14 flex-none flex-col items-center gap-1 border-r border-border bg-card py-2"
+        className="flex w-14 flex-none flex-col items-center gap-1 border-r border-border bg-card py-2 text-sidebar-foreground"
       >
         <Compass className="mb-2 size-5 text-primary" aria-hidden />
         {items.map(({ id, label, icon: Icon, shortcut }) => {
@@ -43,7 +43,7 @@ export function NavRail({ items, active, onSelect }: NavRailProps) {
                     isActive ? "bg-accent text-primary" : "text-muted-foreground",
                   )}
                 >
-                  <Icon className="size-[18px]" />
+                  <Icon className="size-5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="right" className="flex items-center gap-2">

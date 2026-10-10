@@ -18,7 +18,7 @@ export function useViewShortcuts(
   useEffect(() => {
     let armedAt = 0;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || isEditable(e.target)) return;
+      if (e.repeat || e.isComposing || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || isEditable(e.target)) return;
       const key = e.key.toLowerCase();
       const armed = Date.now() - armedAt <= CHORD_WINDOW_MS;
       const view = keys[key];
