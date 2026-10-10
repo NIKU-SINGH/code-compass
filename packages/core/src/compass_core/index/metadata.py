@@ -52,9 +52,13 @@ def save_metadata(path: Path, meta: IndexMetadata) -> None:
         "grammar_versions": {lang.value: v for lang, v in meta.grammar_versions.items()},
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    os.replace(tmp, path)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def load_metadata(path: Path) -> IndexMetadata:
@@ -72,18 +76,23 @@ def load_metadata(path: Path) -> IndexMetadata:
     """
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        schema_version = int(raw.get("schema_version", 1))
-        if schema_version > SUPPORTED_SCHEMA_VERSION:
+        schema_version = raw.get("schema_version", 1)
+        if isinstance(schema_version, bool) or not isinstance(schema_version, int):
+            raise ValueError(f"invalid schema_version {schema_version!r}")
+        if not 1 <= schema_version <= SUPPORTED_SCHEMA_VERSION:
             raise ValueError(f"unsupported schema_version {schema_version}")
+        indexed_at = raw["indexed_at"]
+        if isinstance(indexed_at, bool) or not isinstance(indexed_at, int | float):
+            raise ValueError(f"invalid indexed_at {indexed_at!r}")
         commit = raw.get("indexed_commit")
         return IndexMetadata(
             indexed_commit=None if commit is None else str(commit),
-            indexed_at=datetime.fromtimestamp(raw["indexed_at"], UTC),
+            indexed_at=datetime.fromtimestamp(indexed_at, UTC),
             schema_version=schema_version,
             grammar_versions={
                 Language(lang): str(v) for lang, v in raw.get("grammar_versions", {}).items()
             },
         )
-    except (OSError, KeyError, ValueError, TypeError, AttributeError) as exc:
+    except (OSError, KeyError, ValueError, TypeError, AttributeError, OverflowError) as exc:
         # JSONDecodeError is a ValueError subclass.
         raise IndexIncompatibleError(f"Unreadable index metadata at {path}: {exc}") from exc
