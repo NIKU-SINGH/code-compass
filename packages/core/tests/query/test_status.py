@@ -39,7 +39,9 @@ def test_fresh_index_is_not_stale(fixture_db: GraphDB, fixture_index: IndexLocat
 
 def test_modified_file_is_stale(private_index: IndexLocation) -> None:
     target = private_index.repo_root / "app" / "auth.py"
-    future = target.stat().st_mtime + 3600
+    with GraphDB(private_index.db_path, read_only=True) as db:
+        indexed_at = int(index_status(private_index, db).indexed_at.timestamp())
+    future = indexed_at + 3600
     os.utime(target, (future, future))
     assert _status(private_index) == 1
 
