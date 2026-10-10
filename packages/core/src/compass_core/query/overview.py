@@ -98,8 +98,8 @@ def _caveats(counts: IndexCounts, stale: int) -> tuple[Caveat, ...]:
         caveats.append(Caveat(code=CaveatCode.STALE_INDEX, message=message, count=stale))
     if counts.functions and not counts.edges_by_type[EdgeType.CALLS]:
         message = (
-            "no calls were resolved between the "
-            f"{counts.functions} indexed functions, so symbol-level lists may be empty"
+            "no function-to-function calls were resolved among the "
+            f"{counts.functions} indexed functions; symbol-level lists may be empty"
         )
         caveats.append(
             Caveat(code=CaveatCode.UNRESOLVED_CALLS, message=message, count=counts.functions)

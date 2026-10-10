@@ -123,7 +123,7 @@ def test_no_resolved_calls_adds_unresolved_caveat(tmp_path: Path) -> None:
     assert res.counts.edges_by_type[EdgeType.CALLS] == 0
     [caveat] = res.caveats
     assert caveat.code is CaveatCode.UNRESOLVED_CALLS and caveat.count == 2
-    assert "no calls were resolved" in caveat.message
+    assert "no function-to-function calls were resolved" in caveat.message
 
 
 def test_empty_index_has_empty_lists(tmp_path: Path) -> None:
