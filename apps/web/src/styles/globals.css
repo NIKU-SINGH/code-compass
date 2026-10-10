@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
 
-@custom-variant dark (&:is(.dark, .dark *));
+@custom-variant dark (@media (prefers-color-scheme: dark));
 
 @theme inline {
   --animate-skeleton: skeleton 2s -1s infinite linear;
@@ -30,6 +30,18 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --font-sans: var(--font-geist), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "SF Mono", Menlo, monospace;
+  --color-kind-file: var(--kind-file);
+  --color-kind-class: var(--kind-class);
+  --color-kind-function: var(--kind-function);
+  --color-kind-method: var(--kind-method);
+  --color-kind-external: var(--kind-external);
+  --color-edge-imports: var(--edge-imports);
+  --color-edge-calls: var(--edge-calls);
+  --color-edge-inherits: var(--edge-inherits);
+  --color-edge-contains: var(--edge-contains);
+  --color-edge-external: var(--edge-external);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -74,88 +86,104 @@
 :root {
   color-scheme: light;
   --radius: 0.625rem;
-  --background: var(--color-white);
-  --foreground: var(--color-neutral-800);
-  --card: var(--color-white);
-  --card-foreground: var(--color-neutral-800);
-  --popover: var(--color-white);
-  --popover-foreground: var(--color-neutral-800);
-  --primary: oklch(0.488 0.217 264);
-  --primary-foreground: var(--color-white);
-  --secondary: --alpha(var(--color-black) / 4%);
-  --secondary-foreground: var(--color-neutral-800);
-  --muted: --alpha(var(--color-black) / 4%);
-  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-black));
-  --accent: --alpha(var(--color-black) / 4%);
-  --accent-foreground: var(--color-neutral-800);
-  --destructive: var(--color-red-500);
-  --destructive-foreground: var(--color-red-700);
-  --border: --alpha(var(--color-black) / 8%);
-  --input: --alpha(var(--color-black) / 10%);
-  --ring: oklch(0.488 0.217 264);
+  --background: #f3f2f2;
+  --foreground: #201f1d;
+  --card: #f8f7f6;
+  --card-foreground: #201f1d;
+  --popover: #f8f7f6;
+  --popover-foreground: #201f1d;
+  --primary: #b68235;
+  --primary-foreground: #fff3e4;
+  --secondary: #eae9e9;
+  --secondary-foreground: #201f1d;
+  --muted: #eae9e9;
+  --muted-foreground: #6f6b6b;
+  --accent: color-mix(in srgb, #b68235 13%, transparent);
+  --accent-foreground: #7d5411;
+  --destructive: oklch(0.52 0.15 28);
+  --destructive-foreground: oklch(0.52 0.15 28);
+  --border: color-mix(in srgb, #201f1d 14%, transparent);
+  --input: color-mix(in srgb, #201f1d 24%, transparent);
+  --ring: #b68235;
   --info: var(--color-blue-500);
   --info-foreground: var(--color-blue-700);
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-700);
-  --warning: var(--color-amber-500);
-  --warning-foreground: var(--color-amber-700);
-  /* Sidebar — light */
-  --sidebar: var(--color-neutral-50);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: oklch(0.488 0.217 264);
-  --sidebar-primary-foreground: var(--color-white);
-  --sidebar-accent: --alpha(var(--color-black) / 4%);
-  --sidebar-accent-foreground: var(--color-neutral-800);
-  --sidebar-border: --alpha(var(--color-black) / 8%);
-  --sidebar-ring: oklch(0.488 0.217 264);
+  --success: oklch(0.5 0.1 145);
+  --success-foreground: oklch(0.5 0.1 145);
+  --warning: #a06f24;
+  --warning-foreground: #a06f24;
+  /* Sidebar */
+  --sidebar: #f8f7f6;
+  --sidebar-foreground: #201f1d;
+  --sidebar-primary: #b68235;
+  --sidebar-primary-foreground: #fff3e4;
+  --sidebar-accent: color-mix(in srgb, #b68235 13%, transparent);
+  --sidebar-accent-foreground: #7d5411;
+  --sidebar-border: color-mix(in srgb, #201f1d 14%, transparent);
+  --sidebar-ring: #b68235;
+  /* Graph node kinds and edge types */
+  --kind-file: oklch(0.52 0.09 240);
+  --kind-class: oklch(0.55 0.11 70);
+  --kind-function: oklch(0.5 0.08 150);
+  --kind-method: oklch(0.5 0.09 310);
+  --kind-external: oklch(0.52 0.12 30);
+  --edge-imports: oklch(0.6 0.07 240);
+  --edge-calls: #605d5d;
+  --edge-inherits: oklch(0.62 0.09 70);
+  --edge-contains: #bab6b6;
+  --edge-external: oklch(0.6 0.09 30);
 
   @variant dark {
     color-scheme: dark;
-    --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
-    --foreground: var(--color-neutral-100);
-    --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
-    --card-foreground: var(--color-neutral-100);
-    --popover: color-mix(in srgb, var(--background) 98%, var(--color-white));
-    --popover-foreground: var(--color-neutral-100);
-    --primary: oklch(0.588 0.217 264);
-    --primary-foreground: var(--color-white);
-    --secondary: --alpha(var(--color-white) / 4%);
-    --secondary-foreground: var(--color-neutral-100);
-    --muted: --alpha(var(--color-white) / 4%);
-    --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-    --accent: --alpha(var(--color-white) / 4%);
-    --accent-foreground: var(--color-neutral-100);
-    --destructive: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
-    --destructive-foreground: var(--color-red-400);
-    --border: --alpha(var(--color-white) / 6%);
-    --input: --alpha(var(--color-white) / 8%);
-    --ring: oklch(0.588 0.217 264);
+    --background: #1a1817;
+    --foreground: #f3f2f2;
+    --card: #201e1d;
+    --card-foreground: #f3f2f2;
+    --popover: #201e1d;
+    --popover-foreground: #f3f2f2;
+    --primary: #e1ad66;
+    --primary-foreground: #3a270d;
+    --secondary: #282625;
+    --secondary-foreground: #f3f2f2;
+    --muted: #282625;
+    --muted-foreground: #9b9797;
+    --accent: color-mix(in srgb, #e1ad66 13%, transparent);
+    --accent-foreground: #e1ad66;
+    --destructive: oklch(0.7 0.13 28);
+    --destructive-foreground: oklch(0.7 0.13 28);
+    --border: color-mix(in srgb, #f3f2f2 10%, transparent);
+    --input: color-mix(in srgb, #f3f2f2 18%, transparent);
+    --ring: #e1ad66;
     --info: var(--color-blue-500);
     --info-foreground: var(--color-blue-400);
-    --success: var(--color-emerald-500);
-    --success-foreground: var(--color-emerald-400);
-    --warning: var(--color-amber-500);
-    --warning-foreground: var(--color-amber-400);
-    /* Sidebar — dark */
-    --sidebar: color-mix(in srgb, var(--color-neutral-950) 98%, var(--color-white));
-    --sidebar-foreground: var(--color-neutral-100);
-    --sidebar-primary: oklch(0.588 0.217 264);
-    --sidebar-primary-foreground: var(--color-white);
-    --sidebar-accent: --alpha(var(--color-white) / 4%);
-    --sidebar-accent-foreground: var(--color-neutral-100);
-    --sidebar-border: --alpha(var(--color-white) / 6%);
-    --sidebar-ring: oklch(0.588 0.217 264);
+    --success: oklch(0.76 0.1 145);
+    --success-foreground: oklch(0.76 0.1 145);
+    --warning: #e1ad66;
+    --warning-foreground: #e1ad66;
+    /* Sidebar */
+    --sidebar: #201e1d;
+    --sidebar-foreground: #f3f2f2;
+    --sidebar-primary: #e1ad66;
+    --sidebar-primary-foreground: #3a270d;
+    --sidebar-accent: color-mix(in srgb, #e1ad66 13%, transparent);
+    --sidebar-accent-foreground: #e1ad66;
+    --sidebar-border: color-mix(in srgb, #f3f2f2 10%, transparent);
+    --sidebar-ring: #e1ad66;
+    /* Graph node kinds and edge types */
+    --kind-file: oklch(0.74 0.08 240);
+    --kind-class: oklch(0.76 0.1 75);
+    --kind-function: oklch(0.74 0.08 150);
+    --kind-method: oklch(0.73 0.08 310);
+    --kind-external: oklch(0.72 0.1 30);
+    --edge-imports: oklch(0.66 0.07 240);
+    --edge-calls: #bab6b6;
+    --edge-inherits: oklch(0.68 0.09 75);
+    --edge-contains: #605d5d;
+    --edge-external: oklch(0.66 0.09 30);
   }
 }
 
 body {
-  font-family:
-    "DM Sans",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    system-ui,
-    sans-serif;
+  font-family: var(--font-geist), system-ui, sans-serif;
   margin: 0;
   padding: 0;
   min-height: 100vh;
@@ -187,7 +215,7 @@ pre,
 code,
 textarea,
 input {
-  font-family: "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: var(--font-jetbrains-mono), "SF Mono", Menlo, monospace;
 }
 
 /* Scrollbar styling */
@@ -208,10 +236,12 @@ input {
   background: rgba(0, 0, 0, 0.25);
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-}
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+  }
 
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.18);
+  }
 }
