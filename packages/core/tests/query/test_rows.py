@@ -4,12 +4,17 @@ import pytest
 
 from compass_core.errors import IndexIncompatibleError
 from compass_core.query.rows import (
+    call_type_value,
+    confidence_value,
     external_from_row,
     file_from_row,
+    function_from_row,
+    line_value,
     symbol_from_row,
+    text_list_value,
     to_repo_path,
 )
-from compass_core.query.types import SymbolKind
+from compass_core.query.types import CallType, SymbolKind
 
 
 def test_wrong_typed_column_raises_incompatible(tmp_path: Path) -> None:
@@ -64,3 +69,32 @@ def test_file_and_external_rows(tmp_path: Path) -> None:
     assert (e.id, e.kind, e.file_path) == ("ext::json.dumps", SymbolKind.EXTERNAL, None)
     with pytest.raises(IndexIncompatibleError):
         file_from_row([1, "x"], tmp_path)
+
+
+def test_function_from_row_uses_is_method_flag() -> None:
+    row = ["py::app.models::User.save", "save", "app/models.py", 6, 7, "def save(self):", True]
+    symbol = function_from_row(row, Path("/r"))
+    assert symbol.kind is SymbolKind.METHOD and symbol.id == "app/models.py::User.save"
+
+
+@pytest.mark.parametrize("value", [None, "0.5", True, -0.1, 1.5])
+def test_confidence_value_rejects_bad_values(value: object) -> None:
+    with pytest.raises(IndexIncompatibleError):
+        confidence_value(value)
+
+
+def test_call_type_value_maps_known_and_rejects_unknown() -> None:
+    assert call_type_value("MRO") is CallType.MRO
+    with pytest.raises(IndexIncompatibleError):
+        call_type_value("UNRESOLVED")
+
+
+def test_text_list_value_reads_lists_and_null() -> None:
+    assert text_list_value(["parse"], "raw_calls") == ("parse",)
+    assert text_list_value(None, "raw_calls") == ()
+    with pytest.raises(IndexIncompatibleError):
+        text_list_value("parse", "raw_calls")
+
+
+def test_line_value_maps_zero_to_none() -> None:
+    assert line_value(0, "line") is None and line_value(4, "line") == 4

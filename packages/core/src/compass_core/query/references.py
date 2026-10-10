@@ -73,8 +73,19 @@ def _definitions(db: GraphDB, where: str, params: QueryParams, repo_root: Path) 
     return classes + functions
 
 
-def _stored_paths(rel: str, repo_root: Path) -> list[str]:
-    """Both spellings of a repo-relative path: as given and joined onto ``repo_root``."""
+def stored_paths(rel: str, repo_root: Path) -> list[str]:
+    """Both stored spellings of a repo-relative path.
+
+    Args:
+        rel: Repo-relative POSIX path.
+        repo_root: Absolute repository root.
+
+    Returns:
+        ``[rel, <repo_root>/rel]``, for ``IN $paths`` matches against stored paths.
+
+    Example:
+        ``stored_paths("app/a.py", Path("/r"))`` returns ``["app/a.py", "/r/app/a.py"]``.
+    """
     return [rel, (repo_root / rel).as_posix()]
 
 
@@ -95,7 +106,7 @@ def _by_path_and_tail(
     """Definitions in ``path`` (or any file whose path ends with it) named ``tail``."""
     where = "(n.file_path IN $paths" + (" OR n.file_path ENDS WITH $suffix)" if suffix else ")")
     params: QueryParams = {
-        "paths": _stored_paths(path, repo_root),
+        "paths": stored_paths(path, repo_root),
         "suffix": "/" + path,
         "tail": _SEP + tail,
     }
@@ -106,7 +117,7 @@ def _file(db: GraphDB, path: str, repo_root: Path) -> list[SymbolRef]:
     rows = as_rows(
         db.execute(
             "MATCH (f:File) WHERE f.path IN $paths RETURN f.path, f.module_name",
-            {"paths": _stored_paths(path, repo_root)},
+            {"paths": stored_paths(path, repo_root)},
         )
     )
     return [file_from_row(r, repo_root) for r in rows]
@@ -184,7 +195,7 @@ def _fan_in(db: GraphDB, symbols: Sequence[SymbolRef], repo_root: Path) -> dict[
                 "MATCH (c:Function)-[:CALLS]->(f:Function) "
                 "WHERE f.file_path IN $paths AND f.id ENDS WITH $tail RETURN count(c)",
                 {
-                    "paths": _stored_paths(symbol.file_path, repo_root),
+                    "paths": stored_paths(symbol.file_path, repo_root),
                     "tail": _SEP + symbol.id.rsplit(_SEP, 1)[1],
                 },
             )

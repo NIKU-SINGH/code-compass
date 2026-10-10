@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 QueryParams: TypeAlias = dict[str, Any]
 """Prepared-statement parameters for ``GraphDB.execute``."""
 
+Row: TypeAlias = Sequence[Any]
+"""One positional result row; only ``query/rows.py`` should interpret its columns."""
+
 
 def as_row(result: lb.QueryResult) -> Sequence[Any]:
     """Return the next result row as a positionally-indexable sequence.
@@ -38,12 +41,12 @@ def as_row(result: lb.QueryResult) -> Sequence[Any]:
     return row
 
 
-def as_rows(result: lb.QueryResult) -> list[Sequence[Any]]:
+def as_rows(result: lb.QueryResult) -> list[Row]:
     """Return every remaining result row as a positionally-indexable sequence. See `as_row`."""
     rows = result.get_all()
     for row in rows:
         assert not isinstance(row, dict), "expected a positional row, got a dict-row result"
-    return cast("list[Sequence[Any]]", rows)
+    return cast("list[Row]", rows)
 
 
 class GraphDB:

@@ -18,7 +18,7 @@ from typing import Any
 
 from compass_core.errors import IndexIncompatibleError
 from compass_core.query.models import SymbolRef
-from compass_core.query.types import QualifiedName, RepoPath, SymbolId, SymbolKind
+from compass_core.query.types import CallType, QualifiedName, RepoPath, SymbolId, SymbolKind
 
 _SEP = "::"
 
@@ -241,3 +241,126 @@ def count_value(value: Any) -> int:
             f"unexpected column type for count: expected int, got {type(value).__name__}"
         )
     return value
+
+
+def function_from_row(row: Sequence[Any], repo_root: Path) -> SymbolRef:
+    """Build a function or method ``SymbolRef`` from a row carrying ``is_method``.
+
+    Args:
+        row: Columns ``[id, name, file_path, line_start, line_end, signature, is_method]``.
+        repo_root: Absolute repository root.
+
+    Returns:
+        The symbol, with kind ``METHOD`` when ``is_method`` is true, else ``FUNCTION``.
+
+    Raises:
+        IndexIncompatibleError: A column is missing or has an unexpected type.
+
+    Example:
+        ``["py::app.models::User.save", "save", "app/models.py", 6, 7, "def save(self):",
+        True]`` becomes a ``METHOD`` with id ``"app/models.py::User.save"``.
+    """
+    _expect_width(row, 7, "function row")
+    kind = SymbolKind.METHOD if is_method_flag(row[6]) else SymbolKind.FUNCTION
+    return symbol_from_row(row, kind, repo_root)
+
+
+def text_value(value: Any, column: str) -> str:
+    """Validate a string column.
+
+    Args:
+        value: Raw column value.
+        column: Column name, for the error message.
+
+    Returns:
+        The value as a ``str``.
+
+    Raises:
+        IndexIncompatibleError: The value is not a string.
+    """
+    return _text(value, column)
+
+
+def text_list_value(value: Any, column: str) -> tuple[str, ...]:
+    """Validate a ``STRING[]`` column such as ``Function.raw_calls``.
+
+    Args:
+        value: Raw column value; a stored ``NULL`` reads as an empty tuple.
+        column: Column name, for the error message.
+
+    Returns:
+        The strings, in stored order.
+
+    Raises:
+        IndexIncompatibleError: The value is not a list of strings.
+
+    Example:
+        ``text_list_value(["parse"], "raw_calls")`` returns ``("parse",)``.
+    """
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise IndexIncompatibleError(
+            f"unexpected column type for {column}: expected list, got {type(value).__name__}"
+        )
+    return tuple(_text(item, column) for item in value)
+
+
+def line_value(value: Any, column: str) -> int | None:
+    """Validate a 1-indexed line column; a stored ``0`` (unknown) becomes ``None``.
+
+    Args:
+        value: Raw column value.
+        column: Column name, for the error message.
+
+    Returns:
+        The 1-indexed line, or ``None`` when unknown.
+
+    Raises:
+        IndexIncompatibleError: The value is not an integer.
+
+    Example:
+        ``line_value(0, "line")`` returns ``None``; ``line_value(4, "line")`` returns ``4``.
+    """
+    return _line(value, column)
+
+
+def confidence_value(value: Any) -> float:
+    """Validate a ``CALLS.confidence`` column.
+
+    Args:
+        value: Raw column value.
+
+    Returns:
+        The confidence as a ``float`` in ``[0, 1]``.
+
+    Raises:
+        IndexIncompatibleError: The value is not a number in ``[0, 1]``.
+
+    Example:
+        ``confidence_value(0.800000011920929)`` returns it unchanged (stored as FLOAT).
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+        raise IndexIncompatibleError(f"unexpected value for confidence: {value!r}")
+    return float(value)
+
+
+def call_type_value(value: Any) -> CallType:
+    """Validate a ``CALLS.call_type`` column.
+
+    Args:
+        value: Raw column value.
+
+    Returns:
+        The call type.
+
+    Raises:
+        IndexIncompatibleError: The value is not one of the ``CallType`` values.
+
+    Example:
+        ``call_type_value("MRO")`` returns ``CallType.MRO``.
+    """
+    try:
+        return CallType(_text(value, "call_type"))
+    except ValueError as exc:
+        raise IndexIncompatibleError(f"unexpected value for call_type: {value!r}") from exc
