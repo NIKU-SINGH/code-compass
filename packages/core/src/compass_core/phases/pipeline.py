@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import shutil
 import subprocess
 import time
 from collections.abc import Callable
@@ -64,14 +66,34 @@ class Pipeline:
                 return ctx
 
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        with GraphDB(db_path) as db:
-            create_schema(db)
-            ctx = PersistencePhase().run(ctx, db)
+        building = db_path.with_name(db_path.name + ".building")
+        _remove_db(building)
+        try:
+            with GraphDB(building) as db:
+                create_schema(db)
+                ctx = PersistencePhase().run(ctx, db)
+            os.replace(building, db_path)
+        except BaseException:
+            _remove_db(building)
+            raise
         if on_phase_complete is not None:
             on_phase_complete("persistence", ctx)
 
         _save_metadata(repo_root)
         return ctx
+
+
+def _remove_db(path: Path) -> None:
+    """Delete a LadybugDB file or directory plus its write-ahead log, if present.
+
+    Args:
+        path: The database path; sibling files named ``<path>.wal`` are removed too.
+    """
+    for candidate in (path, path.with_name(path.name + ".wal")):
+        if candidate.is_dir():
+            shutil.rmtree(candidate)
+        elif candidate.exists():
+            candidate.unlink()
 
 
 def _save_metadata(repo_path: Path) -> None:

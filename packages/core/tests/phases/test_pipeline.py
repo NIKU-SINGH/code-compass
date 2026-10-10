@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import pytest
+
 import compass_core.languages.python  # noqa: F401
+from compass_core.graph.db import GraphDB, as_row
 from compass_core.phases.pipeline import Pipeline
 
 
@@ -30,3 +33,59 @@ def test_stop_after_resolution_skips_persistence(tmp_path: Path):
 
     assert ctx.resolved_graph is not None
     assert not db_path.exists()
+
+
+def _edge_count(db_path: Path) -> int:
+    with GraphDB(db_path) as db:
+        return int(as_row(db.execute("MATCH ()-[r]->() RETURN count(*)"))[0])
+
+
+def _function_names(db_path: Path) -> set[str]:
+    with GraphDB(db_path) as db:
+        return {r[0] for r in db.execute("MATCH (f:Function) RETURN f.name").get_all()}
+
+
+def test_reingest_does_not_duplicate_edges(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "a.py").write_text("def run():\n    helper()\n")
+    (repo / "b.py").write_text("def helper():\n    pass\n")
+    db_path = tmp_path / "graph.ladybug"
+
+    Pipeline().run(repo, db_path)
+    first = _edge_count(db_path)
+    Pipeline().run(repo, db_path)
+
+    assert _edge_count(db_path) == first
+
+
+def test_reingest_removes_deleted_functions(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "a.py").write_text("def keep():\n    pass\n\ndef gone():\n    pass\n")
+    db_path = tmp_path / "graph.ladybug"
+    Pipeline().run(repo, db_path)
+
+    (repo / "a.py").write_text("def keep():\n    pass\n")
+    Pipeline().run(repo, db_path)
+
+    assert _function_names(db_path) == {"keep"}
+
+
+def test_failed_ingest_leaves_old_db_untouched(tmp_path: Path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "a.py").write_text("def keep():\n    pass\n")
+    db_path = tmp_path / "graph.ladybug"
+    Pipeline().run(repo, db_path)
+    before = _edge_count(db_path)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("write failed")
+
+    monkeypatch.setattr("compass_core.phases.pipeline.PersistencePhase.run", boom)
+    with pytest.raises(RuntimeError):
+        Pipeline().run(repo, db_path)
+
+    assert _edge_count(db_path) == before
+    assert not db_path.with_name(db_path.name + ".building").exists()
