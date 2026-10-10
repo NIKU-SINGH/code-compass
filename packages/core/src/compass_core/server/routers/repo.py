@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from compass_core.errors import IndexIncompatibleError
 from compass_core.graph.db import GraphDB, as_row, as_rows
 from compass_core.query.rows import public_definition_id, public_file_id
+from compass_core.server.routers.query import get_index
 from compass_core.settings import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["repo"])
 
@@ -83,9 +88,21 @@ def _entry_points(db: GraphDB) -> list[EntryPoint]:
     return [EntryPoint(path=row[0], module_name=row[1]) for row in rows]
 
 
+def _repo_root() -> Path:
+    """Repo root as the query routes derive it, so public ids match theirs.
+
+    Falls back to ``settings.REPO_ROOT`` when no index can be located.
+    """
+    try:
+        return get_index().repo_root
+    except Exception:
+        return Path(settings.REPO_ROOT).resolve()
+
+
 def _graph_nodes(db: GraphDB) -> list[GraphNode]:
-    repo_root = Path(settings.REPO_ROOT).resolve()
+    repo_root = _repo_root()
     nodes: list[GraphNode] = []
+    skipped = 0
 
     for row in as_rows(db.execute("MATCH (f:File) RETURN f.path, f.path, 'File', f.path")):
         path = row[0]
@@ -99,31 +116,30 @@ def _graph_nodes(db: GraphDB) -> list[GraphNode]:
             )
         )
 
-    for row in as_rows(db.execute("MATCH (c:Class) RETURN c.id, c.name, 'Class', c.file_path")):
-        nodes.append(
-            GraphNode(
-                id=row[0],
-                label=row[1],
-                type="Class",
-                file_path=row[3],
-                public_id=public_definition_id(row[0], row[3], repo_root),
+    definitions = [
+        ("MATCH (c:Class) RETURN c.id, c.name, 'Class', c.file_path", True),
+        ("MATCH (fn:Function) RETURN fn.id, fn.name, fn.is_method, fn.file_path", False),
+    ]
+    for query, is_class in definitions:
+        for row in as_rows(db.execute(query)):
+            try:
+                public_id = public_definition_id(row[0], row[3], repo_root)
+            except IndexIncompatibleError:
+                skipped += 1
+                continue
+            node_type = "Class" if is_class else ("Method" if row[2] else "Function")
+            nodes.append(
+                GraphNode(
+                    id=row[0],
+                    label=row[1],
+                    type=node_type,
+                    file_path=row[3],
+                    public_id=public_id,
+                )
             )
-        )
 
-    for row in as_rows(
-        db.execute("MATCH (fn:Function) RETURN fn.id, fn.name, fn.is_method, fn.file_path")
-    ):
-        node_type = "Method" if row[2] else "Function"
-        nodes.append(
-            GraphNode(
-                id=row[0],
-                label=row[1],
-                type=node_type,
-                file_path=row[3],
-                public_id=public_definition_id(row[0], row[3], repo_root),
-            )
-        )
-
+    if skipped:
+        logger.warning("repo graph: skipped %d definition(s) with malformed stored ids", skipped)
     return nodes
 
 
