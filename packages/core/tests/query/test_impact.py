@@ -125,14 +125,24 @@ def test_truncation_flag(fixture_db: GraphDB, fixture_index: IndexLocation) -> N
     assert _items(res) == [(1, "app/__init__.py", "file::app/__init__.py")]
 
 
-def test_file_target_unresolved_caveat_counts_affected_functions(
+def test_file_target_without_hidden_callers_has_no_unresolved_caveat(
     fixture_db: GraphDB, fixture_index: IndexLocation
 ) -> None:
-    # Affected files' functions with raw calls lacking an edge: handle (User().save) and
-    # jobs.run (same-file nightly()).
+    # Every call to decode_token / parse / lookup from another file resolves; the
+    # affected functions' own unresolved calls (handle's User().save, jobs.run's
+    # nightly()) cannot hide callers of app/auth.py, so they are not counted.
     res = _run(fixture_db, fixture_index, "app/auth.py")
+    assert not [c for c in res.caveats if c.code is CaveatCode.UNRESOLVED_CALLS]
+
+
+def test_file_target_caveat_counts_unresolved_calls_to_its_definitions(
+    fixture_db: GraphDB, fixture_index: IndexLocation
+) -> None:
+    # handle calls User() (a class: no stored CALLS edge) and User().save (unresolved);
+    # both bare names are definitions of app/models.py, so exactly one function.
+    res = _run(fixture_db, fixture_index, "app/models.py")
     (caveat,) = [c for c in res.caveats if c.code is CaveatCode.UNRESOLVED_CALLS]
-    assert caveat.count == 2 and "2" in caveat.message
+    assert caveat.count == 1 and caveat.message.startswith("1 function ")
 
 
 # --- symbol targets -----------------------------------------------------------------------
@@ -205,18 +215,35 @@ def test_min_confidence_excludes_weaker_edges(
 def test_unresolved_same_file_call_yields_caveat_not_certainty(
     fixture_db: GraphDB, fixture_index: IndexLocation
 ) -> None:
+    # decode_token's same-file call parse() has no edge: exactly one hidden caller.
     res = _run(fixture_db, fixture_index, "app/auth.py::parse")
     assert res.groups == () and res.total == 0
     (caveat,) = [c for c in res.caveats if c.code is CaveatCode.UNRESOLVED_CALLS]
-    assert caveat.count is not None and caveat.count >= 1
-    assert str(caveat.count) in caveat.message
+    assert caveat.count == 1 and caveat.message.startswith("1 function ")
+
+
+def test_symbol_caveat_counts_unresolved_calls_to_reached_names(
+    fixture_db: GraphDB, fixture_index: IndexLocation
+) -> None:
+    # Every call to decode_token resolves; nightly is reached, and jobs.run's
+    # same-file nightly() has no edge, so exactly jobs.run is flagged.
+    res = _run(fixture_db, fixture_index, "app/auth.py::decode_token", depth=1)
+    (caveat,) = [c for c in res.caveats if c.code is CaveatCode.UNRESOLVED_CALLS]
+    assert caveat.count == 1
+
+
+def test_symbol_without_unresolved_callers_has_no_caveat(
+    fixture_db: GraphDB, fixture_index: IndexLocation
+) -> None:
+    # Nobody calls tick, resolved or not.
+    res = _run(fixture_db, fixture_index, "app/scheduler.py::tick")
+    assert res.caveats == ()
 
 
 def test_caveat_counts_callers_without_edge_to_target(
     fixture_db: GraphDB, fixture_index: IndexLocation
 ) -> None:
-    # tick's only call resolves, so (b) adds nothing; jobs.run calls nightly() in the same
-    # file without an edge, so (a) counts exactly one function.
+    # jobs.run calls nightly() in the same file without an edge: exactly one function.
     res = _run(fixture_db, fixture_index, "app/jobs.py::nightly", depth=1)
     assert _items(res) == [(1, "app/scheduler.py", "app/scheduler.py::tick")]
     (caveat,) = [c for c in res.caveats if c.code is CaveatCode.UNRESOLVED_CALLS]
@@ -435,3 +462,24 @@ def test_diamond_keeps_shortest_distance_and_smallest_via(tmp_path: Path) -> Non
     # Non-tree edges (c -> a, c -> b, e -> b) are still reported.
     pairs = {(e.source_id, e.target_id) for e in res.edges}
     assert {("c.py::c", "a.py::a"), ("c.py::c", "b.py::b"), ("e.py::e", "b.py::b")} <= pairs
+
+
+def test_builtin_and_method_calls_of_dependents_do_not_raise_caveat(tmp_path: Path) -> None:
+    # a() calls t() (resolved) plus max() and kept.append(): raw calls that never
+    # resolve to an edge but cannot be calls to t, so no UNRESOLVED_CALLS caveat.
+    repo = tmp_path / "noisy"
+    repo.mkdir()
+    (repo / "t.py").write_text("def t():\n    return 1\n")
+    (repo / "a.py").write_text(
+        "from t import t\n\n\ndef a(kept):\n    kept.append(max(1, 2))\n    return t()\n"
+    )
+    location = _ingest(repo)
+
+    with GraphDB(location.db_path, read_only=True) as db:
+        symbol = _ok(impact(db, location, "t.py::t", ImpactParams()))
+        file = _ok(impact(db, location, "t.py", ImpactParams()))
+
+    assert _items(symbol) == [(1, "a.py", "a.py::a")]
+    assert symbol.caveats == ()
+    assert _items(file) == [(1, "a.py", "file::a.py")]
+    assert file.caveats == ()

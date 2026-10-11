@@ -13,14 +13,14 @@ from collections.abc import Iterable, Sequence
 from itertools import groupby
 from pathlib import Path
 
-from compass_core.graph.db import GraphDB, QueryParams, as_rows
+from compass_core.graph.db import GraphDB, as_rows
 from compass_core.index.locate import IndexLocation
 from compass_core.query.impact_walk import Walk, stored_target_key, walk_files, walk_symbols
 from compass_core.query.models import Caveat, EdgeRef, ResultItem, SymbolRef
 from compass_core.query.params import ImpactParams
 from compass_core.query.references import ResolvedReference, resolve
 from compass_core.query.results import ImpactGroup, ImpactResult, Lookup
-from compass_core.query.rows import count_value, text_list_value, text_value
+from compass_core.query.rows import text_list_value, text_value
 from compass_core.query.status import index_status
 from compass_core.query.types import CaveatCode, RepoPath, SymbolKind
 
@@ -29,15 +29,13 @@ _RAW_CALLERS = (
     "MATCH (f:Function) WHERE size(f.raw_calls) > 0 "
     "OPTIONAL MATCH (f)-[:CALLS]->(g:Function) WITH f, collect(g.name) AS internal "
     "OPTIONAL MATCH (f)-[:CALLS_EXTERN]->(x:ExternalFunction) "
-    "RETURN f.id, f.raw_calls, internal, collect(x.name)"
+    "RETURN f.id, f.raw_calls, internal, collect(x.name), f.file_path"
 )
 _METHOD_NAMES = "MATCH (c:Class)-[:CONTAINS]->(m:Function) WHERE c.id IN $ids RETURN m.name"
-# Raw calls versus resolved outgoing edges for a set of functions.
-_RESOLVED_COUNTS = (
-    "MATCH (f:Function) WHERE {where} "
-    "OPTIONAL MATCH (f)-[c:CALLS]->(:Function) WITH f, count(c) AS internal "
-    "OPTIONAL MATCH (f)-[e:CALLS_EXTERN]->(:ExternalFunction) "
-    "RETURN f.id, f.raw_calls, internal, count(e)"
+# Names of every definition in a file: functions, methods and classes.
+_FILE_DEFINITION_NAMES = (
+    "MATCH (f:Function) WHERE f.file_path = $path RETURN f.name "
+    "UNION MATCH (c:Class) WHERE c.file_path = $path RETURN c.name"
 )
 
 
@@ -79,26 +77,42 @@ def _watched_names(db: GraphDB, target: SymbolRef, target_key: str, walk: Walk) 
     return names
 
 
-def _unresolved_callers(db: GraphDB, names: set[str], target_key: str) -> set[str]:
-    """(a) Functions with a raw call to one of ``names`` that resolved to no edge to a
-    function (or external) of that name. The target itself is not counted."""
+def _file_watched_names(db: GraphDB, path: str) -> set[str]:
+    """Bare names whose unresolved calls may hide dependents of the file at ``path``:
+    every function, method and class defined in it."""
+    return {
+        text_value(row[0], "name")
+        for row in as_rows(db.execute(_FILE_DEFINITION_NAMES, {"path": path}))
+    }
+
+
+def _unresolved_callers(
+    db: GraphDB, names: set[str], *, skip_id: str | None = None, skip_file: str | None = None
+) -> set[str]:
+    """Functions with a raw call to one of ``names`` that resolved to no edge to a
+    function (or external) of that name.
+
+    Only such calls can hide further callers of the target; a dependent's other
+    unresolved calls (builtins, methods on locals) cannot, so they are not counted.
+
+    Args:
+        db: Open graph database.
+        names: Watched bare names.
+        skip_id: Stored id of a function not to count (the symbol target itself).
+        skip_file: Stored path whose functions are not counted (the file target).
+
+    Returns:
+        The stored ids of the flagged functions.
+    """
     found: set[str] = set()
     for row in as_rows(db.execute(_RAW_CALLERS)):
         key = text_value(row[0], "id")
+        if key == skip_id or text_value(row[4], "file_path") == skip_file:
+            continue
         resolved = set(text_list_value(row[2], "name")) | set(text_list_value(row[3], "name"))
         called = {bare_call_name(c) for c in text_list_value(row[1], "raw_calls")}
-        if key != target_key and (called & names) - resolved:
+        if (called & names) - resolved:
             found.add(key)
-    return found
-
-
-def _partially_resolved(db: GraphDB, where: str, params: QueryParams) -> set[str]:
-    """(b) Functions with more raw calls than resolved outgoing call edges."""
-    found: set[str] = set()
-    for row in as_rows(db.execute(_RESOLVED_COUNTS.format(where=where), params)):
-        resolved = count_value(row[2]) + count_value(row[3])
-        if len(text_list_value(row[1], "raw_calls")) > resolved:
-            found.add(text_value(row[0], "id"))
     return found
 
 
@@ -150,18 +164,11 @@ def _walk(
         walk = walk_files(
             db, target, key, depth=depth, min_confidence=min_confidence, repo_root=repo_root
         )
-        paths = sorted(r.key for r in walk.reached)
-        if not paths:
-            return walk, set()
-        return walk, _partially_resolved(db, "f.file_path IN $paths", {"paths": paths})
+        return walk, _unresolved_callers(db, _file_watched_names(db, key), skip_file=key)
     walk = walk_symbols(
         db, target, key, depth=depth, min_confidence=min_confidence, repo_root=repo_root
     )
-    functions = sorted(r.key for r in walk.reached if r.item.symbol.kind is not SymbolKind.CLASS)
-    unresolved = _unresolved_callers(db, _watched_names(db, target, key, walk), key)
-    if functions:
-        unresolved |= _partially_resolved(db, "f.id IN $ids", {"ids": functions})
-    return walk, unresolved
+    return walk, _unresolved_callers(db, _watched_names(db, target, key, walk), skip_id=key)
 
 
 def impact(
@@ -192,12 +199,15 @@ def impact(
         IndexIncompatibleError: A stored row or the index metadata is unreadable.
 
     Note:
-        ``UNRESOLVED_CALLS`` counts functions that (a) have a raw call to the bare name
-        of the target, an affected symbol, or a method of the target or an affected
-        class, with no resolved edge to a function or external of that name (symbol
-        targets only), or (b) are affected and have more raw calls than resolved
-        outgoing edges. ``min_confidence`` is compared with a ``1e-6`` tolerance because
-        stored confidences are float32. Overrides (``Via(OVERRIDES)``) are not walked.
+        ``UNRESOLVED_CALLS`` counts functions that have a raw call to a watched bare
+        name with no resolved edge to a function or external of that name. For a
+        symbol target the watched names are the target, every affected symbol and
+        the methods of the target and affected classes (the target itself is not
+        counted); for a file target they are the names of every function, method and
+        class defined in the file (its own functions are not counted). A dependent's
+        other unresolved calls (builtins, methods on locals) are not counted.
+        ``min_confidence`` is compared with a ``1e-6`` tolerance because stored
+        confidences are float32. Overrides (``Via(OVERRIDES)``) are not walked.
 
     Example:
         ``impact(db, loc, "app/auth.py::decode_token", ImpactParams(depth=2))`` returns
