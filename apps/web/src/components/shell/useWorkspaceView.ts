@@ -12,7 +12,7 @@ function parseView(raw: string | null): WorkspaceView {
   return WORKSPACE_VIEWS.find((v) => v === raw) ?? "overview";
 }
 
-/** Reads and writes the active workspace view from `?view=` and `?focus=`. */
+/** Reads the active workspace view from `?view=` and `?focus=`; `setView` pushes a history entry. */
 export function useWorkspaceView(): {
   view: WorkspaceView;
   focus: string | null;
@@ -26,9 +26,12 @@ export function useWorkspaceView(): {
     (next: WorkspaceView, nextFocus?: string | null) => {
       const query = new URLSearchParams({ view: next });
       if (nextFocus) query.set("focus", nextFocus);
-      router.replace(`${pathname}?${query.toString()}`, { scroll: false });
+      // Every caller is a user navigation, so it gets a history entry (Back works);
+      // re-selecting the current view and focus adds none.
+      if (query.toString() === params.toString()) return;
+      router.push(`${pathname}?${query.toString()}`, { scroll: false });
     },
-    [router, pathname],
+    [router, pathname, params],
   );
 
   return { view: parseView(params.get("view")), focus: params.get("focus"), setView };
