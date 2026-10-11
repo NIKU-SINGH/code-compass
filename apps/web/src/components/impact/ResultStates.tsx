@@ -1,18 +1,30 @@
-import { CircleCheck, RefreshCw } from "lucide-react";
+import { RefreshCw, SearchX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SymbolRef } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { KIND_STYLES, symbolLocation } from "./symbolKind";
 
-export function EmptyResult() {
+interface EmptyResultProps {
+  /** True when the result carries an UNRESOLVED_CALLS caveat, so the list may be incomplete. */
+  maybeIncomplete?: boolean;
+  title?: string;
+  description?: string;
+  incompleteNote?: string;
+}
+
+export function EmptyResult({
+  maybeIncomplete = false,
+  title = "No resolved dependents found",
+  description = "This only reflects resolved calls and imports. Tests and entry points often look like this.",
+  incompleteNote = "Some possible callers could not be resolved, so this may be incomplete.",
+}: EmptyResultProps) {
   return (
     <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border px-5 py-11 text-center">
-      <CircleCheck className="size-6 text-success" aria-hidden />
-      <div className="font-medium">Nothing depends on this</div>
-      <div className="max-w-sm text-xs text-muted-foreground">
-        This only reflects resolved calls and imports. Tests and entry points often look like this.
-      </div>
+      <SearchX className="size-6 text-muted-foreground" aria-hidden />
+      <div className="font-medium">{title}</div>
+      <div className="max-w-sm text-xs text-muted-foreground">{description}</div>
+      {maybeIncomplete && <div className="max-w-sm text-xs text-muted-foreground">{incompleteNote}</div>}
     </div>
   );
 }

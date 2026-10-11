@@ -82,7 +82,9 @@ export function TargetAnalysis() {
                 <CaveatBanner key={c.code} caveat={c} />
               ))}
               {state.result.groups.length === 0 ? (
-                <EmptyResult />
+                <EmptyResult
+                  maybeIncomplete={state.result.caveats.some((c) => c.code === "UNRESOLVED_CALLS")}
+                />
               ) : (
                 <AffectedGroupList groups={state.result.groups} onRetarget={retarget} />
               )}
