@@ -1,26 +1,23 @@
 "use client";
 
 import { RetryButton } from "@/components/ui/RetryButton";
-import { useWorkspaceView } from "@/components/shell/useWorkspaceView";
 import { CaveatBanner } from "@/components/ui/CaveatBanner";
 import { InlineError } from "@/components/ui/InlineError";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { OverviewResult } from "@/lib/api";
 import { errorCopy } from "@/lib/errorCopy";
-import { BreakdownBar } from "./BreakdownBar";
-import { InsightCard } from "./InsightCard";
-import { InsightGroup } from "./InsightGroup";
+import { GraphComposition } from "./GraphComposition";
+import { IndexHealth } from "./IndexHealth";
 import {
-  edgeBreakdown,
+  compositionEdges,
+  compositionSegments,
   freshnessText,
-  kindBreakdown,
-  librariesCard,
-  mostCalledCard,
-  mostImportedCard,
-  riskiestCard,
   statTiles,
-  type InsightCardData,
+  totalEdges,
 } from "./insightCards";
+import { healthIssues, resolvedCallPercent } from "./signals/cards";
+import { SAMPLE_INDEX_HEALTH } from "./signals/sampleData";
+import { SignalSections } from "./signals/SignalSections";
 import { StatTile } from "./StatTile";
 import { useInsightsQuery } from "./useInsightsQuery";
 
@@ -46,22 +43,6 @@ function LoadingState() {
 
 export function InsightsDashboard() {
   const query = useInsightsQuery();
-  const { setView } = useWorkspaceView();
-
-  const renderCard = (card: InsightCardData) => {
-    const target = card.navigateTo;
-    return (
-      <InsightCard
-        key={card.id}
-        title={card.title}
-        description={card.description}
-        icon={card.icon}
-        rows={card.rows}
-        emptyText={card.emptyText}
-        onSelect={target ? (row) => setView(target, row.id) : undefined}
-      />
-    );
-  };
 
   const renderResult = (r: OverviewResult) => (
     <>
@@ -81,18 +62,22 @@ export function InsightsDashboard() {
           <StatTile key={t.id} label={t.label} value={t.value} icon={t.icon} />
         ))}
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <BreakdownBar title="Entities by kind" segments={kindBreakdown(r.counts)} />
-        <BreakdownBar title="Edges by type" segments={edgeBreakdown(r.counts)} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.7fr_1fr]">
+        <GraphComposition
+          nodeCount={r.counts.files + r.counts.classes + r.counts.functions}
+          edgeCount={totalEdges(r.counts)}
+          segments={compositionSegments(r.counts)}
+          edges={compositionEdges(r.counts)}
+        />
+        <IndexHealth
+          resolvedPercent={resolvedCallPercent(SAMPLE_INDEX_HEALTH)}
+          issues={healthIssues(SAMPLE_INDEX_HEALTH)}
+          note="Unresolved calls are missing from Impact results, so a change may reach further than shown."
+          badge="Sample data"
+          badgeTitle="Placeholder numbers: the index does not record this yet"
+        />
       </div>
-      <InsightGroup title="Impact">
-        {renderCard(riskiestCard(r))}
-        {renderCard(mostImportedCard(r))}
-      </InsightGroup>
-      <InsightGroup title="Usage">
-        {renderCard(mostCalledCard(r))}
-        {renderCard(librariesCard(r))}
-      </InsightGroup>
+      <SignalSections />
     </>
   );
 
@@ -103,7 +88,7 @@ export function InsightsDashboard() {
       <div className="mx-auto flex max-w-5xl flex-col gap-4 px-8 pb-14 pt-6">
         <div className="flex items-baseline gap-3">
           <h1 className="text-xl font-semibold tracking-tight">Overview</h1>
-          <p className="text-sm text-muted-foreground">What is in this index, and where the risk sits.</p>
+          <p className="text-sm text-muted-foreground">What is in this index, and how healthy the code is.</p>
         </div>
         {query.status === "loading" && <LoadingState />}
         {failure && (

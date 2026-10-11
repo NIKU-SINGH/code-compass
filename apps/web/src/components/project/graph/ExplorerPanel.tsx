@@ -6,13 +6,14 @@ import { useGraphData, type NodeType } from "./useGraphData";
 import { useExpandableGraph, VisibleNode } from "./useExpandableGraph";
 import type { GraphCanvasHandle } from "./GraphCanvas3D";
 import { GraphLegend } from "./GraphLegend";
-import { Starfield } from "./Starfield";
 import { DetailsPanel } from "./DetailsPanel";
 import { Info } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { useWorkspaceView } from "@/components/shell/useWorkspaceView";
 import { findFocusedNode } from "./focusMatch";
+import { useNodeDetail } from "./useNodeDetail";
+import type { SymbolRef } from "@/lib/api";
 
 // 3d-force-graph touches `window` at import time, so it must never be
 // pulled into the server bundle.
@@ -29,9 +30,11 @@ export function ExplorerPanel() {
     visibleEdges,
     typeVisibility,
     typeCounts,
+    typeTotals,
     toggleType,
     edgeTypeVisibility,
     edgeTypeCounts,
+    edgeTypeTotals,
     toggleEdgeType,
     expand,
     revealPathTo,
@@ -74,14 +77,43 @@ export function ExplorerPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedNode]);
 
+  // Escape clears the selection, unless the user is typing in the search box.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;
+      setSelection(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const handleNodeClick = useCallback((node: VisibleNode, x: number, y: number) => {
     setSelection({ id: node.id, x, y });
   }, []);
 
-  const connectionCount = selectedNode
-    ? (data?.edges.filter((e) => e.source === selectedNode.id || e.target === selectedNode.id)
-        .length ?? 0)
-    : 0;
+  const { detail, loading: detailLoading, error: detailError, retry } = useNodeDetail(
+    selectedNode?.publicId ?? null
+  );
+
+  const nodeByPublicId = useMemo(
+    () => new Map((data?.nodes ?? []).map((n) => [n.public_id, n])),
+    [data]
+  );
+  const canSelectRelated = useCallback(
+    (symbol: SymbolRef) => nodeByPublicId.has(symbol.id),
+    [nodeByPublicId]
+  );
+  // Related items may be collapsed away in the graph; reveal their path before selecting.
+  const selectRelated = useCallback(
+    (symbol: SymbolRef) => {
+      const target = nodeByPublicId.get(symbol.id);
+      if (!target) return;
+      revealPathTo(target.id);
+      setSelection({ id: target.id });
+    },
+    [nodeByPublicId, revealPathTo]
+  );
 
   const handleNodeDblClick = useCallback(
     (node: VisibleNode) => {
@@ -94,8 +126,6 @@ export function ExplorerPanel() {
   return (
     <div className="flex-1 flex overflow-hidden">
       <div className="flex-1 relative overflow-hidden">
-        <Starfield />
-
         {/* Top bar: search */}
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2">
           <Input
@@ -122,11 +152,13 @@ export function ExplorerPanel() {
           ref={canvasRef}
           nodes={visibleNodes}
           edges={visibleEdges}
+          totalNodeCount={Object.values(typeTotals).reduce((sum, n) => sum + n, 0)}
           showLabels={showLabels}
           onNodeClick={handleNodeClick}
           onNodeDblClick={handleNodeDblClick}
           onBackgroundClick={() => setSelection(null)}
           focusId={focusedNode?.id ?? null}
+          selectedId={selectedNode?.id ?? null}
         />
 
         {loading && (
@@ -151,9 +183,11 @@ export function ExplorerPanel() {
         <GraphLegend
           typeVisibility={typeVisibility}
           typeCounts={typeCounts}
+          typeTotals={typeTotals}
           onToggleType={toggleType}
           edgeTypeVisibility={edgeTypeVisibility}
           edgeTypeCounts={edgeTypeCounts}
+          edgeTypeTotals={edgeTypeTotals}
           onToggleEdgeType={toggleEdgeType}
           showLabels={showLabels}
           onToggleLabels={() => setShowLabels((v) => !v)}
@@ -165,33 +199,22 @@ export function ExplorerPanel() {
           Click to select. Double-click to expand.
         </p>
 
-        {selectedNode && (
-          <>
-            {popover?.x !== undefined && popover.y !== undefined && (
-              <div
-                className="fixed z-20 bg-card border border-border rounded-lg shadow-lg p-3 text-xs pointer-events-none"
-                style={{ left: popover.x + 12, top: popover.y - 8 }}
-              >
-                <p className="font-semibold text-foreground mb-1">{selectedNode.label}</p>
-                <p className="text-muted-foreground">{selectedNode.type}</p>
-                <p className="text-muted-foreground mt-0.5">
-                  {connectionCount} connection{connectionCount === 1 ? "" : "s"}
-                </p>
-                {selectedNode.hasChildren && (
-                  <p className="text-muted-foreground/70 mt-1">Double-click to explore connections</p>
-                )}
-              </div>
-            )}
-
-            <DetailsPanel
-              node={selectedNode}
-              connectionCount={connectionCount}
-              onClose={() => setSelection(null)}
-              onShowImpact={(node) => setView("impact", node.publicId)}
-            />
-          </>
-        )}
       </div>
+
+      {selectedNode && (
+        <DetailsPanel
+          node={selectedNode}
+          detail={detail}
+          loading={detailLoading}
+          error={detailError}
+          onRetry={retry}
+          onClose={() => setSelection(null)}
+          onShowImpact={(node) => setView("impact", node.publicId)}
+          onExpand={(node) => expand(node.id)}
+          canSelect={canSelectRelated}
+          onSelectRelated={selectRelated}
+        />
+      )}
     </div>
   );
 }

@@ -17,6 +17,7 @@ type Schemas = components["schemas"];
 
 export type ImpactResult = Schemas["ImpactResult"];
 export type SearchResult = Schemas["SearchResult"];
+export type NodeDetail = Schemas["NodeDetail"];
 export type OverviewResult = Schemas["OverviewResult"];
 export type AmbiguousReference = Schemas["AmbiguousReference"];
 export type SymbolNotFound = Schemas["SymbolNotFound"];
@@ -199,4 +200,29 @@ export async function getImpact(
 
 export function getOverview(opts: { signal?: AbortSignal } = {}): Promise<OverviewResult> {
   return getOk<OverviewResult>("/api/overview", new URLSearchParams(), "OVERVIEW", opts.signal);
+}
+
+/**
+ * Everything known about one node. Resolves to `null` when the node is unknown or the
+ * reference is ambiguous (404 / 409), so callers can show "no details" without an error.
+ */
+export async function getNodeDetail(
+  ref: string,
+  opts: { signal?: AbortSignal } = {},
+): Promise<NodeDetail | null> {
+  const path = "/api/describe";
+  const res = await request(path, new URLSearchParams({ ref }), opts.signal);
+  const body = await readJson(res, opts.signal);
+  if (res.ok) {
+    if (!isOk(body, "DESCRIBE")) throw unexpected(path, res, body);
+    return body as NodeDetail;
+  }
+  if (
+    (res.status === 404 || res.status === 409) &&
+    isRecord(body) &&
+    (body.outcome === "not_found" || body.outcome === "ambiguous")
+  ) {
+    return null;
+  }
+  throw toApiError(res, body);
 }

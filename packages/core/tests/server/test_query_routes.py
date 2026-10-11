@@ -230,3 +230,16 @@ def test_get_index_repo_root_is_absolute(monkeypatch: pytest.MonkeyPatch, tmp_pa
     location = get_index()
     assert location.repo_root.is_absolute()
     assert location.db_path.is_absolute()
+
+
+def test_status_describes_the_index(client: TestClient, fixture_index: IndexLocation) -> None:
+    r = client.get("/api/status")
+    body = r.json()
+    assert r.status_code == 200
+    assert body["repo_root"] == str(fixture_index.repo_root)
+    assert {"indexed_at", "indexed_commit", "stale_file_count"} <= set(body)
+
+
+def test_status_without_an_index_is_503(tmp_path: Path) -> None:
+    r = _client_raising(IndexNotFoundError(searched_from=tmp_path)).get("/api/status")
+    assert r.status_code == 503

@@ -98,6 +98,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Status
+         * @description Describe the index: which repository, when it was built and how many files changed since.
+         */
+        get: operations["status_api_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/describe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Describe Node
+         * @description Describe one file, class, function or method: docstring, source and neighbours.
+         */
+        get: operations["describe_node_api_describe_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/overview": {
         parameters: {
             query?: never;
@@ -321,6 +361,43 @@ export interface components {
          * @enum {string}
          */
         MatchRule: "EXACT_ID" | "FILE_PATH" | "QUALIFIED_NAME" | "PATH_AND_NAME" | "CLASS_MEMBER" | "BARE_NAME";
+        /** NodeDetail */
+        NodeDetail: {
+            /**
+             * Outcome
+             * @default ok
+             * @constant
+             */
+            outcome: "ok";
+            index: components["schemas"]["IndexStatus"];
+            /** Caveats */
+            caveats: components["schemas"]["Caveat"][];
+            /**
+             * Operation
+             * @default DESCRIBE
+             * @constant
+             */
+            operation: "DESCRIBE";
+            symbol: components["schemas"]["SymbolRef"];
+            /** Docstring */
+            docstring: string | null;
+            /** Bases */
+            bases: components["schemas"]["SymbolRef"][];
+            /** Subclasses */
+            subclasses: components["schemas"]["SymbolRef"][];
+            /** Members */
+            members: components["schemas"]["SymbolRef"][];
+            /** Callees */
+            callees: components["schemas"]["SymbolRef"][];
+            /** Callers */
+            callers: components["schemas"]["SymbolRef"][];
+            /** Imports */
+            imports: components["schemas"]["SymbolRef"][];
+            /** Imported By */
+            imported_by: components["schemas"]["SymbolRef"][];
+            /** Truncated */
+            truncated: boolean;
+        };
         /** OverviewResponse */
         OverviewResponse: {
             /** Project Id */
@@ -613,6 +690,120 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImpactResult"];
+                };
+            };
+            /** @description Reference matched nothing */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SymbolNotFound"];
+                };
+            };
+            /** @description Reference matched several symbols */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AmbiguousReference"];
+                };
+            };
+            /** @description Invalid argument */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Index missing, busy or incompatible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Query timed out */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    status_api_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndexStatus"];
+                };
+            };
+            /** @description Invalid argument */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Index missing, busy or incompatible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Query timed out */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    describe_node_api_describe_get: {
+        parameters: {
+            query: {
+                ref: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeDetail"];
                 };
             };
             /** @description Reference matched nothing */

@@ -1,4 +1,3 @@
-const SCHEME_QUERY = "(prefers-color-scheme: dark)";
 const FALLBACK_TOKEN = "--muted-foreground";
 // Only reached when even the fallback token cannot be resolved (no DOM, no canvas, broken theme).
 const LAST_RESORT = "#808080";
@@ -7,15 +6,16 @@ let cache = new Map<string, string>();
 let schemeVersion = 0;
 let swatch: CanvasRenderingContext2D | null = null;
 const listeners = new Set<() => void>();
-let media: MediaQueryList | null = null;
+let observer: MutationObserver | null = null;
 
 /** Cache key: the colour depends on the active scheme, so a stale entry can never leak across schemes. */
 export function colorCacheKey(dark: boolean, varName: string): string {
   return `${dark ? "dark" : "light"}:${varName}`;
 }
 
+/** The active scheme is whatever `<html data-theme>` says: the theme toggle and the OS both write it. */
 function isDark(): boolean {
-  return window.matchMedia(SCHEME_QUERY).matches;
+  return document.documentElement.dataset.theme === "dark";
 }
 
 function handleSchemeChange() {
@@ -24,7 +24,7 @@ function handleSchemeChange() {
   listeners.forEach((l) => l());
 }
 
-/** Increments once per OS colour-scheme change observed while anything was subscribed. */
+/** Increments once per colour-scheme change (toggle or OS) observed while anything was subscribed. */
 export function getColorSchemeVersion(): number {
   return schemeVersion;
 }
@@ -83,21 +83,21 @@ export function resolveCssColor(varName: string): string {
   return hex;
 }
 
-/** Subscribes to OS colour-scheme changes (cache is already invalidated when `listener` runs). */
+/** Subscribes to colour-scheme changes (cache is already invalidated when `listener` runs). */
 export function onColorSchemeChange(listener: () => void): () => void {
   if (typeof window === "undefined") return () => {};
   if (listeners.size === 0) {
     // Nothing was watching while unsubscribed, so anything cached may predate a scheme flip.
     cache = new Map();
-    media = window.matchMedia(SCHEME_QUERY);
-    media.addEventListener("change", handleSchemeChange);
+    observer = new MutationObserver(handleSchemeChange);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   }
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
-    if (listeners.size === 0 && media) {
-      media.removeEventListener("change", handleSchemeChange);
-      media = null;
+    if (listeners.size === 0 && observer) {
+      observer.disconnect();
+      observer = null;
     }
   };
 }

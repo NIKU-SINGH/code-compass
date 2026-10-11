@@ -10,8 +10,10 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from compass_core.graph.db import GraphDB
 from compass_core.index.locate import IndexLocation, require_index
+from compass_core.query.detail import describe
 from compass_core.query.errors import ErrorResponse
 from compass_core.query.impact import impact
+from compass_core.query.models import IndexStatus
 from compass_core.query.overview import overview
 from compass_core.query.params import (
     MAX_DEPTH,
@@ -23,12 +25,14 @@ from compass_core.query.params import (
 from compass_core.query.results import (
     AmbiguousReference,
     ImpactResult,
+    NodeDetail,
     OverviewResult,
     SearchResult,
     SymbolNotFound,
 )
 from compass_core.query.search import find_symbols
 from compass_core.query.serialize import to_json
+from compass_core.query.status import index_status
 from compass_core.query.types import SymbolKind
 from compass_core.settings import settings
 
@@ -108,6 +112,23 @@ def impact_of(
     """List what may be affected by changing a file or symbol."""
     params = ImpactParams(depth=depth, min_confidence=min_confidence, limit=limit)
     result = impact(db, location, ref, params)
+    if isinstance(result, AmbiguousReference):
+        return Response(to_json(result), status_code=409, media_type="application/json")
+    if isinstance(result, SymbolNotFound):
+        return Response(to_json(result), status_code=404, media_type="application/json")
+    return result
+
+
+@router.get("/status", response_model=IndexStatus, responses=_ERRORS)
+def status(db: Db, location: Location) -> IndexStatus:
+    """Describe the index: which repository, when it was built and how many files changed since."""
+    return index_status(location, db)
+
+
+@router.get("/describe", response_model=NodeDetail, responses=_LOOKUP_ERRORS)
+def describe_node(db: Db, location: Location, ref: Annotated[str, _TEXT]) -> NodeDetail | Response:
+    """Describe one file, class, function or method: docstring, source and neighbours."""
+    result = describe(db, location, ref)
     if isinstance(result, AmbiguousReference):
         return Response(to_json(result), status_code=409, media_type="application/json")
     if isinstance(result, SymbolNotFound):

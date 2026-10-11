@@ -1,6 +1,6 @@
 "use client";
 
-import { Compass, type LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -26,7 +26,6 @@ export function NavRail({ items, active, onSelect }: NavRailProps) {
         aria-label="Workspace views"
         className="flex w-14 flex-none flex-col items-center gap-1 border-r border-border bg-card py-2 text-sidebar-foreground"
       >
-        <Compass className="mb-2 size-5 text-primary" aria-hidden />
         {items.map(({ id, label, icon: Icon, shortcut }) => {
           const isActive = id === active;
           return (

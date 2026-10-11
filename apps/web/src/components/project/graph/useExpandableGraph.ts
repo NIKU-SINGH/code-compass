@@ -3,6 +3,9 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import type { GraphData, NodeType, EdgeType } from "./useGraphData";
 
+/** How much of a node type is on the globe; see `useExpandableGraph`. */
+export type TypeMode = "off" | "revealed" | "all";
+
 export interface VisibleNode {
   id: string;
   publicId: string;
@@ -22,13 +25,19 @@ export interface VisibleEdge {
 export function useExpandableGraph(data: GraphData | null) {
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [typeVisibility, setTypeVisibility] = useState<Record<NodeType, boolean>>({
-    File: true,
-    Class: true,
-    Function: true,
-    Method: true,
-    ExternalDep: true,
+  // Per node type: "all" shows every node of the type, "revealed" only those brought in by
+  // expanding or searching, "off" none. Only files are on the globe to begin with.
+  const [typeMode, setTypeMode] = useState<Record<NodeType, TypeMode>>({
+    File: "all",
+    Class: "off",
+    Function: "off",
+    Method: "off",
+    ExternalDep: "off",
   });
+  const typeVisibility = useMemo(
+    () => Object.fromEntries(Object.entries(typeMode).map(([t, m]) => [t, m !== "off"])) as Record<NodeType, boolean>,
+    [typeMode]
+  );
   const [edgeTypeVisibility, setEdgeTypeVisibility] = useState<Record<EdgeType, boolean>>({
     CONTAINS: true,
     IMPORTS: true,
@@ -71,6 +80,27 @@ export function useExpandableGraph(data: GraphData | null) {
     setExpanded(new Set());
   }, [roots]);
 
+  const nodeById = useMemo(() => {
+    const map = new Map<string, GraphData["nodes"][number]>();
+    data?.nodes.forEach((n) => map.set(n.id, n));
+    return map;
+  }, [data]);
+
+  // Bringing nodes in by expanding or searching must show them, so their types switch on.
+  const promoteTypesOf = useCallback(
+    (ids: Iterable<string>) => {
+      setTypeMode((prev) => {
+        let next = prev;
+        for (const id of ids) {
+          const type = nodeById.get(id)?.type as NodeType | undefined;
+          if (type && next[type] === "off") next = { ...next, [type]: "revealed" };
+        }
+        return next;
+      });
+    },
+    [nodeById]
+  );
+
   const expand = useCallback(
     (nodeId: string) => {
       const kids = childrenOf[nodeId];
@@ -81,8 +111,9 @@ export function useExpandableGraph(data: GraphData | null) {
         return next;
       });
       setExpanded((prev) => new Set(prev).add(nodeId));
+      promoteTypesOf(kids);
     },
-    [childrenOf]
+    [childrenOf, promoteTypesOf]
   );
 
   const revealPathTo = useCallback(
@@ -108,43 +139,38 @@ export function useExpandableGraph(data: GraphData | null) {
         chain.slice(1).forEach((id) => next.add(id));
         return next;
       });
+      promoteTypesOf(chain);
     },
-    [parentOf]
+    [parentOf, promoteTypesOf]
   );
 
   const toggleType = useCallback((type: NodeType) => {
-    setTypeVisibility((prev) => ({ ...prev, [type]: !prev[type] }));
+    // Off -> everything of this type; on (all or partly) -> off.
+    setTypeMode((prev) => ({ ...prev, [type]: prev[type] === "off" ? "all" : "off" }));
   }, []);
 
   const toggleEdgeType = useCallback((type: EdgeType) => {
     setEdgeTypeVisibility((prev) => ({ ...prev, [type]: !prev[type] }));
   }, []);
 
-  const nodeById = useMemo(() => {
-    const map = new Map<string, GraphData["nodes"][number]>();
-    data?.nodes.forEach((n) => map.set(n.id, n));
-    return map;
-  }, [data]);
-
   const visibleNodes = useMemo<VisibleNode[]>(() => {
     const out: VisibleNode[] = [];
-    revealed.forEach((id) => {
-      const n = nodeById.get(id);
-      if (!n) return;
+    data?.nodes.forEach((n) => {
       const type = n.type as NodeType;
-      if (!typeVisibility[type]) return;
+      const mode = typeMode[type];
+      if (mode === "off" || (mode === "revealed" && !revealed.has(n.id))) return;
       out.push({
         id: n.id,
         publicId: n.public_id,
         label: n.label,
         type,
         filePath: n.file_path,
-        hasChildren: (childrenOf[id]?.length ?? 0) > 0,
-        expanded: expanded.has(id),
+        hasChildren: (childrenOf[n.id]?.length ?? 0) > 0,
+        expanded: expanded.has(n.id),
       });
     });
     return out;
-  }, [revealed, nodeById, typeVisibility, childrenOf, expanded]);
+  }, [data, revealed, typeMode, childrenOf, expanded]);
 
   const visibleEdges = useMemo<VisibleEdge[]>(() => {
     if (!data) return [];
@@ -167,12 +193,11 @@ export function useExpandableGraph(data: GraphData | null) {
       Method: 0,
       ExternalDep: 0,
     };
-    revealed.forEach((id) => {
-      const n = nodeById.get(id);
-      if (n) counts[n.type as NodeType]++;
+    visibleNodes.forEach((n) => {
+      counts[n.type]++;
     });
     return counts;
-  }, [revealed, nodeById]);
+  }, [visibleNodes]);
 
   const edgeTypeCounts = useMemo(() => {
     const counts: Record<EdgeType, number> = {
@@ -192,14 +217,33 @@ export function useExpandableGraph(data: GraphData | null) {
     return counts;
   }, [data, visibleNodes]);
 
+  // Everything in the index per type, whether or not it is on the globe yet.
+  const typeTotals = useMemo(() => {
+    const totals: Record<NodeType, number> = { File: 0, Class: 0, Function: 0, Method: 0, ExternalDep: 0 };
+    data?.nodes.forEach((n) => {
+      totals[n.type as NodeType]++;
+    });
+    return totals;
+  }, [data]);
+
+  const edgeTypeTotals = useMemo(() => {
+    const totals: Record<EdgeType, number> = { CONTAINS: 0, IMPORTS: 0, INHERITS: 0, CALLS: 0, CALLS_EXTERN: 0 };
+    data?.edges.forEach((e) => {
+      totals[e.type as EdgeType]++;
+    });
+    return totals;
+  }, [data]);
+
   return {
     visibleNodes,
     visibleEdges,
     typeVisibility,
     typeCounts,
+    typeTotals,
     toggleType,
     edgeTypeVisibility,
     edgeTypeCounts,
+    edgeTypeTotals,
     toggleEdgeType,
     expand,
     revealPathTo,

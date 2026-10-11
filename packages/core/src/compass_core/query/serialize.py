@@ -13,6 +13,7 @@ from compass_core.query.errors import ErrorResponse
 from compass_core.query.results import (
     AmbiguousReference,
     ImpactResult,
+    NodeDetail,
     OverviewResult,
     SearchResult,
     SymbolNotFound,
@@ -22,6 +23,7 @@ Serializable = (
     SearchResult
     | ImpactResult
     | OverviewResult
+    | NodeDetail
     | AmbiguousReference
     | SymbolNotFound
     | ErrorResponse

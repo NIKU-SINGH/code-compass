@@ -214,6 +214,44 @@ class OverviewResult(ResultHeader):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class NodeDetail(ResultHeader):
+    """Everything known about one node, for a details panel.
+
+    Only the relationships that apply to the node's kind are filled; the rest are empty.
+
+    Attributes:
+        operation: Always ``Operation.DESCRIBE``.
+        symbol: The node; ``symbol.source`` holds its source text for classes and functions.
+        docstring: Extracted docstring, or ``None`` when there is none.
+        bases: Classes this class inherits from, within the repository.
+        subclasses: Classes that inherit from this class.
+        members: Methods of a class, or the classes and functions a file defines.
+        callees: Functions this function calls.
+        callers: Functions that call this function.
+        imports: Files this file imports.
+        imported_by: Files that import this file.
+        truncated: Whether any relationship was cut at the per-relationship limit.
+
+    Example:
+        ``describe(db, loc, "app/auth.py::Policy")`` yields ``NodeDetail(symbol=<Policy>,
+        docstring="Declarative mapping...", bases=(), subclasses=(), members=(<Policy.allows>,),
+        ...)``.
+    """
+
+    operation: Literal[Operation.DESCRIBE] = Operation.DESCRIBE
+    symbol: SymbolRef
+    docstring: str | None
+    bases: tuple[SymbolRef, ...]
+    subclasses: tuple[SymbolRef, ...]
+    members: tuple[SymbolRef, ...]
+    callees: tuple[SymbolRef, ...]
+    callers: tuple[SymbolRef, ...]
+    imports: tuple[SymbolRef, ...]
+    imported_by: tuple[SymbolRef, ...]
+    truncated: bool
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class AmbiguousReference:
     """A reference that matched several symbols.
 
