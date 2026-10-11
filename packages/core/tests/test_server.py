@@ -1,12 +1,27 @@
 """Tests for the FastAPI server."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
+from compass_core.index.locate import IndexLocation
 from compass_core.server.main import app
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _located_index():
+    """The repo routes locate the index first; GraphDB itself is mocked per test."""
+    location = IndexLocation(
+        repo_root=Path("/repo"),
+        db_path=Path("/repo/.compass/graph.ladybug"),
+        metadata_path=Path("/repo/.compass/metadata.json"),
+    )
+    with patch("compass_core.server.routers.repo.get_index", return_value=location):
+        yield
 
 
 def test_health_check():

@@ -99,6 +99,18 @@ def _repo_root() -> Path:
         return Path(settings.REPO_ROOT).resolve()
 
 
+def _open_index() -> GraphDB:
+    """Open the index the query routes use (``get_index``), read-only.
+
+    Located from ``LADYBUG_DB_PATH`` or by walking up from the cwd, so the routes
+    work when the server is started from a subdirectory of the indexed repo.
+
+    Raises:
+        IndexNotFoundError: No index can be located (the routes answer 503).
+    """
+    return GraphDB(get_index().db_path, read_only=True)
+
+
 def _graph_nodes(db: GraphDB) -> list[GraphNode]:
     repo_root = _repo_root()
     nodes: list[GraphNode] = []
@@ -183,7 +195,7 @@ def _graph_edges(db: GraphDB) -> list[GraphEdge]:
 @router.get("/repo/overview", response_model=OverviewResponse)
 async def repo_overview() -> OverviewResponse:
     try:
-        with GraphDB() as db:
+        with _open_index() as db:
             file_count = _count(db, "MATCH (n:File) RETURN count(*)")
             class_count = _count(db, "MATCH (n:Class) RETURN count(*)")
             function_count = _count(db, "MATCH (n:Function) RETURN count(*)")
@@ -205,7 +217,7 @@ async def repo_overview() -> OverviewResponse:
 @router.get("/repo/graph", response_model=GraphResponse)
 async def repo_graph() -> GraphResponse:
     try:
-        with GraphDB() as db:
+        with _open_index() as db:
             nodes = _graph_nodes(db)
             edges = _graph_edges(db)
     except Exception as exc:
