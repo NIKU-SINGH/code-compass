@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Box, Braces, FileInput, FileText, Network, Package, PhoneIncoming, Target } from "lucide-react";
 import { symbolLocation } from "@/components/impact/symbolKind";
 import type { EdgeType, IndexCounts, OverviewResult, RankedSymbol, SymbolKind } from "@/lib/api";
+import { RISK_CANDIDATES } from "@/lib/limits";
 
 /** One row of an insight card. `barPercent` is 0-100, relative to the card's maximum. */
 export interface InsightRowData {
@@ -69,7 +70,7 @@ export function riskiestCard(r: OverviewResult): InsightCardData {
   return {
     id: "riskiest",
     title: "Riskiest to change",
-    description: "Symbols whose change reaches the most others",
+    description: `Among the ${RISK_CANDIDATES} most-called functions; resolved calls only`,
     icon: Target,
     rows: rankedRows(r.riskiest_to_change, (n) => `${n.toLocaleString()} affected`),
     emptyText: "No resolved calls yet",
