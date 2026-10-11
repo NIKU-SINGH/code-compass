@@ -14,6 +14,7 @@ from pathlib import Path
 
 from compass_core.graph.db import GraphDB
 from compass_core.graph.schema import create_schema
+from compass_core.index.locate import metadata_path_for
 from compass_core.index.metadata import IndexMetadata, save_metadata
 from compass_core.phases.base import IngestContext, Phase
 from compass_core.phases.discovery import DiscoveryPhase
@@ -80,7 +81,7 @@ class Pipeline:
         if on_phase_complete is not None:
             on_phase_complete("persistence", ctx)
 
-        _save_metadata(repo_root)
+        _save_metadata(repo_root, metadata_path_for(db_path))
         return ctx
 
 
@@ -97,8 +98,15 @@ def _remove_db(path: Path) -> None:
             candidate.unlink()
 
 
-def _save_metadata(repo_path: Path) -> None:
-    """Write .compass/metadata.json (commit, time, grammar versions) via IndexMetadata."""
+def _save_metadata(repo_path: Path, metadata_path: Path) -> None:
+    """Write the index metadata (commit, time, grammar versions) via IndexMetadata.
+
+    Args:
+        repo_path: Repository root, used for the git commit.
+        metadata_path: Destination beside the database (``metadata_path_for``), so
+            ``require_index(..., override=db_path)`` finds it; for the default
+            database this is ``<repo>/.compass/metadata.json``.
+    """
     commit = _get_git_commit(repo_path)
     meta = IndexMetadata(
         indexed_commit=None if commit == "unknown" else commit,
@@ -106,7 +114,7 @@ def _save_metadata(repo_path: Path) -> None:
         schema_version=1,
         grammar_versions={Language(k): v for k, v in _grammar_versions().items()},
     )
-    save_metadata(repo_path / ".compass" / "metadata.json", meta)
+    save_metadata(metadata_path, meta)
     logger.debug("Metadata written: %s", meta)
 
 

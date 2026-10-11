@@ -31,6 +31,22 @@ class IndexLocation:
     metadata_path: Path
 
 
+def metadata_path_for(db_path: Path) -> Path:
+    """Where the metadata of the database at ``db_path`` lives: beside it.
+
+    Args:
+        db_path: Path to a ``graph.ladybug`` database.
+
+    Returns:
+        ``db_path.parent / "metadata.json"``.
+
+    Example:
+        ``metadata_path_for(Path("/repo/.compass/graph.ladybug"))`` returns
+        ``Path("/repo/.compass/metadata.json")``.
+    """
+    return db_path.parent / _META_NAME
+
+
 def _location(repo_root: Path) -> IndexLocation:
     base = repo_root / _INDEX_DIR
     return IndexLocation(
@@ -70,7 +86,7 @@ def require_index(start: Path, override: Path | None = None) -> IndexLocation:
         return IndexLocation(
             repo_root=override.parent.parent,
             db_path=override,
-            metadata_path=override.parent / _META_NAME,
+            metadata_path=metadata_path_for(override),
         )
     location = find_index(start)
     if location is None:

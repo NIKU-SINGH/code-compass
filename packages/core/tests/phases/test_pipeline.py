@@ -117,3 +117,23 @@ def test_write_result_counts_only_stored_edges(tmp_path: Path):
     assert _calls_count(db_path) == 1
     assert ctx.write_result.dropped_edges == 1
     assert ctx.write_result.edge_count == _edge_count(db_path)
+
+
+def test_custom_db_path_keeps_metadata_beside_the_db(tmp_path: Path):
+    from compass_core.index.locate import require_index
+    from compass_core.index.metadata import load_metadata
+    from compass_core.query.status import index_status
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "a.py").write_text("def run():\n    pass\n")
+    db_path = repo / "custom_index" / "g.ladybug"
+
+    Pipeline().run(repo, db_path)
+
+    assert not (repo / ".compass" / "metadata.json").exists()
+    load_metadata(db_path.parent / "metadata.json")
+    location = require_index(repo, override=db_path)
+    with GraphDB(location.db_path, read_only=True) as db:
+        status = index_status(location, db)
+    assert status.repo_root == repo.resolve() and status.stale_file_count == 0
