@@ -184,6 +184,9 @@ def _graph_edges(db: GraphDB) -> list[GraphEdge]:
     for row in as_rows(db.execute("MATCH (a:Class)-[:INHERITS]->(b:Class) RETURN a.id, b.id")):
         _add(row[0], row[1], "INHERITS")
 
+    for row in as_rows(db.execute("MATCH (a:Function)-[:CALLS]->(b:Function) RETURN a.id, b.id")):
+        _add(row[0], row[1], "CALLS")
+
     return edges
 
 
