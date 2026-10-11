@@ -13,11 +13,23 @@ function confidenceClass(c: number | null): string {
   return c >= 1.0 ? "text-success" : "text-warning";
 }
 
+/** Text and tooltip of the last column: a call confidence, or what kind of link this is. */
+function confidenceCell(item: ResultItem): { text: string; title: string } {
+  const c = item.min_confidence;
+  if (c !== null) return { text: c.toFixed(2), title: `Minimum edge confidence ${c.toFixed(2)}` };
+  const kind = item.via?.kind;
+  if (kind === "IMPORTS" || kind === "IMPORTED_BY") {
+    return { text: "import", title: "Import dependency (not a call)" };
+  }
+  return { text: "—", title: "Confidence unknown" };
+}
+
 export function AffectedRow({ item, onRetarget }: AffectedRowProps) {
   const { symbol } = item;
   const kind = KIND_STYLES[symbol.kind];
   const Icon = kind.icon;
   const confidence = item.min_confidence;
+  const cell = confidenceCell(item);
   return (
     <button
       type="button"
@@ -31,11 +43,8 @@ export function AffectedRow({ item, onRetarget }: AffectedRowProps) {
       </span>
       <span className="truncate font-mono text-xs text-muted-foreground">{symbolLocation(symbol)}</span>
       <span className="truncate text-xs italic text-muted-foreground">{viaText(item.via)}</span>
-      <span
-        className={cn("text-right font-mono text-xs", confidenceClass(confidence))}
-        title={confidence === null ? "Confidence unknown" : `Minimum edge confidence ${confidence.toFixed(2)}`}
-      >
-        {confidence === null ? "—" : confidence.toFixed(2)}
+      <span className={cn("text-right font-mono text-xs", confidenceClass(confidence))} title={cell.title}>
+        {cell.text}
       </span>
     </button>
   );
