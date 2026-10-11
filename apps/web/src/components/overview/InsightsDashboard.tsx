@@ -22,7 +22,7 @@ import {
   type InsightCardData,
 } from "./insightCards";
 import { StatTile } from "./StatTile";
-import { useOverviewQuery } from "./useOverviewQuery";
+import { useInsightsQuery } from "./useInsightsQuery";
 
 function LoadingState() {
   return (
@@ -45,7 +45,7 @@ function LoadingState() {
 }
 
 export function InsightsDashboard() {
-  const query = useOverviewQuery();
+  const query = useInsightsQuery();
   const { setView } = useWorkspaceView();
 
   const renderCard = (card: InsightCardData) => {

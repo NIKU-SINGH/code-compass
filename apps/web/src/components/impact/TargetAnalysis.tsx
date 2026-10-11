@@ -19,7 +19,7 @@ import {
 } from "./ResultStates";
 import { TargetCard } from "./TargetCard";
 import { TargetPicker } from "./TargetPicker";
-import { useImpactQuery } from "./useImpactQuery";
+import { useDependentsQuery } from "./useDependentsQuery";
 import { useSymbolSearch } from "./useSymbolSearch";
 
 export function TargetAnalysis() {
@@ -28,7 +28,7 @@ export function TargetAnalysis() {
   const [depth, setDepth] = useState(DEFAULT_IMPACT_DEPTH);
   const [query, setQuery] = useState("");
   const search = useSymbolSearch(query);
-  const state = useImpactQuery(focus, depth);
+  const state = useDependentsQuery(focus, depth);
 
   const retarget = (id: string) => setView("impact", id);
   const pick = (symbol: { id: string }) => {
@@ -100,7 +100,7 @@ function shownCount(groups: ReadonlyArray<ImpactGroup>): number {
   return groups.reduce((n, g) => n + g.items.length, 0);
 }
 
-function ErrorNotice({ state }: { state: Extract<ReturnType<typeof useImpactQuery>, { status: "error" }> }) {
+function ErrorNotice({ state }: { state: Extract<ReturnType<typeof useDependentsQuery>, { status: "error" }> }) {
   const copy = errorCopy(state.error);
   return (
     <InlineError

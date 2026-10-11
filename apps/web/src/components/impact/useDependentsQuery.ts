@@ -9,7 +9,7 @@ import {
   type SymbolNotFound,
 } from "@/lib/api";
 
-export type ImpactQueryState =
+export type DependentsQueryState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "ok"; result: ImpactResult }
@@ -30,7 +30,7 @@ interface QueryInputs {
 
 interface StoredState {
   inputs: QueryInputs;
-  state: ImpactQueryState;
+  state: DependentsQueryState;
 }
 
 /**
@@ -38,7 +38,7 @@ interface StoredState {
  * otherwise (new target/depth/retry not yet settled) the view is loading, so a
  * stale result for another target is never rendered.
  */
-export function deriveQueryState(stored: StoredState | null, current: QueryInputs): ImpactQueryState {
+export function deriveQueryState(stored: StoredState | null, current: QueryInputs): DependentsQueryState {
   if (current.target === null) return { status: "idle" };
   if (
     stored === null ||
@@ -52,17 +52,17 @@ export function deriveQueryState(stored: StoredState | null, current: QueryInput
 }
 
 /** Fetches impact for `target` at `depth`; each change aborts the in-flight request. */
-export function useImpactQuery(
+export function useDependentsQuery(
   target: string | null,
   depth: number,
-): ImpactQueryState & { retry: () => void } {
+): DependentsQueryState & { retry: () => void } {
   const [stored, setStored] = useState<StoredState | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (target === null) return;
     const inputs: QueryInputs = { target, depth, attempt };
-    const settle = (state: ImpactQueryState) => setStored({ inputs, state });
+    const settle = (state: DependentsQueryState) => setStored({ inputs, state });
     const controller = new AbortController();
     getImpact(target, { depth, signal: controller.signal })
       .then((outcome) => {
