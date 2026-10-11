@@ -1,6 +1,4 @@
-import { HeartPulse } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { SectionCard } from "./SectionCard";
 import { cn } from "@/lib/utils";
 
 export interface HealthIssue {
@@ -16,25 +14,12 @@ interface Props {
   resolvedPercent: number;
   issues: ReadonlyArray<HealthIssue>;
   note: string;
-  /** Small label beside the title, e.g. "Sample data". */
-  badge?: string;
-  badgeTitle?: string;
 }
 
 /** How trustworthy the index is: share of calls resolved, and what could not be. */
-export function IndexHealth({ resolvedPercent, issues, note, badge, badgeTitle }: Props) {
+export function IndexHealth({ resolvedPercent, issues, note }: Props) {
   return (
-    <Card className="flex min-w-0 flex-col gap-4 px-5 py-4 shadow-none">
-      <div className="flex items-center gap-2">
-        <HeartPulse className="size-4 text-kind-function" aria-hidden />
-        <h2 className="text-sm font-semibold">Index health</h2>
-        {badge && (
-          <Badge variant="outline" title={badgeTitle}>
-            {badge}
-          </Badge>
-        )}
-      </div>
-
+    <SectionCard title="Index health" description={note}>
       <div className="flex flex-col gap-2.5">
         <div className="flex items-baseline gap-2">
           <span className="text-3xl font-semibold tracking-tight">{resolvedPercent}%</span>
@@ -58,7 +43,6 @@ export function IndexHealth({ resolvedPercent, issues, note, badge, badgeTitle }
           </li>
         ))}
       </ul>
-      <p className="text-xs text-muted-foreground">{note}</p>
-    </Card>
+    </SectionCard>
   );
 }

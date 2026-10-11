@@ -11,13 +11,13 @@ interface Props {
   children: ReactNode;
 }
 
-/** Titled card shared by every Overview chart. */
-export function ChartCard({ title, description, aside, className, children }: Props) {
+/** The one titled card every Overview section is built from, so spacing and headings never drift. */
+export function SectionCard({ title, description, aside, className, children }: Props) {
   return (
-    <Card className={cn("flex min-w-0 flex-col gap-3 px-4 py-3.5 shadow-none", className)}>
+    <Card className={cn("flex min-w-0 flex-col gap-4 px-5 py-4 shadow-none", className)}>
       <div className="flex flex-col gap-0.5">
-        <div className="flex items-baseline gap-2">
-          <h3 className="text-sm font-semibold">{title}</h3>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-sm font-semibold">{title}</h2>
           {aside && <span className="text-xs text-muted-foreground tabular-nums">{aside}</span>}
         </div>
         {description && <p className="text-xs text-muted-foreground">{description}</p>}

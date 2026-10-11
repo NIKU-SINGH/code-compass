@@ -1,5 +1,5 @@
 import { Bot, User } from "lucide-react";
-import { ChartCard } from "./ChartCard";
+import { SectionCard } from "../SectionCard";
 import { SINGLE_COLOR } from "./palette";
 
 export interface HeatColumn {
@@ -34,7 +34,7 @@ function tint(percent: number): string {
 /** Matrix of share per row and column, with a scale legend; the cells themselves are the table. */
 export function Heatmap({ title, description, columns, rows }: Props) {
   return (
-    <ChartCard title={title} description={description} className="lg:col-span-2">
+    <SectionCard title={title} description={description} className="lg:col-span-2">
       <div className="overflow-x-auto">
         <table className="w-full border-separate border-spacing-0.5 text-xs">
           <thead>
@@ -88,6 +88,6 @@ export function Heatmap({ title, description, columns, rows }: Props) {
         />
         <span>100% of the area&apos;s lines</span>
       </div>
-    </ChartCard>
+    </SectionCard>
   );
 }

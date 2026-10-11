@@ -136,3 +136,20 @@ def test_empty_index_has_empty_lists(tmp_path: Path) -> None:
     assert res.top_external_libraries == () and res.riskiest_to_change == ()
     assert res.caveats == ()
     assert [e.file_path for e in res.entry_points] == ["x.py"]
+
+
+def test_call_resolution_counts_every_call_site(
+    fixture_db: GraphDB, fixture_index: IndexLocation
+) -> None:
+    calls = overview(fixture_db, fixture_index).call_resolution
+    assert calls.total > calls.resolved >= 5
+
+
+def test_call_resolution_of_unlinked_call_is_unresolved(tmp_path: Path) -> None:
+    res = _overview(_build(tmp_path, {"m.py": "def f():\n    pass\n\ndef g():\n    f()\n"}))
+    assert (res.call_resolution.total, res.call_resolution.resolved) == (1, 0)
+
+
+def test_call_resolution_of_empty_index_is_zero(tmp_path: Path) -> None:
+    res = _overview(_build(tmp_path, {"x.py": "x = 1\n"}))
+    assert (res.call_resolution.total, res.call_resolution.resolved) == (0, 0)

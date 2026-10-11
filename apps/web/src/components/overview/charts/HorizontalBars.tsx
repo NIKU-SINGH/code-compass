@@ -2,7 +2,7 @@
 
 import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { ChartCard } from "./ChartCard";
+import { SectionCard } from "../SectionCard";
 import { SINGLE_COLOR } from "./palette";
 
 export interface BarRow {
@@ -37,7 +37,7 @@ export function HorizontalBars({ title, description, aside, rows, valueLabel, co
   const data = rows.map((r) => ({ ...r, detail: r.detail ?? r.value.toLocaleString() }));
 
   return (
-    <ChartCard title={title} description={description} aside={aside}>
+    <SectionCard title={title} description={description} aside={aside}>
       <ChartContainer
         config={config}
         className="aspect-auto w-full"
@@ -66,6 +66,6 @@ export function HorizontalBars({ title, description, aside, rows, valueLabel, co
           </Bar>
         </BarChart>
       </ChartContainer>
-    </ChartCard>
+    </SectionCard>
   );
 }

@@ -2,7 +2,7 @@
 
 import { Cell, Pie, PieChart } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { ChartCard } from "./ChartCard";
+import { SectionCard } from "../SectionCard";
 
 export interface DonutSegment {
   id: string;
@@ -30,7 +30,7 @@ export function Donut({ title, description, aside, segments, centre }: Props) {
   );
 
   return (
-    <ChartCard title={title} description={description} aside={aside}>
+    <SectionCard title={title} description={description} aside={aside}>
       <div className="flex flex-col items-center gap-4 sm:flex-row">
         <div className="relative size-44 flex-none">
           <ChartContainer config={config} className="aspect-square size-full">
@@ -72,6 +72,6 @@ export function Donut({ title, description, aside, segments, centre }: Props) {
           ))}
         </ul>
       </div>
-    </ChartCard>
+    </SectionCard>
   );
 }

@@ -19,6 +19,7 @@ export type ImpactResult = Schemas["ImpactResult"];
 export type SearchResult = Schemas["SearchResult"];
 export type NodeDetail = Schemas["NodeDetail"];
 export type OverviewResult = Schemas["OverviewResult"];
+export type CallResolution = Schemas["CallResolution"];
 export type AmbiguousReference = Schemas["AmbiguousReference"];
 export type SymbolNotFound = Schemas["SymbolNotFound"];
 export type ErrorResponse = Schemas["ErrorResponse"];

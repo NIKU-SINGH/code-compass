@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { IndexCounts } from "@/lib/api";
-import { compositionEdges, compositionSegments } from "@/components/overview/insightCards";
+import type { CallResolution, IndexCounts } from "@/lib/api";
+import { compositionEdges, compositionSegments, indexFreshness, statTiles } from "@/components/overview/insightCards";
 import { healthIssues, resolvedCallPercent } from "@/components/overview/signals/cards";
-import { SAMPLE_INDEX_HEALTH } from "@/components/overview/signals/sampleData";
+
+const calls: CallResolution = { total: 193, resolved: 171 };
 
 const counts: IndexCounts = {
   files: 15,
@@ -35,13 +36,46 @@ describe("composition", () => {
 
 describe("index health", () => {
   it("derives the resolved share and unresolved count from the same totals", () => {
-    expect(resolvedCallPercent(SAMPLE_INDEX_HEALTH)).toBe(88.6);
-    const [unresolved] = healthIssues(SAMPLE_INDEX_HEALTH);
-    expect(unresolved.count).toBe(SAMPLE_INDEX_HEALTH.totalCalls - SAMPLE_INDEX_HEALTH.resolvedCalls);
+    expect(resolvedCallPercent(calls)).toBe(88.6);
+    const [unresolved] = healthIssues(calls);
+    expect(unresolved.count).toBe(22);
   });
 
-  it("marks a parse failure as an error and the rest as degraded", () => {
-    const dots = healthIssues(SAMPLE_INDEX_HEALTH).map((i) => i.dotClass);
-    expect(dots).toEqual(["bg-kind-class", "bg-kind-class", "bg-kind-external"]);
+  it("reads as fully resolved when the code makes no calls", () => {
+    expect(resolvedCallPercent({ total: 0, resolved: 0 })).toBe(100);
+  });
+});
+
+describe("stat tiles", () => {
+  it("gives every tile a label, a description and a legend colour", () => {
+    const tiles = statTiles(counts);
+    expect(tiles.map((t) => [t.label, t.value])).toEqual([
+      ["Files", 15],
+      ["Classes", 8],
+      ["Functions", 27],
+      ["Edges", 98],
+    ]);
+    for (const t of tiles) {
+      expect(t.detail).not.toBe("");
+      expect(t.colorClass).toMatch(/^bg-(kind|edge)-/);
+    }
+  });
+});
+
+describe("index freshness", () => {
+  const now = new Date("2026-01-01T12:00:00Z");
+  const index = {
+    indexed_at: "2026-01-01T11:55:00Z",
+    indexed_commit: "abcdef1234567",
+    stale_file_count: 3,
+    repo_root: "/repo",
+  } as Parameters<typeof indexFreshness>[0];
+
+  it("splits the header facts into indexed time, short commit and stale count", () => {
+    expect(indexFreshness(index, now)).toEqual({ indexed: "Indexed 5 min ago", commit: "abcdef1", staleCount: 3 });
+  });
+
+  it("omits the commit when the index has none", () => {
+    expect(indexFreshness({ ...index, indexed_commit: null }, now).commit).toBeUndefined();
   });
 });

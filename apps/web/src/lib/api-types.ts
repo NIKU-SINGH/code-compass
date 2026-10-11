@@ -175,6 +175,13 @@ export interface components {
             /** Candidates */
             candidates: components["schemas"]["SymbolRef"][];
         };
+        /** CallResolution */
+        CallResolution: {
+            /** Total */
+            total: number;
+            /** Resolved */
+            resolved: number;
+        };
         /**
          * CallType
          * @description Resolution types that write a ``CALLS`` edge.
@@ -431,6 +438,7 @@ export interface components {
              */
             operation: "OVERVIEW";
             counts: components["schemas"]["IndexCounts"];
+            call_resolution: components["schemas"]["CallResolution"];
             /** Entry Points */
             entry_points: components["schemas"]["SymbolRef"][];
             /** Most Imported Files */
