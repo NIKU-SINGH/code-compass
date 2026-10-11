@@ -35,7 +35,10 @@ export function TargetPicker({ query, onQueryChange, results, loading, error, on
     if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });
   }, [showList, activeIndex, listId]);
 
+  // While a newer query is loading the listed hits are stale: keep them visible
+  // (dimmed) but not pickable, so Enter or a click never picks an outdated match.
   const pick = (hit: SearchHit) => {
+    if (loading) return;
     setOpen(false);
     onPick(hit.symbol);
   };
@@ -50,7 +53,7 @@ export function TargetPicker({ query, onQueryChange, results, loading, error, on
       setActive(Math.max(activeIndex - 1, 0));
     } else if (e.key === "Enter" && showList && results[activeIndex]) {
       e.preventDefault();
-      pick(results[activeIndex]);
+      if (!loading) pick(results[activeIndex]);
     } else if (e.key === "Escape") {
       setOpen(false);
     }
@@ -86,7 +89,13 @@ export function TargetPicker({ query, onQueryChange, results, loading, error, on
           onMouseDown={(e) => e.preventDefault()}
           className="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md"
         >
-            <ul id={listId} role="listbox" aria-label="Matching symbols" className="p-1">
+            <ul
+              id={listId}
+              role="listbox"
+              aria-label="Matching symbols"
+              aria-busy={loading}
+              className={cn("p-1", loading && results.length > 0 && "opacity-60")}
+            >
               {results.map((hit, i) => {
                 const kind = KIND_STYLES[hit.symbol.kind];
                 const Icon = kind.icon;
@@ -96,6 +105,7 @@ export function TargetPicker({ query, onQueryChange, results, loading, error, on
                     id={`${listId}-${i}`}
                     role="option"
                     aria-selected={i === activeIndex}
+                    aria-disabled={loading || undefined}
                     // mousedown fires before the input's blur closes the list
                     onMouseDown={(e) => {
                       e.preventDefault();
