@@ -14,6 +14,7 @@ venv/
 # Node
 node_modules/
 apps/web/dist/
+*.tsbuildinfo
 
 # Static build output copied into FastAPI
 packages/core/src/compass_core/server/static/
