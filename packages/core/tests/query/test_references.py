@@ -123,3 +123,14 @@ def test_user_input_is_not_interpolated(fixture_db: GraphDB, fixture_index: Inde
 def test_empty_reference_not_found(fixture_db: GraphDB, fixture_index: IndexLocation) -> None:
     out = resolve(fixture_db, "  ", repo_root=fixture_index.repo_root)
     assert isinstance(out, SymbolNotFound) and out.suggestions == ()
+
+
+def test_qualified_name_with_empty_or_too_many_segments_matches_nothing(
+    fixture_db: GraphDB, fixture_index: IndexLocation
+) -> None:
+    from compass_core.query.references import _qualified
+
+    root = fixture_index.repo_root
+    assert _qualified(fixture_db, "a." * 250, root) == []
+    assert _qualified(fixture_db, ".".join(["a"] * 65), root) == []
+    assert _qualified(fixture_db, "app.auth..decode_token", root) == []

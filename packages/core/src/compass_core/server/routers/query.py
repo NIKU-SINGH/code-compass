@@ -13,7 +13,13 @@ from compass_core.index.locate import IndexLocation, require_index
 from compass_core.query.errors import ErrorResponse
 from compass_core.query.impact import impact
 from compass_core.query.overview import overview
-from compass_core.query.params import MAX_DEPTH, MAX_LIMIT, ImpactParams, SearchParams
+from compass_core.query.params import (
+    MAX_DEPTH,
+    MAX_LIMIT,
+    MAX_TEXT_LENGTH,
+    ImpactParams,
+    SearchParams,
+)
 from compass_core.query.results import (
     AmbiguousReference,
     ImpactResult,
@@ -73,13 +79,16 @@ def get_db(location: Annotated[IndexLocation, Depends(get_index)]) -> Iterator[G
 
 Location = Annotated[IndexLocation, Depends(get_index)]
 Db = Annotated[GraphDB, Depends(get_db)]
+# Free text: 1..MAX_TEXT_LENGTH characters with at least one non-whitespace character;
+# anything else is a 422 INVALID_ARGUMENT naming the parameter.
+_TEXT = Query(min_length=1, max_length=MAX_TEXT_LENGTH, pattern=r"\S")
 
 
 @router.get("/search", response_model=SearchResult, responses=_ERRORS)
 def search(
     db: Db,
     location: Location,
-    q: Annotated[str, Query(min_length=1)],
+    q: Annotated[str, _TEXT],
     kind: SymbolKind | None = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = 50,
 ) -> SearchResult:
@@ -91,7 +100,7 @@ def search(
 def impact_of(
     db: Db,
     location: Location,
-    ref: Annotated[str, Query(min_length=1)],
+    ref: Annotated[str, _TEXT],
     depth: Annotated[int, Query(ge=1, le=MAX_DEPTH)] = 3,
     min_confidence: Annotated[float, Query(ge=0, le=1)] = 0.0,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = 50,

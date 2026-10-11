@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -81,6 +82,37 @@ def test_empty_search_query_is_422(client: TestClient) -> None:
     assert r.status_code == 422
     assert r.json()["code"] == "INVALID_ARGUMENT"
     assert any("q" in d["key"] for d in r.json()["details"])
+
+
+@pytest.mark.parametrize(
+    ("route", "name", "value"),
+    [
+        ("/api/search", "q", "   "),
+        ("/api/search", "q", "x" * 513),
+        ("/api/impact", "ref", "   "),
+        ("/api/impact", "ref", "x" * 513),
+    ],
+    ids=["blank-q", "long-q", "blank-ref", "long-ref"],
+)
+def test_blank_or_oversized_text_is_422(
+    client: TestClient, route: str, name: str, value: str
+) -> None:
+    r = client.get(route, params={name: value})
+    assert r.status_code == 422
+    assert r.json()["code"] == "INVALID_ARGUMENT"
+    assert any(name in d["key"] for d in r.json()["details"])
+
+
+def test_longest_allowed_text_is_accepted(client: TestClient) -> None:
+    assert client.get("/api/search", params={"q": "x" * 512}).status_code == 200
+    assert client.get("/api/impact", params={"ref": "x" * 512}).status_code == 404
+
+
+def test_dotted_ref_resolves_promptly(client: TestClient) -> None:
+    started = time.monotonic()
+    r = client.get("/api/impact", params={"ref": "a." * 250})
+    assert r.status_code in (200, 404, 409)
+    assert time.monotonic() - started < 2
 
 
 def test_ambiguous_ref_is_409(client: TestClient) -> None:

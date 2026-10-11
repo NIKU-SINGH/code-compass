@@ -30,6 +30,8 @@ from compass_core.query.rows import (
 from compass_core.query.types import MatchRule, SymbolKind
 
 _SEP = "::"
+_MAX_QUALIFIED_PARTS = 64
+"""Most dotted segments a qualified name may have (deeper nesting is not real code)."""
 _MAX_SUGGESTIONS = 5
 _FUNCTION_QUERY = (
     "MATCH (n:Function) WHERE {where} "
@@ -145,8 +147,14 @@ def _exact_id(db: GraphDB, ref: str, repo_root: Path, allow_file: bool) -> list[
 
 
 def _qualified(db: GraphDB, ref: str, repo_root: Path) -> list[SymbolRef]:
-    """Match ``module.[Class.]name`` by trying every module/tail split of the dotted name."""
+    """Match ``module.[Class.]name`` by trying every module/tail split of the dotted name.
+
+    A name with an empty segment (``a..b``, ``a.``) can match no stored id, and the
+    number of splits is capped, so a long dotted ``ref`` builds no large id list.
+    """
     parts = ref.split(".")
+    if len(parts) > _MAX_QUALIFIED_PARTS or not all(parts):
+        return []
     ids = [
         f"py{_SEP}{'.'.join(parts[:i])}{_SEP}{'.'.join(parts[i:])}" for i in range(1, len(parts))
     ]

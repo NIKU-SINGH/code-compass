@@ -17,6 +17,9 @@ MAX_DEPTH = 10
 MAX_LIMIT = 500
 """Largest allowed result limit."""
 
+MAX_TEXT_LENGTH = 512
+"""Longest allowed search query or symbol reference, in characters."""
+
 
 def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
