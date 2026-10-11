@@ -1,6 +1,6 @@
 "use client";
 
-import { RetryButton } from "@/components/impact/ResultStates";
+import { RetryButton } from "@/components/ui/RetryButton";
 import { useWorkspaceView } from "@/components/shell/useWorkspaceView";
 import { CaveatBanner } from "@/components/ui/CaveatBanner";
 import { InlineError } from "@/components/ui/InlineError";

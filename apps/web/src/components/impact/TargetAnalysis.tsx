@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CaveatBanner } from "@/components/ui/CaveatBanner";
 import { InlineError } from "@/components/ui/InlineError";
+import { RetryButton } from "@/components/ui/RetryButton";
 import { useWorkspaceView } from "@/components/shell/useWorkspaceView";
 import type { ImpactGroup } from "@/lib/api";
 import { DEFAULT_IMPACT_DEPTH, MAX_DEPTH } from "@/lib/limits";
@@ -15,7 +16,6 @@ import {
   IdleHint,
   LoadingRows,
   NotFoundHint,
-  RetryButton,
 } from "./ResultStates";
 import { TargetCard } from "./TargetCard";
 import { TargetPicker } from "./TargetPicker";

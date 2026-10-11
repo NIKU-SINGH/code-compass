@@ -1,5 +1,4 @@
-import { RefreshCw, SearchX } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { SearchX } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SymbolRef } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -107,14 +106,5 @@ export function NotFoundHint({ reference, suggestions, onChoose }: NotFoundHintP
         </>
       )}
     </div>
-  );
-}
-
-export function RetryButton({ onRetry }: { onRetry: () => void }) {
-  return (
-    <Button variant="outline" size="sm" className="cursor-pointer" onClick={onRetry}>
-      <RefreshCw className="size-3.5" aria-hidden />
-      Retry
-    </Button>
   );
 }
