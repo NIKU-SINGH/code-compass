@@ -1,5 +1,3 @@
-import type { LucideIcon } from "lucide-react";
-import { Box, Braces, FileText, Network } from "lucide-react";
 import type { EdgeType, IndexCounts, OverviewResult } from "@/lib/api";
 import type { CompositionEdge, CompositionSegment } from "./GraphComposition";
 
@@ -7,7 +5,8 @@ export interface StatTileData {
   id: string;
   label: string;
   value: number;
-  icon: LucideIcon;
+  detail: string;
+  colorClass: string;
 }
 
 /** value / max as a percentage; 0 when the maximum is 0. */
@@ -25,10 +24,10 @@ export function totalEdges(counts: IndexCounts): number {
 
 export function statTiles(counts: IndexCounts): ReadonlyArray<StatTileData> {
   return [
-    { id: "files", label: "Files", value: counts.files, icon: FileText },
-    { id: "classes", label: "Classes", value: counts.classes, icon: Box },
-    { id: "functions", label: "Functions", value: counts.functions, icon: Braces },
-    { id: "edges", label: "Edges", value: totalEdges(counts), icon: Network },
+    { id: "files", label: "Files", value: counts.files, detail: "Source files indexed", colorClass: "bg-kind-file" },
+    { id: "classes", label: "Classes", value: counts.classes, detail: "Class definitions", colorClass: "bg-kind-class" },
+    { id: "functions", label: "Functions", value: counts.functions, detail: "Including methods", colorClass: "bg-kind-function" },
+    { id: "edges", label: "Edges", value: totalEdges(counts), detail: "Links between symbols", colorClass: "bg-edge-calls" },
   ];
 }
 
@@ -61,18 +60,16 @@ export function compositionEdges(counts: IndexCounts): ReadonlyArray<Composition
   }));
 }
 
-/**
- * Freshness line: "Indexed {date} · {short commit} · {n} changed since".
- * `now` is injectable for testing.
- */
-export function freshnessText(
+/** Freshness facts for the header. `now` is injectable for testing. */
+export function indexFreshness(
   index: OverviewResult["index"],
   now: Date = new Date(),
-): string {
-  const parts = [`Indexed ${relativeTime(new Date(index.indexed_at), now)}`];
-  if (index.indexed_commit) parts.push(index.indexed_commit.slice(0, 7));
-  if (index.stale_file_count > 0) parts.push(`${index.stale_file_count.toLocaleString()} changed since`);
-  return parts.join(" · ");
+): { indexed: string; commit?: string; staleCount: number } {
+  return {
+    indexed: `Indexed ${relativeTime(new Date(index.indexed_at), now)}`,
+    commit: index.indexed_commit ? index.indexed_commit.slice(0, 7) : undefined,
+    staleCount: index.stale_file_count,
+  };
 }
 
 export function relativeTime(then: Date, now: Date): string {

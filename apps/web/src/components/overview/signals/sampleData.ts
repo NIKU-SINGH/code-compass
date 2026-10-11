@@ -1,20 +1,12 @@
 import type {
   AiAuthorshipSignal,
   DeadCodeSignal,
-  IndexHealthSignal,
   OwnershipSignal,
   RefactorSignal,
 } from "./types";
 
 // Placeholder numbers for a fictional repository. The index does not record dead-code analysis
 // or git history yet, so these stand in until it does; the Overview labels them "Sample data".
-
-export const SAMPLE_INDEX_HEALTH: IndexHealthSignal = {
-  totalCalls: 193,
-  resolvedCalls: 171,
-  danglingImports: 3,
-  failedFiles: 1,
-};
 
 export const SAMPLE_DEAD_CODE: DeadCodeSignal = {
   totalSymbols: 149,

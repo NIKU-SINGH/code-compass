@@ -145,13 +145,20 @@ def test_populated_impact_result():
 
 
 def test_overview_result():
-    from compass_core.query.results import IndexCounts, LibraryUsage, OverviewResult, RankedSymbol
+    from compass_core.query.results import (
+        CallResolution,
+        IndexCounts,
+        LibraryUsage,
+        OverviewResult,
+        RankedSymbol,
+    )
     from compass_core.query.types import EdgeType
 
     res = OverviewResult(
         index=_index(),
         caveats=(),
         counts=IndexCounts(files=1, classes=2, functions=3, edges_by_type={EdgeType.CALLS: 55}),
+        call_resolution=CallResolution(total=10, resolved=8),
         entry_points=(),
         most_imported_files=(),
         most_called_functions=(),
@@ -161,6 +168,7 @@ def test_overview_result():
     data = json.loads(to_json(res))
     assert data["operation"] == "OVERVIEW"
     assert data["counts"]["edges_by_type"] == {"CALLS": 55}
+    assert data["call_resolution"] == {"total": 10, "resolved": 8}
     assert data["riskiest_to_change"][0]["count"] == 14
 
 

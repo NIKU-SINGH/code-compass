@@ -9,7 +9,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import { ChartCard } from "./ChartCard";
+import { SectionCard } from "../SectionCard";
 
 export interface TrendSeries {
   id: string;
@@ -65,7 +65,7 @@ export function Trend({ title, description, aside, labels, series, unit = "", ar
   ];
 
   return (
-    <ChartCard title={title} description={description} aside={aside}>
+    <SectionCard title={title} description={description} aside={aside}>
       <ChartContainer config={config} className="aspect-auto w-full" style={{ height: HEIGHT }}>
         {area ? (
           <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -103,6 +103,6 @@ export function Trend({ title, description, aside, labels, series, unit = "", ar
           </LineChart>
         )}
       </ChartContainer>
-    </ChartCard>
+    </SectionCard>
   );
 }

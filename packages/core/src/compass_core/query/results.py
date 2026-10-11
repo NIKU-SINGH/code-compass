@@ -187,12 +187,30 @@ class IndexCounts:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class CallResolution:
+    """How many call sites in the index were tied to a definition.
+
+    Attributes:
+        total: Call sites recorded in function and method bodies.
+        resolved: Call sites whose called name matches a function the caller has a
+            ``CALLS`` or ``CALLS_EXTERN`` edge to.
+
+    Example:
+        ``CallResolution(total=193, resolved=171)`` means 22 calls are unresolved.
+    """
+
+    total: int
+    resolved: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class OverviewResult(ResultHeader):
     """Repository overview.
 
     Attributes:
         operation: Always ``Operation.OVERVIEW``.
         counts: Node and edge totals.
+        call_resolution: Share of call sites the indexer resolved.
         entry_points: Symbols that are entry points.
         most_imported_files: Files ranked by number of importers.
         most_called_functions: Functions ranked by number of callers.
@@ -206,6 +224,7 @@ class OverviewResult(ResultHeader):
 
     operation: Literal[Operation.OVERVIEW] = Operation.OVERVIEW
     counts: IndexCounts
+    call_resolution: CallResolution
     entry_points: tuple[SymbolRef, ...]
     most_imported_files: tuple[RankedSymbol, ...]
     most_called_functions: tuple[RankedSymbol, ...]

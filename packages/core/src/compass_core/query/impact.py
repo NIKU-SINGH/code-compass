@@ -25,7 +25,7 @@ from compass_core.query.status import index_status
 from compass_core.query.types import CaveatCode, RepoPath, SymbolKind
 
 # Every function with raw calls, with the names its resolved CALLS / CALLS_EXTERN reach.
-_RAW_CALLERS = (
+RAW_CALLERS = (
     "MATCH (f:Function) WHERE size(f.raw_calls) > 0 "
     "OPTIONAL MATCH (f)-[:CALLS]->(g:Function) WITH f, collect(g.name) AS internal "
     "OPTIONAL MATCH (f)-[:CALLS_EXTERN]->(x:ExternalFunction) "
@@ -105,7 +105,7 @@ def _unresolved_callers(
         The stored ids of the flagged functions.
     """
     found: set[str] = set()
-    for row in as_rows(db.execute(_RAW_CALLERS)):
+    for row in as_rows(db.execute(RAW_CALLERS)):
         key = text_value(row[0], "id")
         if key == skip_id or text_value(row[4], "file_path") == skip_file:
             continue

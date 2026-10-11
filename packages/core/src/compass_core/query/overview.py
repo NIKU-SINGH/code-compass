@@ -10,15 +10,23 @@ from pathlib import Path
 
 from compass_core.graph.db import GraphDB, Row, as_rows
 from compass_core.index.locate import IndexLocation
+from compass_core.query.impact import RAW_CALLERS, bare_call_name
 from compass_core.query.impact_walk import walk_symbols
 from compass_core.query.models import Caveat, SymbolRef
 from compass_core.query.results import (
+    CallResolution,
     IndexCounts,
     LibraryUsage,
     OverviewResult,
     RankedSymbol,
 )
-from compass_core.query.rows import count_value, file_from_row, function_from_row, text_value
+from compass_core.query.rows import (
+    count_value,
+    file_from_row,
+    function_from_row,
+    text_list_value,
+    text_value,
+)
 from compass_core.query.status import index_status
 from compass_core.query.types import CaveatCode, EdgeType
 
@@ -75,6 +83,17 @@ def _counts(db: GraphDB) -> IndexCounts:
     )
 
 
+def _call_resolution(db: GraphDB) -> CallResolution:
+    """Count call sites, and those whose called name matches a resolved callee of the caller."""
+    total = resolved = 0
+    for row in as_rows(db.execute(RAW_CALLERS)):
+        reached = set(text_list_value(row[2], "name")) | set(text_list_value(row[3], "name"))
+        for raw in text_list_value(row[1], "raw_calls"):
+            total += 1
+            resolved += bare_call_name(raw) in reached
+    return CallResolution(total=total, resolved=resolved)
+
+
 def _riskiest(db: GraphDB, called: list[Row], repo_root: Path) -> tuple[RankedSymbol, ...]:
     """Rank candidates (rows of ``_MOST_CALLED``) by symbols affected at ``RISK_DEPTH``."""
     ranked: list[RankedSymbol] = []
@@ -119,7 +138,10 @@ def overview(db: GraphDB, location: IndexLocation) -> OverviewResult:
 
     Returns:
         An ``OverviewResult``. ``counts.edges_by_type`` has every ``EdgeType`` (zeros
-        included) and ``counts.functions`` counts functions and methods. Each list holds
+        included) and ``counts.functions`` counts functions and methods.
+        ``call_resolution`` counts every call site and those matching a callee the caller
+        has an edge to (a constructor call such as ``User()`` has no edge, so it counts as
+        unresolved). Each list holds
         at most 5 entries: ``entry_points`` are files nobody imports, by path;
         ``most_imported_files`` ranks files by importing files; ``most_called_functions``
         ranks functions and methods by distinct callers; ``top_external_libraries`` ranks
@@ -148,6 +170,7 @@ def overview(db: GraphDB, location: IndexLocation) -> OverviewResult:
         index=status,
         caveats=_caveats(counts, status.stale_file_count),
         counts=counts,
+        call_resolution=_call_resolution(db),
         entry_points=tuple(
             file_from_row(row, repo_root) for row in as_rows(db.execute(_ENTRY_POINTS, limit))
         ),

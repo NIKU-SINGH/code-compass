@@ -1,4 +1,4 @@
-import { Card } from "@/components/ui/card";
+import { SectionCard } from "./SectionCard";
 import { cn } from "@/lib/utils";
 
 export interface CompositionSegment {
@@ -29,14 +29,10 @@ interface Props {
 /** Node mix as one segmented bar with a counted legend, then each edge type with its own bar. */
 export function GraphComposition({ nodeCount, edgeCount, segments, edges }: Props) {
   return (
-    <Card className="flex min-w-0 flex-col gap-4 px-5 py-4 shadow-none">
-      <div className="flex items-baseline gap-3">
-        <h2 className="text-sm font-semibold">Graph composition</h2>
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {nodeCount.toLocaleString()} nodes · {edgeCount.toLocaleString()} edges
-        </span>
-      </div>
-
+    <SectionCard
+      title="Graph composition"
+      aside={`${nodeCount.toLocaleString()} nodes · ${edgeCount.toLocaleString()} edges`}
+    >
       <div className="flex flex-col gap-2.5">
         <div
           role="img"
@@ -71,6 +67,6 @@ export function GraphComposition({ nodeCount, edgeCount, segments, edges }: Prop
           </li>
         ))}
       </ul>
-    </Card>
+    </SectionCard>
   );
 }

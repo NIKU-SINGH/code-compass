@@ -1,13 +1,13 @@
 import type { BarRow } from "../charts/HorizontalBars";
 import type { DonutSegment } from "../charts/Donut";
 import type { HeatColumn, HeatRow } from "../charts/Heatmap";
+import type { CallResolution } from "@/lib/api";
 import type { HealthIssue } from "../IndexHealth";
 import { NEUTRAL_COLOR, SERIES_COLORS } from "../charts/palette";
 import type { TrendSeries } from "../charts/Trend";
 import type {
   AiAuthorshipSignal,
   DeadCodeSignal,
-  IndexHealthSignal,
   OwnershipSignal,
   RefactorEntry,
   RefactorSignal,
@@ -120,15 +120,14 @@ export function ownershipMatrix(o: OwnershipSignal): { columns: HeatColumn[]; ro
   return { columns, rows };
 }
 
-export function resolvedCallPercent(h: IndexHealthSignal): number {
-  return percentOf(h.resolvedCalls, h.totalCalls);
+/** Share of calls resolved; 100 when the code makes no calls, since nothing is missing. */
+export function resolvedCallPercent(c: CallResolution): number {
+  return c.total > 0 ? percentOf(c.resolved, c.total) : 100;
 }
 
-/** What the index could not resolve or read; amber for degraded results, red for failures. */
-export function healthIssues(h: IndexHealthSignal): ReadonlyArray<HealthIssue> {
+/** What the index could not resolve; amber because results are degraded, not failed. */
+export function healthIssues(c: CallResolution): ReadonlyArray<HealthIssue> {
   return [
-    { id: "unresolved", label: "Unresolved calls", count: h.totalCalls - h.resolvedCalls, dotClass: "bg-kind-class" },
-    { id: "dangling", label: "Dangling imports", count: h.danglingImports, dotClass: "bg-kind-class" },
-    { id: "failed", label: "Files that failed to parse", count: h.failedFiles, dotClass: "bg-kind-external" },
+    { id: "unresolved", label: "Unresolved calls", count: c.total - c.resolved, dotClass: "bg-kind-class" },
   ];
 }

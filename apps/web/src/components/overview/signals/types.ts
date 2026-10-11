@@ -1,20 +1,11 @@
 /**
- * Shapes of the four code-health signals shown on the Overview.
+ * Shapes of the code-health signals shown on the Overview.
  *
- * Nothing in the backend produces these yet; `sampleData.ts` is the only source. They are
+ * Index health comes from the overview API. The other four are not produced by the backend
+ * yet; `sampleData.ts` is their only source. They are
  * counts rather than percentages so a real source cannot send inconsistent numbers: every
  * percentage on screen is derived from them.
  */
-
-export interface IndexHealthSignal {
-  /** Call sites seen in the code. */
-  totalCalls: number;
-  /** Call sites the indexer could tie to a definition. */
-  resolvedCalls: number;
-  danglingImports: number;
-  /** Files the parser could not read. */
-  failedFiles: number;
-}
 
 export interface DeadCodeKindCount {
   kind: "function" | "method" | "class";
