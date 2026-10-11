@@ -1,5 +1,7 @@
+import queue
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -14,6 +16,19 @@ _HOLD_WRITER = (
     "print('held', flush=True)\n"
     "time.sleep(30)\n"
 )
+_CHILD_READY_TIMEOUT_S = 20
+
+
+def _first_line(proc: subprocess.Popen[str], timeout: float) -> str:
+    """The child's first stdout line, or fail after ``timeout`` seconds instead of hanging."""
+    lines: queue.Queue[str] = queue.Queue()
+    assert proc.stdout is not None
+    stdout = proc.stdout
+    threading.Thread(target=lambda: lines.put(stdout.readline()), daemon=True).start()
+    try:
+        return lines.get(timeout=timeout)
+    except queue.Empty:
+        pytest.fail(f"child process printed nothing within {timeout} s")
 
 
 def test_initialization(tmp_path: Path) -> None:
@@ -38,8 +53,7 @@ def test_second_process_writer_maps_to_index_busy(tmp_path: Path) -> None:
         [sys.executable, "-c", _HOLD_WRITER, str(path)], stdout=subprocess.PIPE, text=True
     )
     try:
-        assert proc.stdout is not None
-        assert proc.stdout.readline().strip() == "held"
+        assert _first_line(proc, _CHILD_READY_TIMEOUT_S).strip() == "held"
         with pytest.raises(IndexBusyError) as exc:
             GraphDB(path, read_only=True)
         assert exc.value.code is ErrorCode.INDEX_BUSY
@@ -47,7 +61,7 @@ def test_second_process_writer_maps_to_index_busy(tmp_path: Path) -> None:
         assert exc.value.__cause__ is not None
     finally:
         proc.kill()
-        proc.wait()
+        proc.communicate(timeout=10)  # reaps the child and closes its pipes
 
 
 def test_slow_query_maps_to_query_timeout(tmp_path: Path) -> None:
