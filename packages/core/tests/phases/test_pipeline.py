@@ -137,3 +137,29 @@ def test_custom_db_path_keeps_metadata_beside_the_db(tmp_path: Path):
     with GraphDB(location.db_path, read_only=True) as db:
         status = index_status(location, db)
     assert status.repo_root == repo.resolve() and status.stale_file_count == 0
+
+
+def test_indexed_at_is_taken_before_discovery(tmp_path: Path, monkeypatch):
+    """Edits made while a long ingest runs must look stale, so the stamp is the start."""
+    import time
+
+    from compass_core.index.metadata import load_metadata
+    from compass_core.phases.persistence import PersistencePhase
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "a.py").write_text("def run():\n    pass\n")
+    db_path = repo / ".compass" / "graph.ladybug"
+    persistence_started: list[float] = []
+    real_run = PersistencePhase.run
+
+    def slow_run(self, ctx, db):
+        persistence_started.append(time.time())
+        time.sleep(1.1)
+        return real_run(self, ctx, db)
+
+    monkeypatch.setattr("compass_core.phases.pipeline.PersistencePhase.run", slow_run)
+    Pipeline().run(repo, db_path)
+
+    indexed_at = load_metadata(db_path.parent / "metadata.json").indexed_at.timestamp()
+    assert indexed_at <= persistence_started[0]

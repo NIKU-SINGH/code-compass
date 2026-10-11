@@ -48,6 +48,9 @@ class Pipeline:
         stop_after: str | None = None,
         on_phase_complete: Callable[[str, IngestContext], None] | None = None,
     ) -> IngestContext:
+        # Stamp the index with the time the ingest STARTS: a file edited while a long
+        # ingest runs has a later mtime and is reported stale, not silently trusted.
+        started_at = datetime.now(UTC)
         ctx = IngestContext(repo_root=repo_root, reporter=reporter)
 
         phases: dict[str, Phase] = {
@@ -81,7 +84,7 @@ class Pipeline:
         if on_phase_complete is not None:
             on_phase_complete("persistence", ctx)
 
-        _save_metadata(repo_root, metadata_path_for(db_path))
+        _save_metadata(repo_root, metadata_path_for(db_path), started_at)
         return ctx
 
 
@@ -98,7 +101,7 @@ def _remove_db(path: Path) -> None:
             candidate.unlink()
 
 
-def _save_metadata(repo_path: Path, metadata_path: Path) -> None:
+def _save_metadata(repo_path: Path, metadata_path: Path, indexed_at: datetime) -> None:
     """Write the index metadata (commit, time, grammar versions) via IndexMetadata.
 
     Args:
@@ -106,11 +109,12 @@ def _save_metadata(repo_path: Path, metadata_path: Path) -> None:
         metadata_path: Destination beside the database (``metadata_path_for``), so
             ``require_index(..., override=db_path)`` finds it; for the default
             database this is ``<repo>/.compass/metadata.json``.
+        indexed_at: When the ingest started (taken before discovery).
     """
     commit = _get_git_commit(repo_path)
     meta = IndexMetadata(
         indexed_commit=None if commit == "unknown" else commit,
-        indexed_at=datetime.now(UTC),
+        indexed_at=indexed_at,
         schema_version=1,
         grammar_versions={Language(k): v for k, v in _grammar_versions().items()},
     )
