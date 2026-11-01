@@ -23,7 +23,8 @@ from compass_core.query.rows import (
     to_repo_path,
 )
 from compass_core.query.status import index_status
-from compass_core.query.types import SearchMatch, SymbolKind
+from compass_core.query.types import SearchMatch
+from compass_core.shared_types import SymbolKind
 
 _RANK = {match: i for i, match in enumerate(SearchMatch)}
 

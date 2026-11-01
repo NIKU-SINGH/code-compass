@@ -30,8 +30,9 @@ from dataclasses import dataclass
 
 from compass_core.graph.db import GraphDB, as_row
 from compass_core.ir.graph import CallEdge, ExternalCallEdge, ImportEdge, InheritEdge, ResolvedGraph
-from compass_core.ir.models import Definition, DefinitionKind, ParsedFile
+from compass_core.ir.models import Definition, ParsedFile
 from compass_core.progress import ProgressReporter
+from compass_core.shared_types import SymbolKind
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +132,7 @@ def write(
         _write_file(db, pf)
         _node()
         for d in pf.definitions:
-            if d.kind is DefinitionKind.CLASS:
+            if d.kind is SymbolKind.CLASS:
                 _write_class(db, d)
             else:
                 _write_function(db, d, id_to_name)
@@ -237,7 +238,7 @@ def _write_function(db: GraphDB, func: Definition, id_to_name: dict[str, str]) -
         id_to_name: Maps every `Definition.id` in the graph to its short name,
             used to recover the parent class's short name from `func.parent_id`.
     """
-    is_method = func.kind is DefinitionKind.METHOD
+    is_method = func.kind is SymbolKind.METHOD
     parent_class = id_to_name.get(func.parent_id, "") if func.parent_id else ""
     db.execute(
         """
@@ -311,7 +312,7 @@ def _write_contains(db: GraphDB, f: ParsedFile, on_edge: Callable[[], None]) -> 
         on_edge: Callback invoked once for each edge successfully written.
     """
     for d in f.definitions:
-        if d.kind is DefinitionKind.CLASS:
+        if d.kind is SymbolKind.CLASS:
             if _exec(
                 db,
                 "MATCH (a:File {path: $src}), (b:Class {id: $dst}) CREATE (a)-[:CONTAINS]->(b) "
@@ -319,7 +320,7 @@ def _write_contains(db: GraphDB, f: ParsedFile, on_edge: Callable[[], None]) -> 
                 {"src": f.path, "dst": d.id},
             ):
                 on_edge()
-        elif d.kind is DefinitionKind.METHOD:
+        elif d.kind is SymbolKind.METHOD:
             if d.parent_id is not None and _exec(
                 db,
                 "MATCH (a:Class {id: $src}), (b:Function {id: $dst}) CREATE (a)-[:CONTAINS]->(b) "
@@ -403,7 +404,7 @@ def _write_call_edge(db: GraphDB, edge: CallEdge) -> bool:
             "src": edge.caller_id,
             "dst": edge.callee_id,
             "conf": edge.confidence,
-            "ctype": edge.call_type,
+            "ctype": str(edge.call_type),
             "line": edge.line,
         },
     )

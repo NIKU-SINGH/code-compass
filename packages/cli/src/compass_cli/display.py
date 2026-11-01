@@ -16,6 +16,7 @@ from rich.text import Text
 
 from compass_cli.progress import fmt_duration
 from compass_cli.types import IngestSummary
+from compass_core.shared_types import Language
 
 _GOLD = "color(214)"
 
@@ -84,7 +85,7 @@ def phase_header(num: int, total: int, title: str) -> None:
     console.print()
 
 
-def _language_grid(language_counts: dict[str, int]) -> Table:
+def _language_grid(language_counts: dict[Language, int]) -> Table:
     """Lay out a "Languages" label followed by a language -> file-count
     breakdown, three columns wide."""
     grid = Table.grid(padding=(0, 3))

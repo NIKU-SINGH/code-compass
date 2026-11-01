@@ -12,14 +12,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from compass_core.ir.models import ParsedFile
+from compass_core.shared_types import CallType, UnlinkedCall
 
-CONFIDENCE: dict[str, float] = {
-    "DIRECT_IMPORT": 1.0,
-    "RE_EXPORT": 0.8,
-    "MRO": 0.8,
-    "WILDCARD": 0.6,
-    "DYNAMIC": 0.0,
-    "UNRESOLVED": 0.0,
+CONFIDENCE: dict[CallType | UnlinkedCall, float] = {
+    CallType.DIRECT_IMPORT: 1.0,
+    CallType.MODULE_ATTR: 0.9,
+    CallType.RE_EXPORT: 0.8,
+    CallType.MRO: 0.8,
+    UnlinkedCall.WILDCARD: 0.6,
+    UnlinkedCall.DYNAMIC: 0.0,
+    UnlinkedCall.CIRCULAR: 0.0,
+    UnlinkedCall.EXTERNAL: 0.0,
+    UnlinkedCall.UNRESOLVED: 0.0,
 }
 
 
@@ -27,7 +31,7 @@ CONFIDENCE: dict[str, float] = {
 class CallEdge:
     caller_id: str
     callee_id: str
-    call_type: str
+    call_type: CallType
     confidence: float
     line: int = 0
 

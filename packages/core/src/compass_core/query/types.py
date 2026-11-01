@@ -1,7 +1,8 @@
-"""Closed vocabularies and identifier types shared by every query-layer boundary.
+"""Closed vocabularies and identifier types private to the query layer.
 
 Enums are ``StrEnum`` so they serialize as their string value. Identifiers are
 ``NewType`` over ``str`` so a file path cannot be passed where a symbol id is expected.
+Vocabulary shared with parsing and persistence lives in ``compass_core/shared_types.py``.
 """
 
 from __future__ import annotations
@@ -10,48 +11,13 @@ from enum import StrEnum
 from typing import NewType
 
 SymbolId = NewType("SymbolId", str)
-"""Stable node id, e.g. ``"py::compass_core.graph.writer::write"``."""
+"""Public node id, e.g. ``"packages/core/src/compass_core/graph/writer.py::write"``."""
 
 RepoPath = NewType("RepoPath", str)
 """Repo-relative POSIX path, e.g. ``"packages/core/src/compass_core/graph/writer.py"``."""
 
 QualifiedName = NewType("QualifiedName", str)
 """Dotted qualified name, e.g. ``"compass_core.graph.writer.write"``."""
-
-
-class Language(StrEnum):
-    """Supported source languages."""
-
-    PYTHON = "python"
-
-
-class SymbolKind(StrEnum):
-    """Kind of a graph node."""
-
-    FILE = "file"
-    CLASS = "class"
-    FUNCTION = "function"
-    METHOD = "method"
-    EXTERNAL = "external"
-
-
-class EdgeType(StrEnum):
-    """Kind of a graph edge."""
-
-    CONTAINS = "CONTAINS"
-    IMPORTS = "IMPORTS"
-    INHERITS = "INHERITS"
-    CALLS = "CALLS"
-    CALLS_EXTERN = "CALLS_EXTERN"
-
-
-class CallType(StrEnum):
-    """Resolution types that write a ``CALLS`` edge."""
-
-    DIRECT_IMPORT = "DIRECT_IMPORT"
-    MODULE_ATTR = "MODULE_ATTR"
-    RE_EXPORT = "RE_EXPORT"
-    MRO = "MRO"
 
 
 class ViaKind(StrEnum):

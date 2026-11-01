@@ -22,7 +22,8 @@ from compass_core.query.references import ResolvedReference, resolve
 from compass_core.query.results import ImpactGroup, ImpactResult, Lookup
 from compass_core.query.rows import text_list_value, text_value
 from compass_core.query.status import index_status
-from compass_core.query.types import CaveatCode, RepoPath, SymbolKind
+from compass_core.query.types import CaveatCode, RepoPath
+from compass_core.shared_types import SymbolKind
 
 # Every function with raw calls, with the names its resolved CALLS / CALLS_EXTERN reach.
 RAW_CALLERS = (

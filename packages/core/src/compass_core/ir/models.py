@@ -8,13 +8,8 @@ unused kinds speculatively).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 
-
-class DefinitionKind(Enum):
-    CLASS = "class"
-    FUNCTION = "function"
-    METHOD = "method"
+from compass_core.shared_types import CallType, DefinitionKind, Language, UnlinkedCall
 
 
 @dataclass(slots=True)
@@ -55,7 +50,7 @@ class CallSite:
 @dataclass
 class ParsedFile:
     path: str
-    language: str
+    language: Language
     module_name: str
     content_hash: str
     definitions: list[Definition]
@@ -75,6 +70,6 @@ class CallResult:
 
     raw: str
     target_id: str | None  # Definition.id if resolved internally
-    call_type: str
+    call_type: CallType | UnlinkedCall
     confidence: float
     external_library: str | None = None  # set only for EXTERNAL calls

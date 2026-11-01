@@ -28,7 +28,8 @@ from compass_core.query.rows import (
     text_value,
 )
 from compass_core.query.status import index_status
-from compass_core.query.types import CaveatCode, EdgeType
+from compass_core.query.types import CaveatCode
+from compass_core.shared_types import EdgeType
 
 TOP_N = 5
 """Length of every ranked list."""
@@ -72,7 +73,23 @@ def _count(db: GraphDB, query: str) -> int:
     return count_value(rows[0][0]) if rows else 0
 
 
-def _counts(db: GraphDB) -> IndexCounts:
+def index_counts(db: GraphDB) -> IndexCounts:
+    """Count the nodes of an index and its edges of every type.
+
+    Args:
+        db: Open, read-only graph database.
+
+    Returns:
+        The totals. ``edges_by_type`` has every ``EdgeType``, zeros included, and
+        ``functions`` counts functions and methods.
+
+    Raises:
+        IndexIncompatibleError: A stored count is not an integer.
+
+    Example:
+        A repo with one file holding one function has ``files=1``, ``functions=1`` and
+        ``edges_by_type[EdgeType.CONTAINS] == 1``.
+    """
     nodes = {name: _count(db, query) for name, query in _NODE_COUNTS.items()}
     edges = {edge: _count(db, _EDGE_COUNT.format(edge=edge.value)) for edge in EdgeType}
     return IndexCounts(
@@ -81,6 +98,26 @@ def _counts(db: GraphDB) -> IndexCounts:
         functions=nodes["functions"],
         edges_by_type=edges,
     )
+
+
+def entry_points(db: GraphDB, repo_root: Path) -> tuple[SymbolRef, ...]:
+    """List the files nobody imports, by path.
+
+    Args:
+        db: Open, read-only graph database.
+        repo_root: Absolute repository root, used to make paths repo-relative.
+
+    Returns:
+        At most ``TOP_N`` ``FILE`` symbols.
+
+    Raises:
+        IndexIncompatibleError: A stored row is unreadable.
+
+    Example:
+        If ``app/main.py`` imports ``app/auth.py``, only ``app/main.py`` is returned.
+    """
+    rows = as_rows(db.execute(_ENTRY_POINTS, {"limit": TOP_N}))
+    return tuple(file_from_row(row, repo_root) for row in rows)
 
 
 def _call_resolution(db: GraphDB) -> CallResolution:
@@ -163,7 +200,7 @@ def overview(db: GraphDB, location: IndexLocation) -> OverviewResult:
     """
     repo_root = location.repo_root.resolve()
     limit = {"limit": TOP_N}
-    counts = _counts(db)
+    counts = index_counts(db)
     called = as_rows(db.execute(_MOST_CALLED, {"limit": RISK_CANDIDATES}))
     status = index_status(location, db)
     return OverviewResult(
@@ -171,9 +208,7 @@ def overview(db: GraphDB, location: IndexLocation) -> OverviewResult:
         caveats=_caveats(counts, status.stale_file_count),
         counts=counts,
         call_resolution=_call_resolution(db),
-        entry_points=tuple(
-            file_from_row(row, repo_root) for row in as_rows(db.execute(_ENTRY_POINTS, limit))
-        ),
+        entry_points=entry_points(db, repo_root),
         most_imported_files=tuple(
             RankedSymbol(symbol=file_from_row(row, repo_root), count=count_value(row[2]))
             for row in as_rows(db.execute(_MOST_IMPORTED, limit))

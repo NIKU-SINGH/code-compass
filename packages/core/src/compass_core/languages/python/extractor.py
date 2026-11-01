@@ -24,11 +24,13 @@ from pathlib import Path
 import tree_sitter_python as tspython
 from tree_sitter import Language, Node, Parser
 
-from compass_core.ir.models import CallSite, Definition, DefinitionKind, ImportStatement, ParsedFile
+from compass_core.ir.models import CallSite, Definition, ImportStatement, ParsedFile
+from compass_core.shared_types import Language as SourceLanguage
+from compass_core.shared_types import SymbolKind
 
 
 class PythonExtractor:
-    language_id = "python"
+    language_id = SourceLanguage.PYTHON
     file_extensions = {".py"}
 
     def parse(self, source: bytes, file_path: Path) -> ParsedFile:
@@ -49,7 +51,7 @@ class PythonExtractor:
 
         return ParsedFile(
             path=str(file_path),
-            language="python",
+            language=self.language_id,
             module_name=module_name,
             content_hash=content_hash,
             definitions=definitions,
@@ -298,7 +300,7 @@ def _extract_class(
     out_definitions.append(
         Definition(
             id=class_id,
-            kind=DefinitionKind.CLASS,
+            kind=SymbolKind.CLASS,
             name=name,
             file_path=file_path,
             line_start=line_start,
@@ -477,7 +479,7 @@ def _extract_function(
     out_definitions.append(
         Definition(
             id=def_id,
-            kind=DefinitionKind.METHOD if is_method else DefinitionKind.FUNCTION,
+            kind=SymbolKind.METHOD if is_method else SymbolKind.FUNCTION,
             name=name,
             file_path=file_path,
             line_start=line_start,

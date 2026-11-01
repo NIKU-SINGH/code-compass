@@ -20,8 +20,8 @@ from compass_core.query.types import (
     RepoPath,
     SearchMatch,
     SymbolId,
-    SymbolKind,
 )
+from compass_core.shared_types import SymbolKind
 
 
 def _sym() -> SymbolRef:
@@ -108,7 +108,7 @@ def _item():
 
 def test_populated_impact_result():
     from compass_core.query.models import EdgeRef
-    from compass_core.query.types import CallType, EdgeType
+    from compass_core.shared_types import CallType, EdgeType
 
     res = ImpactResult(
         index=_index(),
@@ -152,7 +152,7 @@ def test_overview_result():
         OverviewResult,
         RankedSymbol,
     )
-    from compass_core.query.types import EdgeType
+    from compass_core.shared_types import EdgeType
 
     res = OverviewResult(
         index=_index(),

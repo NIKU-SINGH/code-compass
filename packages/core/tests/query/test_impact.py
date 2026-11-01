@@ -16,14 +16,8 @@ from compass_core.query.results import (
     Lookup,
     SymbolNotFound,
 )
-from compass_core.query.types import (
-    CallType,
-    CaveatCode,
-    EdgeType,
-    MatchRule,
-    SymbolKind,
-    ViaKind,
-)
+from compass_core.query.types import CaveatCode, MatchRule, ViaKind
+from compass_core.shared_types import CallType, EdgeType, SymbolKind
 
 
 def _ok(res: Lookup[ImpactResult]) -> ImpactResult:

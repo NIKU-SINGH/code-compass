@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from compass_core.errors import IndexIncompatibleError
-from compass_core.query.types import Language
+from compass_core.shared_types import Language
 
 SUPPORTED_SCHEMA_VERSION = 1
 

@@ -26,7 +26,7 @@ from compass_core.query.references import ResolvedReference, resolve, stored_pat
 from compass_core.query.results import Lookup, NodeDetail
 from compass_core.query.rows import file_from_row, is_method_flag, symbol_from_row
 from compass_core.query.status import index_status
-from compass_core.query.types import SymbolKind
+from compass_core.shared_types import SymbolKind
 
 _SEP = "::"
 MAX_FILE_BYTES = 512 * 1024

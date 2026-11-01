@@ -18,7 +18,8 @@ from typing import Any
 
 from compass_core.errors import IndexIncompatibleError
 from compass_core.query.models import SymbolRef
-from compass_core.query.types import CallType, QualifiedName, RepoPath, SymbolId, SymbolKind
+from compass_core.query.types import QualifiedName, RepoPath, SymbolId
+from compass_core.shared_types import CallType, SymbolKind
 
 _SEP = "::"
 _CONFIDENCE_DIGITS = 6

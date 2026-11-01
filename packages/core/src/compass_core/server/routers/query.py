@@ -33,8 +33,8 @@ from compass_core.query.results import (
 from compass_core.query.search import find_symbols
 from compass_core.query.serialize import to_json
 from compass_core.query.status import index_status
-from compass_core.query.types import SymbolKind
 from compass_core.settings import settings
+from compass_core.shared_types import SymbolKind
 
 router = APIRouter(tags=["query"])
 

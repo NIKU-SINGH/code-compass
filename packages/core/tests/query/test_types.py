@@ -1,6 +1,7 @@
 import json
 
-from compass_core.query.types import CaveatCode, Language, Outcome, SymbolKind
+from compass_core.query.types import CaveatCode, Outcome
+from compass_core.shared_types import Language, SymbolKind
 
 
 def test_enums_serialize_as_strings():

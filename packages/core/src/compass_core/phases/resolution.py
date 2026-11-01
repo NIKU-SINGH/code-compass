@@ -20,16 +20,12 @@ resolver/call_resolver.py::_resolve_one (not the old docstring's numeric
 order) and its per-raw_call ``try/except Exception`` isolation, which never
 raises and falls back to UNRESOLVED on any internal error.
 
-Confidence values come from ``ir.graph.CONFIDENCE`` where a bucket exists
-(DIRECT_IMPORT, RE_EXPORT, MRO, WILDCARD, DYNAMIC, UNRESOLVED). Two of the old
-call_resolver's buckets have no CONFIDENCE entry and keep their historical
-literal values, same as before the move:
-  - module-attribute calls (``import auth; auth.verify()``) stay at 0.9,
-    distinct from the 1.0 used for bare direct-import calls.
-  - EXTERNAL calls carry no confidence at all (ExternalCallEdge has no
-    confidence field, matching today's behavior).
-CIRCULAR never produces an edge (like UNRESOLVED/WILDCARD/DYNAMIC) so it does
-not need a CONFIDENCE entry either. Note the old code's ``visited`` set is
+Every outcome scores from ``ir.graph.CONFIDENCE``. Module-attribute calls
+(``import auth; auth.verify()``) stay at 0.9, distinct from the 1.0 used for
+bare direct-import calls. EXTERNAL scores 0.0 but the score is dropped, because
+ExternalCallEdge has no confidence field. Only ``CallType`` outcomes produce a
+CALLS edge; ``UnlinkedCall`` outcomes do not (EXTERNAL writes CALLS_EXTERN
+instead). Note the old code's ``visited`` set is
 never actually populated anywhere on the ``_resolve_one`` recursion path --
 CIRCULAR is therefore unreachable via the public ``ResolutionPhase.run``
 entry point today, same as it was via the old ``resolve()`` entry point. This
@@ -58,7 +54,7 @@ values are renamed from the old resolver's vocabulary
 (``RESOLVED``/``POLYMORPHIC``) to names that line up with the
 ``CONFIDENCE`` dict's own keys: ``DIRECT_IMPORT`` (self.method() and bare
 direct-import, both old ``RESOLVED``@1.0), ``MODULE_ATTR`` (old
-``RESOLVED``@0.9, still has no CONFIDENCE bucket -- see above), ``RE_EXPORT``
+``RESOLVED``@0.9), ``RE_EXPORT``
 (old ``RESOLVED``@0.8 via __init__ chain), ``MRO`` (old ``POLYMORPHIC``@0.8).
 ``WILDCARD``, ``DYNAMIC``, ``EXTERNAL``, ``CIRCULAR``, and ``UNRESOLVED``
 keep their old names unchanged. Nothing in-repo branches on the old string
@@ -78,8 +74,9 @@ from compass_core.ir.graph import (
     InheritEdge,
     ResolvedGraph,
 )
-from compass_core.ir.models import CallResult, Definition, DefinitionKind, ParsedFile
+from compass_core.ir.models import CallResult, Definition, ParsedFile
 from compass_core.phases.base import IngestContext
+from compass_core.shared_types import CallType, DefinitionKind, SymbolKind, UnlinkedCall
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +145,7 @@ def _collect_inherit_edges(
     for pf in files:
         file_imports = import_map.get(pf.path, {})
         for defn in pf.definitions:
-            if defn.kind != DefinitionKind.CLASS:
+            if defn.kind != SymbolKind.CLASS:
                 continue
             for base in defn.bases:
                 parent_def = _find_class(base, pf, file_imports, by_path)
@@ -172,12 +169,12 @@ def _collect_call_edges(
     method_index = _build_method_index(files)
     for pf in files:
         for defn in pf.definitions:
-            if defn.kind not in (DefinitionKind.FUNCTION, DefinitionKind.METHOD):
+            if defn.kind not in (SymbolKind.FUNCTION, SymbolKind.METHOD):
                 continue
             results = resolve_calls(defn, pf, symbol_table, import_map, by_path, method_index)
             caller_id = defn.id
             for res in results:
-                if res.call_type == "EXTERNAL" and res.external_library:
+                if res.call_type is UnlinkedCall.EXTERNAL and res.external_library:
                     graph.external_call_edges.append(
                         ExternalCallEdge(
                             caller_id=caller_id,
@@ -185,7 +182,7 @@ def _collect_call_edges(
                             library=res.external_library,
                         )
                     )
-                elif res.target_id is not None:
+                elif isinstance(res.call_type, CallType) and res.target_id is not None:
                     graph.call_edges.append(
                         CallEdge(
                             caller_id=caller_id,
@@ -237,7 +234,10 @@ def resolve_calls(
         except Exception:
             logger.debug("Unexpected error resolving %r in %s", raw, file.path, exc_info=True)
             result = CallResult(
-                raw=raw, target_id=None, call_type="UNRESOLVED", confidence=CONFIDENCE["UNRESOLVED"]
+                raw=raw,
+                target_id=None,
+                call_type=UnlinkedCall.UNRESOLVED,
+                confidence=CONFIDENCE[UnlinkedCall.UNRESOLVED],
             )
         results.append(result)
     return results
@@ -260,7 +260,10 @@ def _resolve_one(
     # Rule 7: dynamic -- check early so we don't try to look up "getattr"
     if "getattr" in raw:
         return CallResult(
-            raw=raw, target_id=None, call_type="DYNAMIC", confidence=CONFIDENCE["DYNAMIC"]
+            raw=raw,
+            target_id=None,
+            call_type=UnlinkedCall.DYNAMIC,
+            confidence=CONFIDENCE[UnlinkedCall.DYNAMIC],
         )
 
     # Rule 1: self.method() -- same-class lookup
@@ -271,8 +274,8 @@ def _resolve_one(
             return CallResult(
                 raw=raw,
                 target_id=symbol_table[target_id],
-                call_type="DIRECT_IMPORT",
-                confidence=CONFIDENCE["DIRECT_IMPORT"],
+                call_type=CallType.DIRECT_IMPORT,
+                confidence=CONFIDENCE[CallType.DIRECT_IMPORT],
             )
 
     # Rule 2: direct import -- bare name imported explicitly
@@ -286,8 +289,8 @@ def _resolve_one(
             return CallResult(
                 raw=raw,
                 target_id=target_id,
-                call_type="DIRECT_IMPORT",
-                confidence=CONFIDENCE["DIRECT_IMPORT"],
+                call_type=CallType.DIRECT_IMPORT,
+                confidence=CONFIDENCE[CallType.DIRECT_IMPORT],
             )
 
     # Rule 3: module attribute -- import auth; auth.verify()
@@ -296,12 +299,15 @@ def _resolve_one(
         if resolved_path is None:
             return _external(raw, head)
         if resolved_path in visited:
-            return CallResult(raw=raw, target_id=None, call_type="CIRCULAR", confidence=0.0)
+            return _circular(raw)
         target_id = _lookup_symbol_in_file(tail, resolved_path, symbol_table, by_path)
         if target_id:
-            # No CONFIDENCE bucket for this rule -- preserved literal 0.9,
-            # distinct from the 1.0 used by direct-import (rule 2).
-            return CallResult(raw=raw, target_id=target_id, call_type="MODULE_ATTR", confidence=0.9)
+            return CallResult(
+                raw=raw,
+                target_id=target_id,
+                call_type=CallType.MODULE_ATTR,
+                confidence=CONFIDENCE[CallType.MODULE_ATTR],
+            )
 
     # Rule 4: __init__ chain -- re-export through a package __init__.py
     init_result = _resolve_via_init(
@@ -323,7 +329,10 @@ def _resolve_one(
     # Rule 6: wildcard import -- can't resolve name but a wildcard import exists
     if _has_wildcard(file):
         return CallResult(
-            raw=raw, target_id=None, call_type="WILDCARD", confidence=CONFIDENCE["WILDCARD"]
+            raw=raw,
+            target_id=None,
+            call_type=UnlinkedCall.WILDCARD,
+            confidence=CONFIDENCE[UnlinkedCall.WILDCARD],
         )
 
     # Rule 8: explicit external -- head is a module-level import not in our repo
@@ -333,7 +342,10 @@ def _resolve_one(
     # Rule 10: unresolved
     logger.debug("Unresolved call %r in %s::%s", raw, file.path, caller.name)
     return CallResult(
-        raw=raw, target_id=None, call_type="UNRESOLVED", confidence=CONFIDENCE["UNRESOLVED"]
+        raw=raw,
+        target_id=None,
+        call_type=UnlinkedCall.UNRESOLVED,
+        confidence=CONFIDENCE[UnlinkedCall.UNRESOLVED],
     )
 
 
@@ -369,7 +381,7 @@ def _resolve_via_init(
     if not resolved_path or not resolved_path.endswith("__init__.py"):
         return None
     if resolved_path in visited:
-        return CallResult(raw=raw, target_id=None, call_type="CIRCULAR", confidence=0.0)
+        return _circular(raw)
 
     symbol = tail or head
     inner_path = import_map.get(resolved_path, {}).get(symbol)
@@ -379,8 +391,8 @@ def _resolve_via_init(
             return CallResult(
                 raw=raw,
                 target_id=target_id,
-                call_type="RE_EXPORT",
-                confidence=CONFIDENCE["RE_EXPORT"],
+                call_type=CallType.RE_EXPORT,
+                confidence=CONFIDENCE[CallType.RE_EXPORT],
             )
     return None
 
@@ -405,8 +417,8 @@ def _resolve_via_mro(
             return CallResult(
                 raw=raw,
                 target_id=symbol_table[target_id],
-                call_type="MRO",
-                confidence=CONFIDENCE["MRO"],
+                call_type=CallType.MRO,
+                confidence=CONFIDENCE[CallType.MRO],
             )
     return None
 
@@ -431,13 +443,11 @@ def _lookup_symbol_in_file(
         return None
 
     parts = name.split(".")
-    current = _find_definition_by_name(
-        pf, parts[0], (DefinitionKind.CLASS, DefinitionKind.FUNCTION)
-    )
+    current = _find_definition_by_name(pf, parts[0], (SymbolKind.CLASS, SymbolKind.FUNCTION))
     if current is None:
         return None
     for part in parts[1:]:
-        current = _find_definition_by_name(pf, part, (DefinitionKind.METHOD,), parent_id=current.id)
+        current = _find_definition_by_name(pf, part, (SymbolKind.METHOD,), parent_id=current.id)
         if current is None:
             return None
 
@@ -492,16 +502,16 @@ def _find_class(
     if resolved_path is not None:
         target_file = by_path.get(resolved_path)
         if target_file is not None:
-            found = _find_definition_by_name(target_file, class_name, (DefinitionKind.CLASS,))
+            found = _find_definition_by_name(target_file, class_name, (SymbolKind.CLASS,))
             if found is not None:
                 return found
 
     for defn in file.definitions:
-        if defn.kind == DefinitionKind.CLASS and defn.name == class_name:
+        if defn.kind == SymbolKind.CLASS and defn.name == class_name:
             return defn
     for pf in by_path.values():
         for defn in pf.definitions:
-            if defn.kind == DefinitionKind.CLASS and defn.name == class_name:
+            if defn.kind == SymbolKind.CLASS and defn.name == class_name:
                 return defn
     return None
 
@@ -530,12 +540,21 @@ def _is_explicit_external(head: str, file: ParsedFile) -> bool:
     return False
 
 
+def _circular(raw: str) -> CallResult:
+    return CallResult(
+        raw=raw,
+        target_id=None,
+        call_type=UnlinkedCall.CIRCULAR,
+        confidence=CONFIDENCE[UnlinkedCall.CIRCULAR],
+    )
+
+
 def _external(raw: str, library: str) -> CallResult:
     return CallResult(
         raw=raw,
         target_id=None,
-        call_type="EXTERNAL",
-        confidence=0.0,
+        call_type=UnlinkedCall.EXTERNAL,
+        confidence=CONFIDENCE[UnlinkedCall.EXTERNAL],
         external_library=library,
     )
 
@@ -548,6 +567,6 @@ def _build_method_index(files: list[ParsedFile]) -> dict[tuple[str, str], str]:
     index: dict[tuple[str, str], str] = {}
     for pf in files:
         for defn in pf.definitions:
-            if defn.kind == DefinitionKind.METHOD and defn.parent_id is not None:
+            if defn.kind == SymbolKind.METHOD and defn.parent_id is not None:
                 index[(defn.parent_id, defn.name)] = defn.id
     return index
