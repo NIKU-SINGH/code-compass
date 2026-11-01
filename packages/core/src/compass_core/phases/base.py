@@ -12,12 +12,13 @@ from compass_core.graph.writer import WriteResult
 from compass_core.ir.graph import ResolvedGraph
 from compass_core.ir.models import ParsedFile
 from compass_core.progress import ProgressReporter
+from compass_core.shared_types import Language
 
 
 @dataclass(slots=True)
 class FileMetadata:
     path: Path
-    language: str
+    language: Language
     content_hash: str
 
 
@@ -30,8 +31,8 @@ class FileManifest:
 
 @dataclass
 class IngestReport:
-    resolved_by_language: dict[str, float]
-    unresolved_by_language: dict[str, float]
+    resolved_by_language: dict[Language, float]
+    unresolved_by_language: dict[Language, float]
     dangling_import_count: int
     orphan_node_count: int
     degraded_file_count: int

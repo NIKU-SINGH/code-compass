@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from compass_core.shared_types import Language
+
 
 @dataclass(frozen=True)
 class IngestSummary:
@@ -21,5 +23,5 @@ class IngestSummary:
     skipped: int
     resolved_pct: float
     orphan_count: int
-    language_counts: dict[str, int]
+    language_counts: dict[Language, int]
     dropped_edges: int = 0

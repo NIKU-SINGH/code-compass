@@ -1,0 +1,86 @@
+"""Layering rules for ``compass_core``: an engine with no adapter inside it.
+
+The CLI, the MCP server and the HTTP server all consume the engine, so the engine may
+not depend on any of them, and the shared vocabulary may not depend on anything.
+"""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+import compass_core
+
+PACKAGE_ROOT = Path(compass_core.__file__).parent
+ADAPTER_DIR = PACKAGE_ROOT / "server"
+
+
+def _engine_sources() -> list[Path]:
+    return [p for p in PACKAGE_ROOT.rglob("*.py") if ADAPTER_DIR not in p.parents]
+
+
+def _imports(path: Path) -> set[str]:
+    modules: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.add(node.module)
+    return modules
+
+
+def _is_under(module: str, parent: str) -> bool:
+    return module == parent or module.startswith(f"{parent}.")
+
+
+def test_engine_never_imports_the_server_or_a_web_framework() -> None:
+    forbidden = ("compass_core.server", "fastapi", "starlette", "uvicorn")
+    offenders = {
+        str(path.relative_to(PACKAGE_ROOT)): module
+        for path in _engine_sources()
+        for module in _imports(path)
+        if any(_is_under(module, f) for f in forbidden)
+    }
+    assert offenders == {}
+
+
+def test_shared_vocabulary_depends_on_nothing_in_the_package() -> None:
+    assert not [
+        m for m in _imports(PACKAGE_ROOT / "shared_types.py") if _is_under(m, "compass_core")
+    ]
+
+
+def test_only_the_query_layer_imports_the_query_layer() -> None:
+    query_dir = PACKAGE_ROOT / "query"
+    offenders = {
+        str(path.relative_to(PACKAGE_ROOT)): module
+        for path in _engine_sources()
+        if query_dir not in path.parents
+        for module in _imports(path)
+        if _is_under(module, "compass_core.query")
+    }
+    assert offenders == {}
+
+
+def test_server_holds_no_graph_queries_or_row_parsing() -> None:
+    offenders: dict[str, str] = {}
+    for path in ADAPTER_DIR.rglob("*.py"):
+        if "query.rows" in " ".join(_imports(path)):
+            offenders[str(path.relative_to(PACKAGE_ROOT))] = "imports query.rows"
+        if ".execute(" in path.read_text(encoding="utf-8"):
+            offenders[str(path.relative_to(PACKAGE_ROOT))] = "runs a query"
+    assert offenders == {}
+
+
+def test_every_enum_name_is_defined_once() -> None:
+    seen: dict[str, str] = {}
+    duplicates: list[str] = []
+    for path in PACKAGE_ROOT.rglob("*.py"):
+        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+            if isinstance(node, ast.ClassDef) and any(
+                isinstance(base, ast.Name) and base.id.endswith("Enum") for base in node.bases
+            ):
+                if node.name in seen:
+                    duplicates.append(node.name)
+                seen[node.name] = str(path)
+    assert duplicates == []

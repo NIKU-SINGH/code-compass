@@ -14,7 +14,7 @@ from compass_core.query.rows import (
     text_list_value,
     to_repo_path,
 )
-from compass_core.query.types import CallType, SymbolKind
+from compass_core.shared_types import CallType, SymbolKind
 
 
 def test_wrong_typed_column_raises_incompatible(tmp_path: Path) -> None:

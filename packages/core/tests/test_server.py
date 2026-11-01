@@ -38,11 +38,10 @@ def test_repo_overview_returns_shape():
     """Overview endpoint returns the expected JSON shape."""
     mock_db = MagicMock()
 
-    def fake_execute(query, **_kwargs):
+    def fake_execute(query, _params=None):
         result = MagicMock()
-        if "count(*)" in query:
-            result.has_next.return_value = True
-            result.get_next.return_value = (10,)
+        if "count(" in query:
+            result.get_all.return_value = [(10,)]
         else:
             # entry points query
             result.get_all.return_value = [
@@ -63,9 +62,9 @@ def test_repo_overview_returns_shape():
     assert data["file_count"] == 10
     assert data["class_count"] == 10
     assert data["function_count"] == 10
-    assert "edge_count" in data
+    assert data["edge_count"] == 50
     assert len(data["entry_points"]) == 2
-    assert data["entry_points"][0]["path"] == "/repo/main.py"
+    assert data["entry_points"][0]["path"] == "main.py"
     assert data["entry_points"][0]["module_name"] == "main"
 
 

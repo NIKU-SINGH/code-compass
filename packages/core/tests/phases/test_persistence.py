@@ -3,15 +3,16 @@ from pathlib import Path
 from compass_core.graph.db import GraphDB
 from compass_core.graph.schema import create_schema
 from compass_core.ir.graph import ResolvedGraph
-from compass_core.ir.models import Definition, DefinitionKind, ParsedFile
+from compass_core.ir.models import Definition, ParsedFile
 from compass_core.phases.base import IngestContext
 from compass_core.phases.persistence import PersistencePhase
+from compass_core.shared_types import SymbolKind
 
 
 def _pf_with_function(path: str, module: str) -> ParsedFile:
     fn = Definition(
         id=f"py::{module}::run",
-        kind=DefinitionKind.FUNCTION,
+        kind=SymbolKind.FUNCTION,
         name="run",
         file_path=path,
         line_start=1,

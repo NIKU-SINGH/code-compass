@@ -1,15 +1,8 @@
 import pytest
 
 from compass_core.query.models import EdgeRef, ResultItem, SymbolRef, Via
-from compass_core.query.types import (
-    CallType,
-    EdgeType,
-    QualifiedName,
-    RepoPath,
-    SymbolId,
-    SymbolKind,
-    ViaKind,
-)
+from compass_core.query.types import QualifiedName, RepoPath, SymbolId, ViaKind
+from compass_core.shared_types import CallType, EdgeType, SymbolKind
 
 
 def _sym(**kw):

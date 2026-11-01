@@ -6,7 +6,7 @@ import pytest
 
 from compass_core.errors import IndexIncompatibleError
 from compass_core.index.metadata import IndexMetadata, load_metadata, save_metadata
-from compass_core.query.types import Language
+from compass_core.shared_types import Language
 
 
 def test_round_trip(tmp_path: Path):

@@ -6,7 +6,7 @@ from compass_core.graph.db import GraphDB
 from compass_core.index.locate import IndexLocation
 from compass_core.query.detail import describe
 from compass_core.query.results import AmbiguousReference, NodeDetail, SymbolNotFound
-from compass_core.query.types import SymbolKind
+from compass_core.shared_types import SymbolKind
 
 
 def _detail(db: GraphDB, loc: IndexLocation, ref: str) -> NodeDetail:

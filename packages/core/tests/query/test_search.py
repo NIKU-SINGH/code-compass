@@ -10,7 +10,8 @@ from compass_core.query.params import SearchParams
 from compass_core.query.references import _fan_in
 from compass_core.query.results import SearchResult
 from compass_core.query.search import find_symbols
-from compass_core.query.types import SearchMatch, SymbolKind
+from compass_core.query.types import SearchMatch
+from compass_core.shared_types import SymbolKind
 
 
 def _find(

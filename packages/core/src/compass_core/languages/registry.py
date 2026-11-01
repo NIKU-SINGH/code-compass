@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from compass_core.errors import UnsupportedLanguageError
 from compass_core.languages.base import ImportResolver, LanguageExtractor
+from compass_core.shared_types import Language
 
 _extractors_by_extension: dict[str, LanguageExtractor] = {}
-_extractors_by_language: dict[str, LanguageExtractor] = {}
-_import_resolvers_by_language: dict[str, ImportResolver] = {}
+_extractors_by_language: dict[Language, LanguageExtractor] = {}
+_import_resolvers_by_language: dict[Language, ImportResolver] = {}
 
 
 def register_extractor(extractor: LanguageExtractor) -> None:
@@ -31,7 +32,7 @@ def get_extractor_for_extension(ext: str) -> LanguageExtractor:
         ) from None
 
 
-def get_extractor_for_language(language_id: str) -> LanguageExtractor:
+def get_extractor_for_language(language_id: Language) -> LanguageExtractor:
     try:
         return _extractors_by_language[language_id]
     except KeyError:
@@ -40,7 +41,7 @@ def get_extractor_for_language(language_id: str) -> LanguageExtractor:
         ) from None
 
 
-def get_import_resolver(language_id: str) -> ImportResolver:
+def get_import_resolver(language_id: Language) -> ImportResolver:
     try:
         return _import_resolvers_by_language[language_id]
     except KeyError:
@@ -54,7 +55,7 @@ def registered_extensions() -> set[str]:
 
 
 def _snapshot_for_tests() -> tuple[
-    dict[str, LanguageExtractor], dict[str, LanguageExtractor], dict[str, ImportResolver]
+    dict[str, LanguageExtractor], dict[Language, LanguageExtractor], dict[Language, ImportResolver]
 ]:
     """Test-only: capture current registry state so it can be restored after a test wipes it."""
     return (
@@ -66,7 +67,9 @@ def _snapshot_for_tests() -> tuple[
 
 def _restore_for_tests(
     snapshot: tuple[
-        dict[str, LanguageExtractor], dict[str, LanguageExtractor], dict[str, ImportResolver]
+        dict[str, LanguageExtractor],
+        dict[Language, LanguageExtractor],
+        dict[Language, ImportResolver],
     ],
 ) -> None:
     """Test-only: restore registry state captured by _snapshot_for_tests."""

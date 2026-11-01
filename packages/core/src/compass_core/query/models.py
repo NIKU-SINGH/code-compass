@@ -11,16 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from compass_core.query.types import (
-    CallType,
-    CaveatCode,
-    EdgeType,
-    QualifiedName,
-    RepoPath,
-    SymbolId,
-    SymbolKind,
-    ViaKind,
-)
+from compass_core.query.types import CaveatCode, QualifiedName, RepoPath, SymbolId, ViaKind
+from compass_core.shared_types import CallType, EdgeType, SymbolKind
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

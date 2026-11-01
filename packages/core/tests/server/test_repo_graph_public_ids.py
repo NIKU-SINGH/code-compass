@@ -11,9 +11,9 @@ from fastapi.testclient import TestClient
 from compass_core.errors import IndexIncompatibleError
 from compass_core.graph.db import GraphDB
 from compass_core.index.locate import IndexLocation
+from compass_core.query import graph_map
 from compass_core.query.references import ResolvedReference, resolve
 from compass_core.server.main import app
-from compass_core.server.routers import repo
 from compass_core.settings import settings
 
 
@@ -51,14 +51,14 @@ def test_malformed_definition_id_is_skipped(
     fixture_index: IndexLocation, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "LADYBUG_DB_PATH", str(fixture_index.db_path))
-    real = repo.public_definition_id
+    real = graph_map.public_definition_id
 
     def flaky(stored_id: str, stored_path: str, root: Any) -> Any:
         if stored_id.endswith("::decode_token"):
             raise IndexIncompatibleError("bad id")
         return real(stored_id, stored_path, root)
 
-    monkeypatch.setattr(repo, "public_definition_id", flaky)
+    monkeypatch.setattr(graph_map, "public_definition_id", flaky)
     response = TestClient(app).get("/api/repo/graph")
     assert response.status_code == 200
     ids = {n["public_id"] for n in response.json()["nodes"]}

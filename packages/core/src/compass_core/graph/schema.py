@@ -119,7 +119,7 @@ _REL_TABLES: list[str] = [
     """,
     # CALLS: Internal function execution flow with metadata.
     #   - confidence (FLOAT): Probability score from the call graph analyzer.
-    #   - call_type (STRING): The nature of the call (e.g., "direct", "dynamic").
+    #   - call_type (STRING): A ``CallType`` value (e.g., "DIRECT_IMPORT", "MRO").
     #   - line (INT64): 1-indexed line number where the call occurs.
     """
     CREATE REL TABLE IF NOT EXISTS CALLS(

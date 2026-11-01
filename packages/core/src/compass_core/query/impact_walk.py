@@ -36,7 +36,8 @@ from compass_core.query.rows import (
     symbol_from_row,
     text_value,
 )
-from compass_core.query.types import EdgeType, SymbolId, SymbolKind, ViaKind
+from compass_core.query.types import SymbolId, ViaKind
+from compass_core.shared_types import EdgeType, SymbolKind
 
 _FN = "{v}.id, {v}.name, {v}.file_path, {v}.line_start, {v}.line_end, {v}.signature, {v}.is_method"
 _CLS = "{v}.id, {v}.name, {v}.file_path, {v}.line_start, {v}.line_end, '' AS {v}_sig"

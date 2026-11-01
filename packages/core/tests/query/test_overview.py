@@ -7,7 +7,8 @@ from compass_core.index.locate import IndexLocation, require_index
 from compass_core.phases.pipeline import Pipeline
 from compass_core.query.overview import overview
 from compass_core.query.results import OverviewResult
-from compass_core.query.types import CaveatCode, EdgeType, SymbolKind
+from compass_core.query.types import CaveatCode
+from compass_core.shared_types import EdgeType, SymbolKind
 
 
 def _build(tmp_path: Path, files: dict[str, str]) -> IndexLocation:

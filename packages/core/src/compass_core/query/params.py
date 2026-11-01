@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from compass_core.errors import InvalidArgumentError
-from compass_core.query.types import SymbolKind
+from compass_core.shared_types import SymbolKind
 
 MAX_DEPTH = 10
 """Largest allowed traversal depth."""

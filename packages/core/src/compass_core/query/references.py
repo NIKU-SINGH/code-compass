@@ -27,7 +27,8 @@ from compass_core.query.rows import (
     is_method_flag,
     symbol_from_row,
 )
-from compass_core.query.types import MatchRule, SymbolKind
+from compass_core.query.types import MatchRule
+from compass_core.shared_types import SymbolKind
 
 _SEP = "::"
 _MAX_QUALIFIED_PARTS = 64

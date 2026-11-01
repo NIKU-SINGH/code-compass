@@ -24,14 +24,14 @@ from compass_core.phases.resolution import ResolutionPhase
 from compass_core.phases.symbol_table import SymbolTablePhase
 from compass_core.phases.validation import ValidationPhase
 from compass_core.progress import ProgressReporter
-from compass_core.query.types import Language
+from compass_core.shared_types import Language
 
 logger = logging.getLogger(__name__)
 
 _PHASE_ORDER = ["discovery", "parse", "symbol_table", "resolution", "validation", "persistence"]
 
-_GRAMMAR_PACKAGES: dict[str, str] = {
-    "python": "tree-sitter-python",
+_GRAMMAR_PACKAGES: dict[Language, str] = {
+    Language.PYTHON: "tree-sitter-python",
 }
 
 
@@ -116,7 +116,7 @@ def _save_metadata(repo_path: Path, metadata_path: Path, indexed_at: datetime) -
         indexed_commit=None if commit == "unknown" else commit,
         indexed_at=indexed_at,
         schema_version=1,
-        grammar_versions={Language(k): v for k, v in _grammar_versions().items()},
+        grammar_versions=_grammar_versions(),
     )
     save_metadata(metadata_path, meta)
     logger.debug("Metadata written: %s", meta)
@@ -139,11 +139,11 @@ def _get_git_commit(repo_path: Path) -> str:
     return "unknown"
 
 
-def _grammar_versions() -> dict[str, str]:
+def _grammar_versions() -> dict[Language, str]:
     """Pin the installed grammar package version for every registered
     language — an unpinned grammar version means incremental diffing would
     trust stale data unknowingly."""
-    versions: dict[str, str] = {}
+    versions: dict[Language, str] = {}
     for language_id, package in _GRAMMAR_PACKAGES.items():
         try:
             versions[language_id] = version(package)

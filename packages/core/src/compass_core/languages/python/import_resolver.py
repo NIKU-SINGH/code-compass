@@ -12,10 +12,11 @@ a parent of it.
 from __future__ import annotations
 
 from compass_core.ir.models import ParsedFile
+from compass_core.shared_types import Language
 
 
 class PythonImportResolver:
-    language_id = "python"
+    language_id = Language.PYTHON
 
     def resolve(self, files: list[ParsedFile]) -> dict[str, dict[str, str | None]]:
         module_to_path = _module_index(files)
