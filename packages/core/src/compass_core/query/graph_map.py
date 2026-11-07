@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from compass_core.contract.types import SymbolId
 from compass_core.errors import IndexIncompatibleError
 from compass_core.graph.db import GraphDB, as_rows
 from compass_core.query.rows import (
@@ -18,7 +19,6 @@ from compass_core.query.rows import (
     public_file_id,
     text_value,
 )
-from compass_core.query.types import SymbolId
 from compass_core.shared_types import EdgeType, SymbolKind
 
 logger = logging.getLogger(__name__)

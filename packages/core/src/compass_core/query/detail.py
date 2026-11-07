@@ -19,11 +19,11 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+from compass_core.contract.models import SymbolRef
+from compass_core.contract.results import Lookup, NodeDetail
 from compass_core.graph.db import GraphDB, QueryParams, as_rows
 from compass_core.index.locate import IndexLocation
-from compass_core.query.models import SymbolRef
 from compass_core.query.references import ResolvedReference, resolve, stored_paths
-from compass_core.query.results import Lookup, NodeDetail
 from compass_core.query.rows import file_from_row, is_method_flag, symbol_from_row
 from compass_core.query.status import index_status
 from compass_core.shared_types import SymbolKind

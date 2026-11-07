@@ -3,14 +3,14 @@ from pathlib import Path
 import pytest
 
 import compass_core.languages.python  # noqa: F401
+from compass_core.contract.params import SearchParams
+from compass_core.contract.results import SearchResult
+from compass_core.contract.types import SearchMatch
 from compass_core.graph.db import GraphDB
 from compass_core.index.locate import IndexLocation, require_index
 from compass_core.phases.pipeline import Pipeline
-from compass_core.query.params import SearchParams
 from compass_core.query.references import _fan_in
-from compass_core.query.results import SearchResult
 from compass_core.query.search import find_symbols
-from compass_core.query.types import SearchMatch
 from compass_core.shared_types import SymbolKind
 
 

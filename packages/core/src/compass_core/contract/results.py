@@ -11,8 +11,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal, TypeAlias, TypeVar
 
-from compass_core.query.models import Caveat, EdgeRef, IndexStatus, ResultItem, SymbolRef
-from compass_core.query.types import MatchRule, Operation, Outcome, RepoPath, SearchMatch
+from compass_core.contract.models import Caveat, EdgeRef, IndexStatus, ResultItem, SymbolRef
+from compass_core.contract.types import MatchRule, Operation, Outcome, RepoPath, SearchMatch
 from compass_core.shared_types import EdgeType, SymbolKind
 
 

@@ -8,21 +8,16 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Response
 
-from compass_core.graph.db import GraphDB
-from compass_core.index.locate import IndexLocation, require_index
-from compass_core.query.detail import describe
-from compass_core.query.errors import ErrorResponse
-from compass_core.query.impact import impact
-from compass_core.query.models import IndexStatus
-from compass_core.query.overview import overview
-from compass_core.query.params import (
+from compass_core.contract.errors import ErrorResponse
+from compass_core.contract.models import IndexStatus
+from compass_core.contract.params import (
     MAX_DEPTH,
     MAX_LIMIT,
     MAX_TEXT_LENGTH,
     ImpactParams,
     SearchParams,
 )
-from compass_core.query.results import (
+from compass_core.contract.results import (
     AmbiguousReference,
     ImpactResult,
     NodeDetail,
@@ -30,8 +25,13 @@ from compass_core.query.results import (
     SearchResult,
     SymbolNotFound,
 )
+from compass_core.contract.serialize import to_json
+from compass_core.graph.db import GraphDB
+from compass_core.index.locate import IndexLocation, require_index
+from compass_core.query.detail import describe
+from compass_core.query.impact import impact
+from compass_core.query.overview import overview
 from compass_core.query.search import find_symbols
-from compass_core.query.serialize import to_json
 from compass_core.query.status import index_status
 from compass_core.settings import settings
 from compass_core.shared_types import SymbolKind

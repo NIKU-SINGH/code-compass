@@ -4,19 +4,19 @@ from pathlib import Path
 import pytest
 
 import compass_core.languages.python  # noqa: F401
-from compass_core.errors import InvalidArgumentError
-from compass_core.graph.db import GraphDB
-from compass_core.index.locate import IndexLocation, require_index
-from compass_core.phases.pipeline import Pipeline
-from compass_core.query.impact import bare_call_name, impact
-from compass_core.query.params import ImpactParams
-from compass_core.query.results import (
+from compass_core.contract.params import ImpactParams
+from compass_core.contract.results import (
     AmbiguousReference,
     ImpactResult,
     Lookup,
     SymbolNotFound,
 )
-from compass_core.query.types import CaveatCode, MatchRule, ViaKind
+from compass_core.contract.types import CaveatCode, MatchRule, ViaKind
+from compass_core.errors import InvalidArgumentError
+from compass_core.graph.db import GraphDB
+from compass_core.index.locate import IndexLocation, require_index
+from compass_core.phases.pipeline import Pipeline
+from compass_core.query.impact import bare_call_name, impact
 from compass_core.shared_types import CallType, EdgeType, SymbolKind
 
 

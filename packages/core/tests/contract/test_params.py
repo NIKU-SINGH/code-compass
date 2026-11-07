@@ -1,7 +1,7 @@
 import pytest
 
+from compass_core.contract.params import MAX_DEPTH, MAX_LIMIT, ImpactParams, SearchParams
 from compass_core.errors import InvalidArgumentError
-from compass_core.query.params import MAX_DEPTH, MAX_LIMIT, ImpactParams, SearchParams
 
 
 @pytest.mark.parametrize("depth", [0, MAX_DEPTH + 1, -1])

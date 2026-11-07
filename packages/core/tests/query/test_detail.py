@@ -2,10 +2,10 @@ from dataclasses import replace
 
 import pytest
 
+from compass_core.contract.results import AmbiguousReference, NodeDetail, SymbolNotFound
 from compass_core.graph.db import GraphDB
 from compass_core.index.locate import IndexLocation
 from compass_core.query.detail import describe
-from compass_core.query.results import AmbiguousReference, NodeDetail, SymbolNotFound
 from compass_core.shared_types import SymbolKind
 
 
@@ -92,7 +92,7 @@ def test_ambiguous_bare_name_is_reported(fixture_db: GraphDB, fixture_index: Ind
 def test_result_is_json_serialisable(
     fixture_db: GraphDB, fixture_index: IndexLocation, ref: str
 ) -> None:
-    from compass_core.query.serialize import to_json
+    from compass_core.contract.serialize import to_json
 
     assert to_json(_detail(fixture_db, fixture_index, ref)).startswith("{")
 

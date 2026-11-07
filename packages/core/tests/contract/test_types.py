@@ -1,6 +1,6 @@
 import json
 
-from compass_core.query.types import CaveatCode, Outcome
+from compass_core.contract.types import CaveatCode, Outcome
 from compass_core.shared_types import Language, SymbolKind
 
 

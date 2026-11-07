@@ -3,7 +3,7 @@
 Parsing, resolution, persistence and the query layer all describe the same graph, so
 the words they use for it live here, once. This module imports nothing from the package
 and sits below every other one. A type used by a single layer belongs in that layer,
-e.g. ``query/types.py``.
+e.g. ``contract/types.py``.
 
 Enums are ``StrEnum`` so they serialize as their string value and compare equal to it.
 """

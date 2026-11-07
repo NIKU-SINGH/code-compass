@@ -13,16 +13,16 @@ from collections.abc import Iterable, Sequence
 from itertools import groupby
 from pathlib import Path
 
+from compass_core.contract.models import Caveat, EdgeRef, ResultItem, SymbolRef
+from compass_core.contract.params import ImpactParams
+from compass_core.contract.results import ImpactGroup, ImpactResult, Lookup
+from compass_core.contract.types import CaveatCode, RepoPath
 from compass_core.graph.db import GraphDB, as_rows
 from compass_core.index.locate import IndexLocation
 from compass_core.query.impact_walk import Walk, stored_target_key, walk_files, walk_symbols
-from compass_core.query.models import Caveat, EdgeRef, ResultItem, SymbolRef
-from compass_core.query.params import ImpactParams
 from compass_core.query.references import ResolvedReference, resolve
-from compass_core.query.results import ImpactGroup, ImpactResult, Lookup
 from compass_core.query.rows import text_list_value, text_value
 from compass_core.query.status import index_status
-from compass_core.query.types import CaveatCode, RepoPath
 from compass_core.shared_types import SymbolKind
 
 # Every function with raw calls, with the names its resolved CALLS / CALLS_EXTERN reach.

@@ -62,6 +62,38 @@ def test_only_the_query_layer_imports_the_query_layer() -> None:
     assert offenders == {}
 
 
+def test_contract_depends_only_on_the_shared_vocabulary_and_errors() -> None:
+    allowed = ("compass_core.contract", "compass_core.shared_types", "compass_core.errors")
+    offenders = {
+        str(path.relative_to(PACKAGE_ROOT)): module
+        for path in (PACKAGE_ROOT / "contract").rglob("*.py")
+        for module in _imports(path)
+        if _is_under(module, "compass_core") and not any(_is_under(module, a) for a in allowed)
+    }
+    assert offenders == {}
+
+
+def test_index_never_imports_the_query_layer() -> None:
+    offenders = {
+        str(path.relative_to(PACKAGE_ROOT)): module
+        for path in (PACKAGE_ROOT / "index").rglob("*.py")
+        for module in _imports(path)
+        if _is_under(module, "compass_core.query")
+    }
+    assert offenders == {}
+
+
+def test_only_the_query_layer_and_ingest_run_graph_queries() -> None:
+    may_query = (PACKAGE_ROOT / "query", PACKAGE_ROOT / "graph", PACKAGE_ROOT / "phases")
+    offenders = [
+        str(path.relative_to(PACKAGE_ROOT))
+        for path in PACKAGE_ROOT.rglob("*.py")
+        if not any(d in path.parents for d in may_query)
+        and ".execute(" in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []
+
+
 def test_server_holds_no_graph_queries_or_row_parsing() -> None:
     offenders: dict[str, str] = {}
     for path in ADAPTER_DIR.rglob("*.py"):

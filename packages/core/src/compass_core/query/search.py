@@ -10,11 +10,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from compass_core.contract.models import SymbolRef
+from compass_core.contract.params import SearchParams
+from compass_core.contract.results import SearchHit, SearchResult
+from compass_core.contract.types import SearchMatch
 from compass_core.graph.db import GraphDB, QueryParams, as_rows
 from compass_core.index.locate import IndexLocation
-from compass_core.query.models import SymbolRef
-from compass_core.query.params import SearchParams
-from compass_core.query.results import SearchHit, SearchResult
 from compass_core.query.rows import (
     count_value,
     file_from_row,
@@ -23,7 +24,6 @@ from compass_core.query.rows import (
     to_repo_path,
 )
 from compass_core.query.status import index_status
-from compass_core.query.types import SearchMatch
 from compass_core.shared_types import SymbolKind
 
 _RANK = {match: i for i, match in enumerate(SearchMatch)}

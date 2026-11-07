@@ -1,5 +1,6 @@
 import pytest
 
+from compass_core.contract.errors import ERROR_MAPPINGS, ErrorDetail, to_error_response
 from compass_core.errors import (
     ErrorCode,
     IndexBusyError,
@@ -8,7 +9,6 @@ from compass_core.errors import (
     InvalidArgumentError,
     QueryTimeoutError,
 )
-from compass_core.query.errors import ERROR_MAPPINGS, ErrorDetail, to_error_response
 
 
 def test_mappings_cover_every_error_code():
