@@ -1,8 +1,8 @@
+from compass_core.contract.results import AmbiguousReference, SymbolNotFound
+from compass_core.contract.types import MatchRule
 from compass_core.graph.db import GraphDB
 from compass_core.index.locate import IndexLocation
 from compass_core.query.references import ResolvedReference, resolve
-from compass_core.query.results import AmbiguousReference, SymbolNotFound
-from compass_core.query.types import MatchRule
 from compass_core.shared_types import SymbolKind
 
 

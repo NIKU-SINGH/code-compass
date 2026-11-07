@@ -1,4 +1,4 @@
-"""Closed vocabularies and identifier types private to the query layer.
+"""Closed vocabularies and identifier types of the query contract.
 
 Enums are ``StrEnum`` so they serialize as their string value. Identifiers are
 ``NewType`` over ``str`` so a file path cannot be passed where a symbol id is expected.

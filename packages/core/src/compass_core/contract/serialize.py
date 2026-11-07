@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pydantic import TypeAdapter
 
-from compass_core.query.errors import ErrorResponse
-from compass_core.query.results import (
+from compass_core.contract.errors import ErrorResponse
+from compass_core.contract.results import (
     AmbiguousReference,
     ImpactResult,
     NodeDetail,

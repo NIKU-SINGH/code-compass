@@ -17,9 +17,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from compass_core.contract.models import SymbolRef
+from compass_core.contract.results import AmbiguousReference, Lookup, SymbolNotFound
+from compass_core.contract.types import MatchRule
 from compass_core.graph.db import GraphDB, QueryParams, as_rows
-from compass_core.query.models import SymbolRef
-from compass_core.query.results import AmbiguousReference, Lookup, SymbolNotFound
 from compass_core.query.rows import (
     count_value,
     external_from_row,
@@ -27,7 +28,6 @@ from compass_core.query.rows import (
     is_method_flag,
     symbol_from_row,
 )
-from compass_core.query.types import MatchRule
 from compass_core.shared_types import SymbolKind
 
 _SEP = "::"

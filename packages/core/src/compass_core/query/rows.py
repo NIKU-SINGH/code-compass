@@ -16,9 +16,9 @@ from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from compass_core.contract.models import SymbolRef
+from compass_core.contract.types import QualifiedName, RepoPath, SymbolId
 from compass_core.errors import IndexIncompatibleError
-from compass_core.query.models import SymbolRef
-from compass_core.query.types import QualifiedName, RepoPath, SymbolId
 from compass_core.shared_types import CallType, SymbolKind
 
 _SEP = "::"

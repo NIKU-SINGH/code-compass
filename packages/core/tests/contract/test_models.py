@@ -1,7 +1,7 @@
 import pytest
 
-from compass_core.query.models import EdgeRef, ResultItem, SymbolRef, Via
-from compass_core.query.types import QualifiedName, RepoPath, SymbolId, ViaKind
+from compass_core.contract.models import EdgeRef, ResultItem, SymbolRef, Via
+from compass_core.contract.types import QualifiedName, RepoPath, SymbolId, ViaKind
 from compass_core.shared_types import CallType, EdgeType, SymbolKind
 
 
@@ -146,7 +146,7 @@ def _status(**kw):
     from datetime import UTC, datetime
     from pathlib import Path
 
-    from compass_core.query.models import IndexStatus
+    from compass_core.contract.models import IndexStatus
 
     base = dict(
         repo_root=Path("/repo"),

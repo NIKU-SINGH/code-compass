@@ -10,14 +10,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from compass_core.errors import ErrorCode, IndexBusyError, QueryError
-from compass_core.query.errors import (
+from compass_core.contract.errors import (
     ERROR_MAPPINGS,
     ErrorDetail,
     ErrorResponse,
     to_error_response,
 )
-from compass_core.query.serialize import to_json
+from compass_core.contract.serialize import to_json
+from compass_core.errors import ErrorCode, IndexBusyError, QueryError
 
 logger = logging.getLogger(__name__)
 

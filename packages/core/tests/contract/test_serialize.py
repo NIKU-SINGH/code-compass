@@ -2,18 +2,17 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from compass_core.errors import ErrorCode
-from compass_core.query.errors import ErrorResponse
-from compass_core.query.models import Caveat, IndexStatus, SymbolRef
-from compass_core.query.results import (
+from compass_core.contract.errors import ErrorResponse
+from compass_core.contract.models import Caveat, IndexStatus, SymbolRef
+from compass_core.contract.results import (
     ImpactGroup,
     ImpactResult,
     SearchHit,
     SearchResult,
     SymbolNotFound,
 )
-from compass_core.query.serialize import to_json
-from compass_core.query.types import (
+from compass_core.contract.serialize import to_json
+from compass_core.contract.types import (
     CaveatCode,
     MatchRule,
     QualifiedName,
@@ -21,6 +20,7 @@ from compass_core.query.types import (
     SearchMatch,
     SymbolId,
 )
+from compass_core.errors import ErrorCode
 from compass_core.shared_types import SymbolKind
 
 
@@ -95,8 +95,8 @@ def test_error_response_serializes():
 
 
 def _item():
-    from compass_core.query.models import ResultItem, Via
-    from compass_core.query.types import ViaKind
+    from compass_core.contract.models import ResultItem, Via
+    from compass_core.contract.types import ViaKind
 
     return ResultItem(
         symbol=_sym(),
@@ -107,7 +107,7 @@ def _item():
 
 
 def test_populated_impact_result():
-    from compass_core.query.models import EdgeRef
+    from compass_core.contract.models import EdgeRef
     from compass_core.shared_types import CallType, EdgeType
 
     res = ImpactResult(
@@ -145,7 +145,7 @@ def test_populated_impact_result():
 
 
 def test_overview_result():
-    from compass_core.query.results import (
+    from compass_core.contract.results import (
         CallResolution,
         IndexCounts,
         LibraryUsage,
@@ -173,7 +173,7 @@ def test_overview_result():
 
 
 def test_ambiguous_reference():
-    from compass_core.query.results import AmbiguousReference
+    from compass_core.contract.results import AmbiguousReference
 
     data = json.loads(to_json(AmbiguousReference(reference="f", candidates=(_sym(), _sym()))))
     assert data["outcome"] == "ambiguous"
@@ -183,7 +183,7 @@ def test_ambiguous_reference():
 def test_adapters_build_for_every_public_type():
     from pydantic import TypeAdapter
 
-    from compass_core.query import results
+    from compass_core.contract import results
 
     for tp in (
         results.SearchResult,

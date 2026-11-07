@@ -23,9 +23,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from compass_core.contract.models import EdgeRef, ResultItem, SymbolRef, Via
+from compass_core.contract.types import SymbolId, ViaKind
 from compass_core.errors import IndexIncompatibleError
 from compass_core.graph.db import GraphDB, QueryParams, Row, as_rows
-from compass_core.query.models import EdgeRef, ResultItem, SymbolRef, Via
 from compass_core.query.references import stored_paths
 from compass_core.query.rows import (
     call_type_value,
@@ -36,7 +37,6 @@ from compass_core.query.rows import (
     symbol_from_row,
     text_value,
 )
-from compass_core.query.types import SymbolId, ViaKind
 from compass_core.shared_types import EdgeType, SymbolKind
 
 _FN = "{v}.id, {v}.name, {v}.file_path, {v}.line_start, {v}.line_end, {v}.signature, {v}.is_method"

@@ -8,18 +8,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from compass_core.graph.db import GraphDB, Row, as_rows
-from compass_core.index.locate import IndexLocation
-from compass_core.query.impact import RAW_CALLERS, bare_call_name
-from compass_core.query.impact_walk import walk_symbols
-from compass_core.query.models import Caveat, SymbolRef
-from compass_core.query.results import (
+from compass_core.contract.models import Caveat, SymbolRef
+from compass_core.contract.results import (
     CallResolution,
     IndexCounts,
     LibraryUsage,
     OverviewResult,
     RankedSymbol,
 )
+from compass_core.contract.types import CaveatCode
+from compass_core.graph.db import GraphDB, Row, as_rows
+from compass_core.index.locate import IndexLocation
+from compass_core.query.impact import RAW_CALLERS, bare_call_name
+from compass_core.query.impact_walk import walk_symbols
 from compass_core.query.rows import (
     count_value,
     file_from_row,
@@ -28,7 +29,6 @@ from compass_core.query.rows import (
     text_value,
 )
 from compass_core.query.status import index_status
-from compass_core.query.types import CaveatCode
 from compass_core.shared_types import EdgeType
 
 TOP_N = 5

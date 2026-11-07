@@ -2,12 +2,12 @@ import os
 from pathlib import Path
 
 import compass_core.languages.python  # noqa: F401
+from compass_core.contract.results import OverviewResult
+from compass_core.contract.types import CaveatCode
 from compass_core.graph.db import GraphDB
 from compass_core.index.locate import IndexLocation, require_index
 from compass_core.phases.pipeline import Pipeline
 from compass_core.query.overview import overview
-from compass_core.query.results import OverviewResult
-from compass_core.query.types import CaveatCode
 from compass_core.shared_types import EdgeType, SymbolKind
 
 
