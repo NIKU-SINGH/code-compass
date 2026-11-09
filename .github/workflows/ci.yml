@@ -74,8 +74,28 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install Python dependencies
+        run: uv sync --all-packages --all-groups --locked
+
+      - name: Generated API types and limits are up to date
+        run: |
+          make gen-api
+          git diff --exit-code apps/web/src/lib/api-types.ts apps/web/src/lib/limits.ts
+
       - name: Type check
         run: pnpm exec tsc --noEmit
+        working-directory: apps/web
+
+      - name: Test
+        run: pnpm test
         working-directory: apps/web
 
       - name: Build

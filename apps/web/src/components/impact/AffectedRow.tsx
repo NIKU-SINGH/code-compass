@@ -18,7 +18,7 @@ function confidenceCell(item: ResultItem): { text: string; title: string } {
   const c = item.min_confidence;
   if (c !== null) return { text: c.toFixed(2), title: `Minimum edge confidence ${c.toFixed(2)}` };
   const kind = item.via?.kind;
-  if (kind === "IMPORTS" || kind === "IMPORTED_BY") {
+  if (kind === "IMPORTS") {
     return { text: "import", title: "Import dependency (not a call)" };
   }
   return { text: "—", title: "Confidence unknown" };

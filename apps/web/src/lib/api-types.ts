@@ -24,40 +24,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/repo/overview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Repo Overview */
-        get: operations["repo_overview_api_repo_overview_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/repo/graph": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Repo Graph */
-        get: operations["repo_graph_api_repo_graph_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/search": {
         parameters: {
             query?: never;
@@ -158,6 +124,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/graph/map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Graph
+         * @description Every file, class, function and method, and the edges between them, for drawing.
+         */
+        get: operations["graph_api_graph_map_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -184,7 +170,13 @@ export interface components {
         };
         /**
          * CallType
-         * @description Resolution types that write a ``CALLS`` edge.
+         * @description How a call resolved to an indexed function; each value writes a ``CALLS`` edge.
+         *
+         *     Attributes:
+         *         DIRECT_IMPORT: A bare imported name, or ``self.method()`` on the same class.
+         *         MODULE_ATTR: An attribute of an imported module, e.g. ``auth.verify()``.
+         *         RE_EXPORT: A name re-exported through a package ``__init__.py``.
+         *         MRO: A method inherited from a base class.
          * @enum {string}
          */
         CallType: "DIRECT_IMPORT" | "MODULE_ATTR" | "RE_EXPORT" | "MRO";
@@ -198,10 +190,10 @@ export interface components {
         };
         /**
          * CaveatCode
-         * @description Reasons an answer may be incomplete.
+         * @description Reasons an answer may be incomplete; only codes the query layer emits.
          * @enum {string}
          */
-        CaveatCode: "STALE_INDEX" | "UNRESOLVED_CALLS" | "DEGRADED_FILES" | "TRUNCATED" | "DEPTH_LIMIT_REACHED";
+        CaveatCode: "STALE_INDEX" | "UNRESOLVED_CALLS";
         /** EdgeRef */
         EdgeRef: {
             /** Source Id */
@@ -217,17 +209,10 @@ export interface components {
         };
         /**
          * EdgeType
-         * @description Kind of a graph edge.
+         * @description Kind of a graph edge; each value is a relationship table in ``graph/schema.py``.
          * @enum {string}
          */
         EdgeType: "CONTAINS" | "IMPORTS" | "INHERITS" | "CALLS" | "CALLS_EXTERN";
-        /** EntryPoint */
-        EntryPoint: {
-            /** Path */
-            path: string;
-            /** Module Name */
-            module_name: string;
-        };
         /**
          * ErrorCode
          * @description Machine-readable failure codes shared by the API, CLI and MCP adapters.
@@ -249,36 +234,12 @@ export interface components {
             /** Details */
             details: components["schemas"]["ErrorDetail"][];
         };
-        /** GraphEdge */
-        GraphEdge: {
-            /** Id */
-            id: string;
-            /** Source */
-            source: string;
-            /** Target */
-            target: string;
-            /** Type */
-            type: string;
-        };
-        /** GraphNode */
-        GraphNode: {
-            /** Id */
-            id: string;
-            /** Label */
-            label: string;
-            /** Type */
-            type: string;
-            /** File Path */
-            file_path: string;
-            /** Public Id */
-            public_id: string;
-        };
-        /** GraphResponse */
-        GraphResponse: {
+        /** GraphMap */
+        GraphMap: {
             /** Nodes */
-            nodes: components["schemas"]["GraphNode"][];
+            nodes: components["schemas"]["MapNode"][];
             /** Edges */
-            edges: components["schemas"]["GraphEdge"][];
+            edges: components["schemas"]["MapEdge"][];
         };
         /** ImpactGroup */
         ImpactGroup: {
@@ -362,6 +323,26 @@ export interface components {
             /** Call Count */
             call_count: number;
         };
+        /** MapEdge */
+        MapEdge: {
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+            type: components["schemas"]["EdgeType"];
+        };
+        /** MapNode */
+        MapNode: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            kind: components["schemas"]["SymbolKind"];
+            /** File Path */
+            file_path: string;
+            /** Public Id */
+            public_id: string;
+        };
         /**
          * MatchRule
          * @description Symbol resolution rules, in the order they are tried.
@@ -404,21 +385,6 @@ export interface components {
             imported_by: components["schemas"]["SymbolRef"][];
             /** Truncated */
             truncated: boolean;
-        };
-        /** OverviewResponse */
-        OverviewResponse: {
-            /** Project Id */
-            project_id: string;
-            /** File Count */
-            file_count: number;
-            /** Class Count */
-            class_count: number;
-            /** Function Count */
-            function_count: number;
-            /** Edge Count */
-            edge_count: number;
-            /** Entry Points */
-            entry_points: components["schemas"]["EntryPoint"][];
         };
         /** OverviewResult */
         OverviewResult: {
@@ -551,10 +517,13 @@ export interface components {
         };
         /**
          * ViaKind
-         * @description Relationship through which a node was reached.
+         * @description Relationship through which an impact item was reached from the item before it.
+         *
+         *     Only values the query layer produces are listed; add one with the operation that
+         *     produces it.
          * @enum {string}
          */
-        ViaKind: "CALLS" | "CALLED_BY" | "IMPORTS" | "IMPORTED_BY" | "INHERITS" | "INHERITED_BY" | "OVERRIDES" | "CONTAINED_IN";
+        ViaKind: "CALLS" | "IMPORTS" | "INHERITS";
     };
     responses: never;
     parameters: never;
@@ -582,46 +551,6 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
-                };
-            };
-        };
-    };
-    repo_overview_api_repo_overview_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OverviewResponse"];
-                };
-            };
-        };
-    };
-    repo_graph_api_repo_graph_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GraphResponse"];
                 };
             };
         };
@@ -877,6 +806,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OverviewResult"];
+                };
+            };
+            /** @description Invalid argument */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Index missing, busy or incompatible */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Query timed out */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    graph_api_graph_map_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GraphMap"];
                 };
             };
             /** @description Invalid argument */

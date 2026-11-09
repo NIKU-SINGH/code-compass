@@ -38,10 +38,7 @@ TOP_N = 5
 """Length of every ranked list."""
 
 RISK_CANDIDATES = 30
-"""How many most-called functions are walked to rank ``riskiest_to_change``.
-
-Mirrored by ``RISK_CANDIDATES`` in ``apps/web/src/lib/limits.ts`` (card copy); keep in sync.
-"""
+"""How many most-called functions are walked to rank ``riskiest_to_change``."""
 
 RISK_DEPTH = 3
 """Traversal depth used to count the symbols affected by a change."""

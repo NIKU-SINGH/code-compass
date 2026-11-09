@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from compass_core.contract.results import GraphMap, MapEdge, MapNode
 from compass_core.contract.types import SymbolId
 from compass_core.graph.db import GraphDB, Row
 from compass_core.query.cypher import Query
@@ -56,66 +57,6 @@ def _edge_query(cypher: str, edge_type: EdgeType) -> Query[MapEdge]:
             source=text_value(row[0], "source"), target=text_value(row[1], "target"), type=edge_type
         ),
     )
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class MapNode:
-    """One file, class, function or method in the map.
-
-    Attributes:
-        id: What ``MapEdge.source`` and ``MapEdge.target`` refer to: the public id of a
-            class or function, the path of a file.
-        label: Short display name.
-        kind: Kind of node; never ``EXTERNAL``.
-        file_path: Repo-relative path.
-        public_id: Public id, accepted wherever a query takes a reference.
-
-    Example:
-        ``def f(): ...`` in ``a.py`` becomes ``MapNode(id="a.py::f", label="f",
-        kind=SymbolKind.FUNCTION, file_path="a.py", public_id=SymbolId("a.py::f"))``.
-    """
-
-    id: str
-    label: str
-    kind: SymbolKind
-    file_path: str
-    public_id: SymbolId
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class MapEdge:
-    """One relationship between two ``MapNode`` values.
-
-    Attributes:
-        source: ``MapNode.id`` the edge leaves.
-        target: ``MapNode.id`` the edge enters.
-        type: Kind of edge; never ``CALLS_EXTERN``, whose targets are not in the map.
-
-    Example:
-        ``a.py`` importing ``b.py`` becomes ``MapEdge(source="a.py", target="b.py",
-        type=EdgeType.IMPORTS)``.
-    """
-
-    source: str
-    target: str
-    type: EdgeType
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GraphMap:
-    """Every indexed node and the deduplicated edges between them.
-
-    Attributes:
-        nodes: Files, then classes, then functions and methods.
-        edges: Distinct ``(source, target, type)`` edges, grouped by type.
-
-    Example:
-        A repo with one file holding one function has two nodes and one ``CONTAINS``
-        edge.
-    """
-
-    nodes: tuple[MapNode, ...]
-    edges: tuple[MapEdge, ...]
 
 
 _FILE_PATHS: Query[str] = Query(

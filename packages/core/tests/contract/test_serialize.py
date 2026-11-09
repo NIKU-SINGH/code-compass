@@ -56,7 +56,7 @@ def test_not_found_serializes_enum_as_string():
 def test_search_result_roundtrip_shapes():
     res = SearchResult(
         index=_index(),
-        caveats=(Caveat(code=CaveatCode.TRUNCATED, message="m", count=3),),
+        caveats=(Caveat(code=CaveatCode.UNRESOLVED_CALLS, message="m", count=3),),
         query="f",
         kind=None,
         hits=(SearchHit(symbol=_sym(), match=SearchMatch.EXACT, fan_in=2),),
@@ -68,7 +68,7 @@ def test_search_result_roundtrip_shapes():
     assert data["outcome"] == "ok"
     assert data["index"]["repo_root"] == "/repo"
     assert data["index"]["indexed_at"].startswith("2026-01-02T03:04:05")
-    assert data["caveats"][0]["code"] == "TRUNCATED"
+    assert data["caveats"][0]["code"] == "UNRESOLVED_CALLS"
     assert data["hits"][0]["symbol"]["kind"] == "function"
 
 
