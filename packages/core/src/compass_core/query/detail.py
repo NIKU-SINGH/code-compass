@@ -21,10 +21,19 @@ from pathlib import Path
 
 from compass_core.contract.models import SymbolRef
 from compass_core.contract.results import Lookup, NodeDetail
-from compass_core.graph.db import GraphDB, QueryParams, as_rows
+from compass_core.graph.db import GraphDB, QueryParams, Row
 from compass_core.index.locate import IndexLocation
+from compass_core.query.cypher import Query
 from compass_core.query.references import ResolvedReference, resolve, stored_paths
-from compass_core.query.rows import file_from_row, is_method_flag, symbol_from_row
+from compass_core.query.rows import (
+    CLASS_FIELDS,
+    FILE_FIELDS,
+    FUNCTION_FIELDS,
+    class_from_row,
+    columns,
+    file_from_row,
+    function_from_row,
+)
 from compass_core.query.status import index_status
 from compass_core.shared_types import SymbolKind
 
@@ -34,13 +43,72 @@ MAX_FILE_BYTES = 512 * 1024
 MAX_RELATED = 200
 """Most neighbours returned per relationship; the result is flagged ``truncated`` past it."""
 
-_CLASS_COLUMNS = "{v}.id, {v}.name, {v}.file_path, {v}.line_start, {v}.line_end, '' AS signature"
-_FUNCTION_COLUMNS = (
-    "{v}.id, {v}.name, {v}.file_path, {v}.line_start, {v}.line_end, {v}.signature, {v}.is_method"
+
+def _is_definition(variable: str) -> str:
+    """``WHERE`` condition selecting the one definition a symbol refers to.
+
+    Stored paths may be absolute or relative, and the stored id always ends with
+    ``::<[Class.]name>``. Used only to compose the constants below, at import.
+    """
+    return f"{variable}.file_path IN $paths AND {variable}.id ENDS WITH $tail"
+
+
+def _text_pair(row: Row, _: Path) -> tuple[str | None, str | None]:
+    return _text_or_none(row[0]), _text_or_none(row[1])
+
+
+_CLASS = columns("r", CLASS_FIELDS)
+_FUNCTION = columns("r", FUNCTION_FIELDS)
+
+_BASES: Query[SymbolRef] = Query(
+    f"MATCH (c:Class)-[:INHERITS]->(r:Class) WHERE {_is_definition('c')} RETURN DISTINCT {_CLASS}",
+    class_from_row,
 )
-# Selects the one definition node `n` a symbol refers to: stored paths may be absolute or
-# relative, and the stored id always ends with "::<[Class.]name>".
-_DEFINITION_WHERE = "n.file_path IN $paths AND n.id ENDS WITH $tail"
+_SUBCLASSES: Query[SymbolRef] = Query(
+    f"MATCH (r:Class)-[:INHERITS]->(c:Class) WHERE {_is_definition('c')} RETURN DISTINCT {_CLASS}",
+    class_from_row,
+)
+_METHODS: Query[SymbolRef] = Query(
+    f"MATCH (c:Class)-[:CONTAINS]->(r:Function) WHERE {_is_definition('c')} "
+    f"RETURN DISTINCT {_FUNCTION}",
+    function_from_row,
+)
+_CALLEES: Query[SymbolRef] = Query(
+    f"MATCH (f:Function)-[:CALLS]->(r:Function) WHERE {_is_definition('f')} "
+    f"RETURN DISTINCT {_FUNCTION}",
+    function_from_row,
+)
+_CALLERS: Query[SymbolRef] = Query(
+    f"MATCH (r:Function)-[:CALLS]->(f:Function) WHERE {_is_definition('f')} "
+    f"RETURN DISTINCT {_FUNCTION}",
+    function_from_row,
+)
+_FILE_CLASSES: Query[SymbolRef] = Query(
+    f"MATCH (f:File)-[:CONTAINS]->(r:Class) WHERE f.path IN $paths RETURN DISTINCT {_CLASS}",
+    class_from_row,
+)
+_FILE_FUNCTIONS: Query[SymbolRef] = Query(
+    f"MATCH (f:File)-[:CONTAINS]->(r:Function) WHERE f.path IN $paths RETURN DISTINCT {_FUNCTION}",
+    function_from_row,
+)
+_IMPORTS: Query[SymbolRef] = Query(
+    f"MATCH (f:File)-[:IMPORTS]->(r:File) WHERE f.path IN $paths "
+    f"RETURN DISTINCT {columns('r', FILE_FIELDS)}",
+    file_from_row,
+)
+_IMPORTED_BY: Query[SymbolRef] = Query(
+    f"MATCH (r:File)-[:IMPORTS]->(f:File) WHERE f.path IN $paths "
+    f"RETURN DISTINCT {columns('r', FILE_FIELDS)}",
+    file_from_row,
+)
+_CLASS_TEXT: Query[tuple[str | None, str | None]] = Query(
+    f"MATCH (n:Class) WHERE {_is_definition('n')} RETURN n.docstring, n.source",
+    _text_pair,
+)
+_FUNCTION_TEXT: Query[tuple[str | None, str | None]] = Query(
+    f"MATCH (n:Function) WHERE {_is_definition('n')} RETURN n.docstring, n.source",
+    _text_pair,
+)
 
 
 def _definition_params(symbol: SymbolRef, repo_root: Path) -> QueryParams:
@@ -55,17 +123,6 @@ def _text_or_none(value: object) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
 
 
-def _classes(db: GraphDB, query: str, params: QueryParams, root: Path) -> list[SymbolRef]:
-    return [symbol_from_row(r, SymbolKind.CLASS, root) for r in as_rows(db.execute(query, params))]
-
-
-def _functions(db: GraphDB, query: str, params: QueryParams, root: Path) -> list[SymbolRef]:
-    return [
-        symbol_from_row(r, SymbolKind.METHOD if is_method_flag(r[6]) else SymbolKind.FUNCTION, root)
-        for r in as_rows(db.execute(query, params))
-    ]
-
-
 def _ordered(symbols: list[SymbolRef]) -> list[SymbolRef]:
     """Stable display order: by file, line, then id."""
     return sorted(symbols, key=lambda s: (s.file_path or "", s.line_start or 0, s.id))
@@ -74,90 +131,25 @@ def _ordered(symbols: list[SymbolRef]) -> list[SymbolRef]:
 def _class_relations(
     db: GraphDB, params: QueryParams, root: Path
 ) -> tuple[list[SymbolRef], list[SymbolRef], list[SymbolRef]]:
-    where = "WHERE " + _DEFINITION_WHERE.replace("n.", "c.")
-    bases = _classes(
-        db,
-        f"MATCH (c:Class)-[:INHERITS]->(b:Class) {where} "
-        f"RETURN DISTINCT {_CLASS_COLUMNS.format(v='b')}",
-        params,
-        root,
+    return (
+        _BASES.run(db, root, params),
+        _SUBCLASSES.run(db, root, params),
+        _METHODS.run(db, root, params),
     )
-    subclasses = _classes(
-        db,
-        f"MATCH (b:Class)-[:INHERITS]->(c:Class) {where} "
-        f"RETURN DISTINCT {_CLASS_COLUMNS.format(v='b')}",
-        params,
-        root,
-    )
-    members = _functions(
-        db,
-        f"MATCH (c:Class)-[:CONTAINS]->(m:Function) {where} "
-        f"RETURN DISTINCT {_FUNCTION_COLUMNS.format(v='m')}",
-        params,
-        root,
-    )
-    return bases, subclasses, members
 
 
 def _function_relations(
     db: GraphDB, params: QueryParams, root: Path
 ) -> tuple[list[SymbolRef], list[SymbolRef]]:
-    where = "WHERE " + _DEFINITION_WHERE.replace("n.", "f.")
-    callees = _functions(
-        db,
-        f"MATCH (f:Function)-[:CALLS]->(g:Function) {where} "
-        f"RETURN DISTINCT {_FUNCTION_COLUMNS.format(v='g')}",
-        params,
-        root,
-    )
-    callers = _functions(
-        db,
-        f"MATCH (g:Function)-[:CALLS]->(f:Function) {where} "
-        f"RETURN DISTINCT {_FUNCTION_COLUMNS.format(v='g')}",
-        params,
-        root,
-    )
-    return callees, callers
+    return _CALLEES.run(db, root, params), _CALLERS.run(db, root, params)
 
 
 def _file_relations(
     db: GraphDB, symbol: SymbolRef, root: Path
 ) -> tuple[list[SymbolRef], list[SymbolRef], list[SymbolRef]]:
     params: QueryParams = {"paths": stored_paths(symbol.file_path or "", root)}
-    members = _classes(
-        db,
-        f"MATCH (f:File)-[:CONTAINS]->(n:Class) WHERE f.path IN $paths "
-        f"RETURN DISTINCT {_CLASS_COLUMNS.format(v='n')}",
-        params,
-        root,
-    ) + _functions(
-        db,
-        f"MATCH (f:File)-[:CONTAINS]->(n:Function) WHERE f.path IN $paths "
-        f"RETURN DISTINCT {_FUNCTION_COLUMNS.format(v='n')}",
-        params,
-        root,
-    )
-    imports = [
-        file_from_row(r, root)
-        for r in as_rows(
-            db.execute(
-                "MATCH (f:File)-[:IMPORTS]->(g:File) WHERE f.path IN $paths "
-                "RETURN DISTINCT g.path, g.module_name",
-                params,
-            )
-        )
-    ]
-    imported_by = [
-        file_from_row(r, root)
-        for r in as_rows(
-            db.execute(
-                "MATCH (g:File)-[:IMPORTS]->(f:File) WHERE f.path IN $paths "
-                "RETURN DISTINCT g.path, g.module_name",
-                params,
-            )
-        )
-    ]
-    return members, imports, imported_by
+    members = _FILE_CLASSES.run(db, root, params) + _FILE_FUNCTIONS.run(db, root, params)
+    return members, _IMPORTS.run(db, root, params), _IMPORTED_BY.run(db, root, params)
 
 
 def _cap(symbols: list[SymbolRef]) -> tuple[tuple[SymbolRef, ...], bool]:
@@ -170,16 +162,8 @@ def _docstring_and_source(
 ) -> tuple[str | None, str | None]:
     if symbol.kind not in (SymbolKind.CLASS, SymbolKind.FUNCTION, SymbolKind.METHOD):
         return None, None
-    label = "Class" if symbol.kind is SymbolKind.CLASS else "Function"
-    rows = as_rows(
-        db.execute(
-            f"MATCH (n:{label}) WHERE {_DEFINITION_WHERE} RETURN n.docstring, n.source",
-            _definition_params(symbol, root),
-        )
-    )
-    if not rows:
-        return None, None
-    return _text_or_none(rows[0][0]), _text_or_none(rows[0][1])
+    query = _CLASS_TEXT if symbol.kind is SymbolKind.CLASS else _FUNCTION_TEXT
+    return query.first(db, root, _definition_params(symbol, root)) or (None, None)
 
 
 def _file_source(symbol: SymbolRef, root: Path) -> str | None:

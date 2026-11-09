@@ -15,7 +15,7 @@ If a rule blocks you, stop and ask; do not work around it.
 |---|---|---|
 | Graph vocabulary used by parsing, ingest *and* queries (`SymbolKind`, `EdgeType`, `CallType`, `Language`) | `compass_core/shared_types.py` | from the generated API types |
 | Query inputs, results, ids and query-only enums | `compass_core/contract/` | `@/lib/api` (wraps generated `lib/api-types.ts`) |
-| Cypher and DB-row parsing | `compass_core/query/` only (`query/rows.py` parses rows) | n/a |
+| Cypher and DB-row parsing | `compass_core/query/` only: every statement is a module-level `Query` (`query/cypher.py`) holding its full Cypher next to its row decoder; column lists and decoders in `query/rows.py` | n/a |
 | Settings / env vars | `compass_core/settings.py`, `compass_server/settings.py` | n/a |
 | Limits, bounds, named constants | `contract/params.py`, or a module-level `UPPER_CASE` constant | `lib/limits.ts` or another `lib/` module |
 | Shared UI components | n/a | `components/ui/` (shadcn) |

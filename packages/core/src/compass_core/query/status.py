@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from compass_core.contract.models import IndexStatus
-from compass_core.graph.db import GraphDB, as_rows
+from compass_core.contract.types import RepoPath
+from compass_core.graph.db import GraphDB
 from compass_core.index.freshness import count_stale
 from compass_core.index.locate import IndexLocation
 from compass_core.index.metadata import load_metadata
-from compass_core.query.rows import to_repo_path
+from compass_core.query.cypher import Query
+from compass_core.query.rows import text_value, to_repo_path
 
-_FILE_PATHS = "MATCH (f:File) RETURN f.path"
+_FILE_PATHS: Query[RepoPath] = Query(
+    "MATCH (f:File) RETURN f.path", lambda row, root: to_repo_path(text_value(row[0], "path"), root)
+)
 
 
 def index_status(location: IndexLocation, db: GraphDB) -> IndexStatus:
@@ -34,11 +38,7 @@ def index_status(location: IndexLocation, db: GraphDB) -> IndexStatus:
     """
     meta = load_metadata(location.metadata_path)
     repo_root = location.repo_root.resolve()
-    paths = [
-        to_repo_path(row[0], repo_root)
-        for row in as_rows(db.execute(_FILE_PATHS))
-        if isinstance(row[0], str)
-    ]
+    paths = _FILE_PATHS.run(db, repo_root)
     return IndexStatus(
         repo_root=repo_root,
         indexed_at=meta.indexed_at,

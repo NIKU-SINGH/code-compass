@@ -24,6 +24,35 @@ from compass_core.shared_types import CallType, SymbolKind
 _SEP = "::"
 _CONFIDENCE_DIGITS = 6
 
+FUNCTION_FIELDS = ("id", "name", "file_path", "line_start", "line_end", "signature", "is_method")
+"""``Function`` properties read by ``function_from_row``, in column order."""
+CLASS_FIELDS = ("id", "name", "file_path", "line_start", "line_end")
+"""``Class`` properties read by ``class_from_row``, in column order."""
+FILE_FIELDS = ("path", "module_name")
+"""``File`` properties read by ``file_from_row``, in column order."""
+FUNCTION_WIDTH = len(FUNCTION_FIELDS)
+CLASS_WIDTH = len(CLASS_FIELDS)
+FILE_WIDTH = len(FILE_FIELDS)
+
+
+def columns(variable: str, fields: Sequence[str]) -> str:
+    """Render a ``RETURN`` column list for one node variable.
+
+    Used only to compose module-level ``Query`` constants, so the column order a query
+    returns and the order its decoder reads are the same list.
+
+    Args:
+        variable: Cypher variable bound to the node, e.g. ``"n"``.
+        fields: Property names, e.g. ``FUNCTION_FIELDS``.
+
+    Returns:
+        The comma-separated column list.
+
+    Example:
+        ``columns("a", FILE_FIELDS)`` returns ``"a.path, a.module_name"``.
+    """
+    return ", ".join(f"{variable}.{name}" for name in fields)
+
 
 def _text(value: Any, column: str) -> str:
     if not isinstance(value, str):
@@ -205,7 +234,7 @@ def file_from_row(row: Sequence[Any], repo_root: Path) -> SymbolRef:
     Raises:
         IndexIncompatibleError: A column is missing or has an unexpected type.
     """
-    _expect_width(row, 2, "file row")
+    _expect_width(row, FILE_WIDTH, "file row")
     file_path = to_repo_path(_text(row[0], "path"), repo_root)
     module = _text(row[1], "module_name")
     return SymbolRef(
@@ -301,9 +330,31 @@ def function_from_row(row: Sequence[Any], repo_root: Path) -> SymbolRef:
         ``["py::app.models::User.save", "save", "app/models.py", 6, 7, "def save(self):",
         True]`` becomes a ``METHOD`` with id ``"app/models.py::User.save"``.
     """
-    _expect_width(row, 7, "function row")
+    _expect_width(row, FUNCTION_WIDTH, "function row")
     kind = SymbolKind.METHOD if is_method_flag(row[6]) else SymbolKind.FUNCTION
     return symbol_from_row(row, kind, repo_root)
+
+
+def class_from_row(row: Sequence[Any], repo_root: Path) -> SymbolRef:
+    """Build a ``CLASS`` ``SymbolRef`` from a row of ``CLASS_FIELDS`` columns.
+
+    Args:
+        row: Columns ``[id, name, file_path, line_start, line_end]``; extra trailing
+            columns are ignored.
+        repo_root: Absolute repository root.
+
+    Returns:
+        The class symbol; classes have no signature.
+
+    Raises:
+        IndexIncompatibleError: A column is missing or has an unexpected type.
+
+    Example:
+        ``["py::app.models::User", "User", "app/models.py", 4, 9]`` becomes
+        ``SymbolRef(id="app/models.py::User", kind=SymbolKind.CLASS, ...)``.
+    """
+    _expect_width(row, CLASS_WIDTH, "class row")
+    return symbol_from_row([*row[:CLASS_WIDTH], ""], SymbolKind.CLASS, repo_root)
 
 
 def text_value(value: Any, column: str) -> str:

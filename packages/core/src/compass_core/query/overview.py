@@ -17,18 +17,23 @@ from compass_core.contract.results import (
     RankedSymbol,
 )
 from compass_core.contract.types import CaveatCode
-from compass_core.graph.db import GraphDB, Row, as_rows
+from compass_core.graph.db import GraphDB, Row
 from compass_core.index.locate import IndexLocation
+from compass_core.query.cypher import Query
 from compass_core.query.impact import RAW_CALLERS, bare_call_name
 from compass_core.query.impact_walk import walk_symbols
 from compass_core.query.rows import (
+    FILE_FIELDS,
+    FILE_WIDTH,
+    FUNCTION_FIELDS,
+    FUNCTION_WIDTH,
+    columns,
     count_value,
     file_from_row,
-    function_from_row,
-    text_list_value,
     text_value,
 )
 from compass_core.query.status import index_status
+from compass_core.query.stored import StoredNode, stored_function
 from compass_core.shared_types import EdgeType
 
 TOP_N = 5
@@ -43,34 +48,52 @@ Mirrored by ``RISK_CANDIDATES`` in ``apps/web/src/lib/limits.ts`` (card copy); k
 RISK_DEPTH = 3
 """Traversal depth used to count the symbols affected by a change."""
 
-_NODE_COUNTS = {
-    "files": "MATCH (n:File) RETURN count(n)",
-    "classes": "MATCH (n:Class) RETURN count(n)",
-    "functions": "MATCH (n:Function) RETURN count(n)",
+
+def _count(row: Row, _: Path) -> int:
+    return count_value(row[0])
+
+
+_FILE_COUNT: Query[int] = Query("MATCH (n:File) RETURN count(n)", _count)
+_CLASS_COUNT: Query[int] = Query("MATCH (n:Class) RETURN count(n)", _count)
+_FUNCTION_COUNT: Query[int] = Query("MATCH (n:Function) RETURN count(n)", _count)
+_EDGE_COUNTS: dict[EdgeType, Query[int]] = {
+    edge: Query(f"MATCH ()-[r:{edge.value}]->() RETURN count(r)", _count) for edge in EdgeType
 }
-_EDGE_COUNT = "MATCH ()-[r:{edge}]->() RETURN count(r)"
-_ENTRY_POINTS = (
-    "MATCH (f:File) WHERE NOT EXISTS { MATCH (:File)-[:IMPORTS]->(f) } "
-    "RETURN f.path, f.module_name ORDER BY f.path LIMIT $limit"
+"""One count query per relationship table; ``EdgeType`` values are the table names."""
+_ENTRY_POINTS: Query[SymbolRef] = Query(
+    f"""
+    MATCH (f:File) WHERE NOT EXISTS {{ MATCH (:File)-[:IMPORTS]->(f) }}
+    RETURN {columns("f", FILE_FIELDS)} ORDER BY f.path LIMIT $limit
+    """,
+    file_from_row,
 )
-_MOST_IMPORTED = (
-    "MATCH (i:File)-[:IMPORTS]->(f:File) "
-    "RETURN f.path, f.module_name, count(DISTINCT i) AS n ORDER BY n DESC, f.path LIMIT $limit"
+_MOST_IMPORTED: Query[RankedSymbol] = Query(
+    f"""
+    MATCH (i:File)-[:IMPORTS]->(f:File)
+    RETURN {columns("f", FILE_FIELDS)}, count(DISTINCT i) AS n
+    ORDER BY n DESC, f.path LIMIT $limit
+    """,
+    lambda row, root: RankedSymbol(
+        symbol=file_from_row(row, root), count=count_value(row[FILE_WIDTH])
+    ),
 )
-_MOST_CALLED = (
-    "MATCH (c:Function)-[:CALLS]->(n:Function) "
-    "RETURN n.id, n.name, n.file_path, n.line_start, n.line_end, n.signature, n.is_method, "
-    "count(DISTINCT c) AS k ORDER BY k DESC, n.name, n.id LIMIT $limit"
+_MOST_CALLED: Query[tuple[StoredNode, int]] = Query(
+    f"""
+    MATCH (c:Function)-[:CALLS]->(n:Function)
+    RETURN {columns("n", FUNCTION_FIELDS)}, count(DISTINCT c) AS k
+    ORDER BY k DESC, n.name, n.id LIMIT $limit
+    """,
+    lambda row, root: (stored_function(row, root), count_value(row[FUNCTION_WIDTH])),
 )
-_LIBRARIES = (
-    "MATCH (:Function)-[e:CALLS_EXTERN]->(x:ExternalFunction) "
-    "RETURN x.library, count(e) AS n ORDER BY n DESC, x.library LIMIT $limit"
+_LIBRARIES: Query[LibraryUsage] = Query(
+    """
+    MATCH (:Function)-[e:CALLS_EXTERN]->(x:ExternalFunction)
+    RETURN x.library, count(e) AS n ORDER BY n DESC, x.library LIMIT $limit
+    """,
+    lambda row, _: LibraryUsage(
+        library=text_value(row[0], "library"), call_count=count_value(row[1])
+    ),
 )
-
-
-def _count(db: GraphDB, query: str) -> int:
-    rows = as_rows(db.execute(query))
-    return count_value(rows[0][0]) if rows else 0
 
 
 def index_counts(db: GraphDB) -> IndexCounts:
@@ -90,13 +113,12 @@ def index_counts(db: GraphDB) -> IndexCounts:
         A repo with one file holding one function has ``files=1``, ``functions=1`` and
         ``edges_by_type[EdgeType.CONTAINS] == 1``.
     """
-    nodes = {name: _count(db, query) for name, query in _NODE_COUNTS.items()}
-    edges = {edge: _count(db, _EDGE_COUNT.format(edge=edge.value)) for edge in EdgeType}
+    root = Path()
     return IndexCounts(
-        files=nodes["files"],
-        classes=nodes["classes"],
-        functions=nodes["functions"],
-        edges_by_type=edges,
+        files=_FILE_COUNT.first(db, root) or 0,
+        classes=_CLASS_COUNT.first(db, root) or 0,
+        functions=_FUNCTION_COUNT.first(db, root) or 0,
+        edges_by_type={edge: query.first(db, root) or 0 for edge, query in _EDGE_COUNTS.items()},
     )
 
 
@@ -116,35 +138,34 @@ def entry_points(db: GraphDB, repo_root: Path) -> tuple[SymbolRef, ...]:
     Example:
         If ``app/main.py`` imports ``app/auth.py``, only ``app/main.py`` is returned.
     """
-    rows = as_rows(db.execute(_ENTRY_POINTS, {"limit": TOP_N}))
-    return tuple(file_from_row(row, repo_root) for row in rows)
+    return tuple(_ENTRY_POINTS.run(db, repo_root, {"limit": TOP_N}))
 
 
 def _call_resolution(db: GraphDB) -> CallResolution:
     """Count call sites, and those whose called name matches a resolved callee of the caller."""
     total = resolved = 0
-    for row in as_rows(db.execute(RAW_CALLERS)):
-        reached = set(text_list_value(row[2], "name")) | set(text_list_value(row[3], "name"))
-        for raw in text_list_value(row[1], "raw_calls"):
+    for caller in RAW_CALLERS.run(db, Path()):
+        for raw in caller.raw_calls:
             total += 1
-            resolved += bare_call_name(raw) in reached
+            resolved += bare_call_name(raw) in caller.reached
     return CallResolution(total=total, resolved=resolved)
 
 
-def _riskiest(db: GraphDB, called: list[Row], repo_root: Path) -> tuple[RankedSymbol, ...]:
-    """Rank candidates (rows of ``_MOST_CALLED``) by symbols affected at ``RISK_DEPTH``."""
+def _riskiest(
+    db: GraphDB, called: list[tuple[StoredNode, int]], repo_root: Path
+) -> tuple[RankedSymbol, ...]:
+    """Rank candidates (results of ``_MOST_CALLED``) by symbols affected at ``RISK_DEPTH``."""
     ranked: list[RankedSymbol] = []
-    for row in called:
-        symbol: SymbolRef = function_from_row(row, repo_root)
+    for node, _ in called:
         walk = walk_symbols(
             db,
-            symbol,
-            text_value(row[0], "id"),
+            node.symbol,
+            node.key,
             depth=RISK_DEPTH,
             min_confidence=0.0,
             repo_root=repo_root,
         )
-        ranked.append(RankedSymbol(symbol=symbol, count=len(walk.reached)))
+        ranked.append(RankedSymbol(symbol=node.symbol, count=len(walk.reached)))
     ranked.sort(key=lambda r: (-r.count, r.symbol.name, r.symbol.id))
     return tuple(ranked[:TOP_N])
 
@@ -201,7 +222,7 @@ def overview(db: GraphDB, location: IndexLocation) -> OverviewResult:
     repo_root = location.repo_root.resolve()
     limit = {"limit": TOP_N}
     counts = index_counts(db)
-    called = as_rows(db.execute(_MOST_CALLED, {"limit": RISK_CANDIDATES}))
+    called = _MOST_CALLED.run(db, repo_root, {"limit": RISK_CANDIDATES})
     status = index_status(location, db)
     return OverviewResult(
         index=status,
@@ -209,17 +230,10 @@ def overview(db: GraphDB, location: IndexLocation) -> OverviewResult:
         counts=counts,
         call_resolution=_call_resolution(db),
         entry_points=entry_points(db, repo_root),
-        most_imported_files=tuple(
-            RankedSymbol(symbol=file_from_row(row, repo_root), count=count_value(row[2]))
-            for row in as_rows(db.execute(_MOST_IMPORTED, limit))
-        ),
+        most_imported_files=tuple(_MOST_IMPORTED.run(db, repo_root, limit)),
         most_called_functions=tuple(
-            RankedSymbol(symbol=function_from_row(row, repo_root), count=count_value(row[7]))
-            for row in called[:TOP_N]
+            RankedSymbol(symbol=node.symbol, count=count) for node, count in called[:TOP_N]
         ),
         riskiest_to_change=_riskiest(db, called, repo_root),
-        top_external_libraries=tuple(
-            LibraryUsage(library=text_value(row[0], "library"), call_count=count_value(row[1]))
-            for row in as_rows(db.execute(_LIBRARIES, limit))
-        ),
+        top_external_libraries=tuple(_LIBRARIES.run(db, repo_root, limit)),
     )
