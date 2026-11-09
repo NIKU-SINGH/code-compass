@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from compass_core.index.locate import IndexLocation
-from compass_core.server.main import app
+from compass_server.main import app
 
 client = TestClient(app)
 
@@ -20,7 +20,7 @@ def _located_index():
         db_path=Path("/repo/.compass/graph.ladybug"),
         metadata_path=Path("/repo/.compass/metadata.json"),
     )
-    with patch("compass_core.server.routers.repo.get_index", return_value=location):
+    with patch("compass_server.routers.repo.get_index", return_value=location):
         yield
 
 
@@ -54,7 +54,7 @@ def test_repo_overview_returns_shape():
     mock_db.__enter__ = lambda s: mock_db
     mock_db.__exit__ = MagicMock(return_value=False)
 
-    with patch("compass_core.server.routers.repo.GraphDB", return_value=mock_db):
+    with patch("compass_server.routers.repo.GraphDB", return_value=mock_db):
         response = client.get("/api/repo/overview")
 
     assert response.status_code == 200
@@ -84,7 +84,7 @@ def test_repo_graph_returns_nodes_and_edges():
     mock_db.__enter__ = lambda s: mock_db
     mock_db.__exit__ = MagicMock(return_value=False)
 
-    with patch("compass_core.server.routers.repo.GraphDB", return_value=mock_db):
+    with patch("compass_server.routers.repo.GraphDB", return_value=mock_db):
         response = client.get("/api/repo/graph")
 
     assert response.status_code == 200
@@ -101,7 +101,7 @@ def test_repo_graph_returns_nodes_and_edges():
 def test_repo_overview_503_when_db_unavailable():
     """Overview endpoint returns 503 if DB cannot be opened."""
     with patch(
-        "compass_core.server.routers.repo.GraphDB",
+        "compass_server.routers.repo.GraphDB",
         side_effect=Exception("DB not found"),
     ):
         response = client.get("/api/repo/overview")

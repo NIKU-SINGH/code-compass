@@ -12,11 +12,10 @@ from pathlib import Path
 import compass_core
 
 PACKAGE_ROOT = Path(compass_core.__file__).parent
-ADAPTER_DIR = PACKAGE_ROOT / "server"
 
 
 def _engine_sources() -> list[Path]:
-    return [p for p in PACKAGE_ROOT.rglob("*.py") if ADAPTER_DIR not in p.parents]
+    return list(PACKAGE_ROOT.rglob("*.py"))
 
 
 def _imports(path: Path) -> set[str]:
@@ -33,8 +32,15 @@ def _is_under(module: str, parent: str) -> bool:
     return module == parent or module.startswith(f"{parent}.")
 
 
-def test_engine_never_imports_the_server_or_a_web_framework() -> None:
-    forbidden = ("compass_core.server", "fastapi", "starlette", "uvicorn")
+def test_engine_never_imports_an_adapter_or_a_web_framework() -> None:
+    forbidden = (
+        "compass_server",
+        "compass_cli",
+        "compass_mcp",
+        "fastapi",
+        "starlette",
+        "uvicorn",
+    )
     offenders = {
         str(path.relative_to(PACKAGE_ROOT)): module
         for path in _engine_sources()
@@ -92,16 +98,6 @@ def test_only_the_query_layer_and_ingest_run_graph_queries() -> None:
         and ".execute(" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
-
-
-def test_server_holds_no_graph_queries_or_row_parsing() -> None:
-    offenders: dict[str, str] = {}
-    for path in ADAPTER_DIR.rglob("*.py"):
-        if "query.rows" in " ".join(_imports(path)):
-            offenders[str(path.relative_to(PACKAGE_ROOT))] = "imports query.rows"
-        if ".execute(" in path.read_text(encoding="utf-8"):
-            offenders[str(path.relative_to(PACKAGE_ROOT))] = "runs a query"
-    assert offenders == {}
 
 
 def test_every_enum_name_is_defined_once() -> None:

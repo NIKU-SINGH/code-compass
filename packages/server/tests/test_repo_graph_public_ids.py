@@ -13,8 +13,8 @@ from compass_core.graph.db import GraphDB
 from compass_core.index.locate import IndexLocation
 from compass_core.query import graph_map
 from compass_core.query.references import ResolvedReference, resolve
-from compass_core.server.main import app
 from compass_core.settings import settings
+from compass_server.main import app
 
 
 @pytest.fixture

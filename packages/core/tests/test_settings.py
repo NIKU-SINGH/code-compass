@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from compass_core.settings import settings
+from compass_core.settings import Settings, settings
 
 
 def test_default_ladybug_db_path():
@@ -14,11 +14,5 @@ def test_repo_root_is_path():
 
 
 def test_env_override(monkeypatch):
-    monkeypatch.setenv("API_PORT", "9123")
-    # Re-import to pick up the new env var
-    import importlib
-
-    import compass_core.settings as cfg
-
-    importlib.reload(cfg)
-    assert cfg.settings.API_PORT == 9123
+    monkeypatch.setenv("QUERY_TIMEOUT_MS", "9123")
+    assert Settings().QUERY_TIMEOUT_MS == 9123

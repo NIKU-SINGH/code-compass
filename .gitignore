@@ -17,7 +17,7 @@ apps/web/dist/
 *.tsbuildinfo
 
 # Static build output copied into FastAPI
-packages/core/src/compass_core/server/static/
+packages/server/src/compass_server/static/
 
 # Environment
 .env

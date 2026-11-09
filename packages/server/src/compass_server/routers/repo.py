@@ -11,8 +11,8 @@ from pydantic import BaseModel
 from compass_core.graph.db import GraphDB
 from compass_core.query.graph_map import graph_map
 from compass_core.query.overview import entry_points, index_counts
-from compass_core.server.routers.query import get_index
 from compass_core.settings import settings
+from compass_server.routers.query import get_index
 
 logger = logging.getLogger(__name__)
 

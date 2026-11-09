@@ -9,18 +9,20 @@ dependencies = []
 package = false
 
 [tool.uv.workspace]
-members = ["packages/cli", "packages/mcp", "packages/core"]
+members = ["packages/cli", "packages/mcp", "packages/core", "packages/server"]
 
 [tool.uv.sources]
 compass-core = { workspace = true }
 compass-cli = { workspace = true }
 compass-mcp = { workspace = true }
+compass-server = { workspace = true }
 
 [dependency-groups]
 dev = [
     "compass-core",
     "compass-cli",
     "compass-mcp",
+    "compass-server",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "ruff>=0.8.0",
@@ -38,9 +40,9 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["compass_core", "compass_cli", "compass_mcp"]
+known-first-party = ["compass_core", "compass_cli", "compass_mcp", "compass_server"]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/core/tests", "packages/cli/tests"]
+testpaths = ["packages/core/tests", "packages/server/tests", "packages/cli/tests"]
 asyncio_mode = "auto"
 addopts = "--import-mode=importlib"
