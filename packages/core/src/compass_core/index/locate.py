@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from compass_core.errors import IndexNotFoundError
+from compass_core.settings import settings
 
 _INDEX_DIR = ".compass"
 _DB_NAME = "graph.ladybug"
@@ -92,3 +93,32 @@ def require_index(start: Path, override: Path | None = None) -> IndexLocation:
     if location is None:
         raise IndexNotFoundError(searched_from=start)
     return location
+
+
+def locate_index(start: Path | None = None) -> IndexLocation:
+    """Find the index every adapter should use: ``LADYBUG_DB_PATH``, else walk up.
+
+    When the configured ``LADYBUG_DB_PATH`` exists it wins, resolved so ``repo_root``
+    is absolute whatever the working directory. Otherwise the index is found by
+    walking up from ``start``, as git does with ``.git/``.
+
+    Args:
+        start: Directory to search from; defaults to the working directory.
+
+    Returns:
+        The index location.
+
+    Raises:
+        IndexNotFoundError: If no configured index exists and none is found above
+            ``start``.
+
+    Example:
+        Run from ``/repo/pkg`` with ``/repo/.compass/graph.ladybug`` present and the
+        default ``LADYBUG_DB_PATH``, ``locate_index()`` returns
+        ``IndexLocation(repo_root=Path("/repo"), ...)``.
+    """
+    origin = start if start is not None else Path.cwd()
+    configured = Path(settings.LADYBUG_DB_PATH).resolve()
+    if configured.exists():
+        return require_index(origin, override=configured)
+    return require_index(origin)

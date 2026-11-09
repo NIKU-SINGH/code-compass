@@ -9,8 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from compass_core.index.locate import IndexLocation
-from compass_core.server.main import app
 from compass_core.settings import settings
+from compass_server.main import app
 
 EXPECTED_CALLS = {
     ("py::app.api::handle", "py::app.auth::decode_token"),

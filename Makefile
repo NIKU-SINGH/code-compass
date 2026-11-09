@@ -2,6 +2,7 @@
 
 install:
 	pip install -e packages/core
+	pip install -e packages/server
 	pip install -e packages/cli
 	pip install -e packages/mcp
 
@@ -13,15 +14,15 @@ dev:
 
 build:
 	cd apps/web && pnpm build
-	cp -r apps/web/dist/* packages/core/src/compass_core/server/static/
+	cp -r apps/web/dist/* packages/server/src/compass_server/static/
 
 clean:
-	rm -rf packages/core/src/compass_core/server/static/*
+	rm -rf packages/server/src/compass_server/static/*
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type d -name "*.egg-info" -exec rm -rf {} +
 
 openapi:
-	uv run python packages/core/scripts/dump_openapi.py .build/openapi.json
+	uv run python packages/server/scripts/dump_openapi.py .build/openapi.json
 
 gen-api: openapi
 	cd apps/web && pnpm gen:api

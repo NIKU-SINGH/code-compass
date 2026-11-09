@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from compass_core.server.main import app
+from compass_server.main import app
 
 
 def main(argv: list[str]) -> int:

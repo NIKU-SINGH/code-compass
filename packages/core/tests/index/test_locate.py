@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 
 from compass_core.errors import IndexNotFoundError
-from compass_core.index.locate import find_index, require_index
+from compass_core.index.locate import find_index, locate_index, require_index
+from compass_core.settings import settings
 
 
 def _make_index(root: Path) -> Path:
@@ -43,3 +44,27 @@ def test_override_takes_precedence(tmp_path: Path):
     db = _make_index(other)
     loc = require_index(tmp_path, override=db)
     assert loc.db_path == db
+
+
+def test_locate_index_prefers_existing_configured_path(tmp_path: Path, monkeypatch):
+    configured = _make_index(tmp_path / "configured")
+    elsewhere = tmp_path / "elsewhere"
+    _make_index(elsewhere)
+    monkeypatch.setattr(settings, "LADYBUG_DB_PATH", str(configured))
+    loc = locate_index(elsewhere)
+    assert loc.db_path == configured.resolve()
+    assert loc.repo_root == (tmp_path / "configured").resolve()
+
+
+def test_locate_index_walks_up_when_configured_path_is_missing(tmp_path: Path, monkeypatch):
+    _make_index(tmp_path)
+    child = tmp_path / "pkg"
+    child.mkdir()
+    monkeypatch.setattr(settings, "LADYBUG_DB_PATH", str(tmp_path / "missing.ladybug"))
+    assert locate_index(child).repo_root == tmp_path
+
+
+def test_locate_index_raises_when_nothing_is_found(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(settings, "LADYBUG_DB_PATH", str(tmp_path / "missing.ladybug"))
+    with pytest.raises(IndexNotFoundError):
+        locate_index(tmp_path)

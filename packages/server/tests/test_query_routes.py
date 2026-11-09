@@ -11,9 +11,10 @@ from fastapi.testclient import TestClient
 
 from compass_core.errors import IndexBusyError, IndexNotFoundError, QueryTimeoutError
 from compass_core.index.locate import IndexLocation
-from compass_core.server.main import app
-from compass_core.server.routers.query import get_index
 from compass_core.settings import settings
+from compass_server.main import app
+from compass_server.routers.query import get_index
+from compass_server.settings import server_settings
 
 QUERY_ROUTES = ("/api/search", "/api/impact", "/api/overview")
 
@@ -197,7 +198,7 @@ def test_existing_routes_unchanged(client: TestClient) -> None:
     assert client.get("/health").json()["status"] == "ok"
 
 
-ORIGIN = settings.FRONTEND_URL
+ORIGIN = server_settings.FRONTEND_URL
 
 
 def test_unexpected_error_500_carries_cors_headers() -> None:

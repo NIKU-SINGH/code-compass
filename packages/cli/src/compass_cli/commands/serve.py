@@ -14,7 +14,7 @@ import typer
 from compass_cli import display
 from compass_cli.errors import handle_errors
 from compass_core.logger import setup as setup_logging
-from compass_core.settings import settings
+from compass_server.settings import server_settings
 
 
 def _wait_for_server(url: str, timeout: int = 30) -> bool:
@@ -31,8 +31,8 @@ def _wait_for_server(url: str, timeout: int = 30) -> bool:
 
 @handle_errors
 def serve(
-    host: str = typer.Option(settings.API_HOST, help="Host for the API server"),
-    port: int = typer.Option(settings.API_PORT, help="Port for the API server"),
+    host: str = typer.Option(server_settings.API_HOST, help="Host for the API server"),
+    port: int = typer.Option(server_settings.API_PORT, help="Port for the API server"),
     no_frontend: bool = typer.Option(False, "--no-frontend", help="Skip starting the frontend"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging"),
 ) -> None:
@@ -42,7 +42,7 @@ def serve(
     web_dir = Path(__file__).parents[5] / "apps" / "web"
     procs: list[subprocess.Popen] = []
 
-    frontend_url = settings.FRONTEND_URL
+    frontend_url = server_settings.FRONTEND_URL
 
     try:
         display.console.print(
@@ -54,7 +54,7 @@ def serve(
                     sys.executable,
                     "-m",
                     "uvicorn",
-                    "compass_core.server.main:app",
+                    "compass_server.main:app",
                     "--host",
                     host,
                     "--port",
@@ -68,7 +68,9 @@ def serve(
             display.console.print(f"[bold green]Starting frontend[/bold green] on {frontend_url}")
             procs.append(subprocess.Popen(["pnpm", "dev"], cwd=web_dir))
             # Poll until the dev server is ready, then open the browser.
-            if _wait_for_server(f"http://{settings.FRONTEND_HOST}:{settings.FRONTEND_PORT}"):
+            if _wait_for_server(
+                f"http://{server_settings.FRONTEND_HOST}:{server_settings.FRONTEND_PORT}"
+            ):
                 webbrowser.open(frontend_url)
 
         display.console.print("[dim]Press Ctrl+C to stop.[/dim]")

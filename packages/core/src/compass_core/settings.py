@@ -1,13 +1,29 @@
 import os
 from pathlib import Path
 
-from pydantic import Field, computed_field
+from pydantic import Field
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 STAGE = os.environ.get("STAGE", None)
 
 
 class Settings(BaseSettings):
+    """Engine settings, read from the environment and ``.env``.
+
+    Adapters that need more settings (e.g. ``compass_server.settings.ServerSettings``)
+    subclass this so they share the same sources and ``STAGE`` handling.
+
+    Attributes:
+        LADYBUG_DB_PATH: Explicit path to the graph database; when it does not exist,
+            the index is found by walking up from the working directory.
+        REPO_ROOT: Root path of the repository being analysed.
+        QUERY_TIMEOUT_MS: Per-query timeout for graph queries, in milliseconds.
+
+    Example:
+        ``QUERY_TIMEOUT_MS=5000 compass ingest .`` gives
+        ``Settings().QUERY_TIMEOUT_MS == 5000``.
+    """
+
     LADYBUG_DB_PATH: str = Field(
         default=".compass/graph.ladybug", description="Path to the LadybugDB graph database file"
     )
@@ -18,17 +34,6 @@ class Settings(BaseSettings):
     QUERY_TIMEOUT_MS: int = Field(
         default=10_000, description="Per-query timeout in milliseconds for graph queries"
     )
-
-    API_HOST: str = Field(default="127.0.0.1", description="Host the FastAPI server binds to")
-    API_PORT: int = Field(default=8000, description="Port the FastAPI server listens on")
-
-    FRONTEND_HOST: str = Field(default="localhost", description="Host of the frontend dev server")
-    FRONTEND_PORT: int = Field(default=3000, description="Port of the frontend dev server")
-
-    @computed_field  # type: ignore[prop-decorator]  # known mypy/pydantic limitation: mypy flags any decorator stacked on @property before the pydantic plugin can special-case @computed_field
-    @property
-    def FRONTEND_URL(self) -> str:
-        return f"http://{self.FRONTEND_HOST}:{self.FRONTEND_PORT}"
 
     model_config = SettingsConfigDict(
         validate_assignment=True,

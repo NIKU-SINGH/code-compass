@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from compass_core.server.errors import register_error_handlers
-from compass_core.server.routers.query import router as query_router
-from compass_core.server.routers.repo import router as repo_router
-from compass_core.settings import settings
+from compass_server.errors import register_error_handlers
+from compass_server.routers.query import router as query_router
+from compass_server.routers.repo import router as repo_router
+from compass_server.settings import server_settings
 
 app = FastAPI(
     title="Code Compass API", description="Backend for the Code Compass visual knowledge graph."
@@ -16,7 +16,7 @@ register_error_handlers(app)
 # Allow the Vite dev server (localhost:5173) to talk to FastAPI (localhost:8000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL],
+    allow_origins=[server_settings.FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

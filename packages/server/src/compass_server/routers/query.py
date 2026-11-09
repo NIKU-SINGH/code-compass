@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -27,13 +26,12 @@ from compass_core.contract.results import (
 )
 from compass_core.contract.serialize import to_json
 from compass_core.graph.db import GraphDB
-from compass_core.index.locate import IndexLocation, require_index
+from compass_core.index.locate import IndexLocation, locate_index
 from compass_core.query.detail import describe
 from compass_core.query.impact import impact
 from compass_core.query.overview import overview
 from compass_core.query.search import find_symbols
 from compass_core.query.status import index_status
-from compass_core.settings import settings
 from compass_core.shared_types import SymbolKind
 
 router = APIRouter(tags=["query"])
@@ -51,10 +49,7 @@ _LOOKUP_ERRORS: dict[int | str, dict[str, Any]] = {
 
 
 def get_index() -> IndexLocation:
-    """Locate the index: ``LADYBUG_DB_PATH`` if it exists, else walk up from the cwd.
-
-    The configured path is resolved so ``repo_root`` is absolute regardless of the
-    cwd. A configured path that does not exist falls back to the cwd search.
+    """FastAPI dependency for the index; the lookup rule lives in ``locate_index``.
 
     Returns:
         The index location.
@@ -62,10 +57,7 @@ def get_index() -> IndexLocation:
     Raises:
         IndexNotFoundError: If no index can be found.
     """
-    configured = Path(settings.LADYBUG_DB_PATH).resolve()
-    if configured.exists():
-        return require_index(Path.cwd(), override=configured)
-    return require_index(Path.cwd())
+    return locate_index()
 
 
 def get_db(location: Annotated[IndexLocation, Depends(get_index)]) -> Iterator[GraphDB]:

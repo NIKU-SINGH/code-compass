@@ -9,6 +9,7 @@ description = "CLI for code-compass"
 requires-python = ">=3.11"
 dependencies = [
     "compass-core",
+    "compass-server",
     "typer>=0.9.0",
     "rich>=13.0.0",
 ]
