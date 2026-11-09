@@ -7,6 +7,7 @@ from __future__ import annotations
 from compass_core.ir.models import ParsedFile
 from compass_core.languages import registry
 from compass_core.phases.base import IngestContext
+from compass_core.shared_types import Language
 
 
 class SymbolTablePhase:
@@ -21,7 +22,7 @@ class SymbolTablePhase:
                 symbol_table[definition.id] = definition.id
 
         import_map: dict[str, dict[str, str | None]] = {}
-        by_language: dict[str, list[ParsedFile]] = {}
+        by_language: dict[Language, list[ParsedFile]] = {}
         for pf in ctx.parsed_files:
             by_language.setdefault(pf.language, []).append(pf)
         for language_id, files in by_language.items():

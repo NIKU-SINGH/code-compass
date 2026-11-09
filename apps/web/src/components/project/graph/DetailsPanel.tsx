@@ -1,115 +1,176 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { Check, Copy, PanelRightClose } from "lucide-react";
+import type { NodeDetail, SymbolRef } from "@/lib/api";
 import type { VisibleNode } from "./useExpandableGraph";
-import { NODE_COLOR, NODE_LABEL } from "./graphStyle";
-import { apiFetch } from "@/lib/api";
+import { NODE_LABEL, NODE_TEXT_CLASS } from "./graphStyle";
+import { Overview } from "./details/Overview";
+import { PanelActions, type PanelView } from "./details/PanelActions";
+import { SourceCode } from "./details/SourceCode";
+import { sectionsFor } from "./details/relatedSections";
+import { metaChips, shortPath } from "./details/meta";
+import { iconForKind, locationLabel } from "./details/symbolLabel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-
-interface FileContentResponse {
-  path: string;
-  content: string;
-  truncated: boolean;
-}
+import { InlineError } from "@/components/ui/InlineError";
+import { RetryButton } from "@/components/ui/RetryButton";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Props {
   node: VisibleNode;
-  connectionCount: number;
+  /** Loaded details for `node`; null while loading, on error, or when the backend has none. */
+  detail: NodeDetail | null;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
   onClose: () => void;
+  onShowImpact: (node: VisibleNode) => void;
+  onExpand: (node: VisibleNode) => void;
+  canSelect: (symbol: SymbolRef) => boolean;
+  onSelectRelated: (symbol: SymbolRef) => void;
 }
 
-export function DetailsPanel({ node, connectionCount, onClose }: Props) {
-  const [code, setCode] = useState<string | null>(null);
-  const [loadingCode, setLoadingCode] = useState(false);
-  const [codeError, setCodeError] = useState<string | null>(null);
+export function DetailsPanel({
+  node,
+  detail,
+  loading,
+  error,
+  onRetry,
+  onClose,
+  onShowImpact,
+  onExpand,
+  canSelect,
+  onSelectRelated,
+}: Props) {
+  const [requestedView, setRequestedView] = useState<PanelView>("overview");
+  const [copied, setCopied] = useState(false);
+  const symbol = detail?.symbol ?? null;
+  const location = symbol
+    ? locationLabel(symbol.file_path, symbol.line_start, symbol.line_end)
+    : repoRelativePath(node.publicId);
+  const source = symbol?.source ?? null;
+  const KindIcon = iconForKind(node.type);
 
-  // Collapse any open code preview whenever a different node is selected.
+  // Every node opens on its overview; the source is one click away.
   useEffect(() => {
-    setCode(null);
-    setCodeError(null);
-    setLoadingCode(false);
+    setRequestedView("overview");
+    setCopied(false);
   }, [node.id]);
+  // A node without source (or still loading) can only show the overview.
+  const view: PanelView = requestedView === "source" && source ? "source" : "overview";
 
-  async function handleViewCode() {
-    if (code !== null) {
-      setCode(null);
-      return;
-    }
-    setLoadingCode(true);
-    setCodeError(null);
+  async function copyLocation() {
     try {
-      const res = await apiFetch<FileContentResponse>(
-        `/api/repo/file?path=${encodeURIComponent(node.filePath)}`
-      );
-      setCode(res.truncated ? `${res.content}\n\n… (truncated)` : res.content);
-    } catch (e) {
-      setCodeError(e instanceof Error ? e.message : "Failed to load file");
-    } finally {
-      setLoadingCode(false);
+      await navigator.clipboard.writeText(location);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard can be unavailable (insecure context, denied permission); nothing to recover.
     }
   }
 
   return (
-    <div className="absolute top-3 right-3 w-[340px] max-h-[calc(100%-1.5rem)] overflow-y-auto bg-card/95 backdrop-blur border border-border rounded-lg shadow-lg z-20 text-xs flex flex-col">
-      <div className="flex items-start justify-between gap-2 px-4 py-3 border-b border-border">
-        <p className="font-semibold text-foreground text-sm">{node.label}</p>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          className="size-6 text-muted-foreground hover:text-foreground flex-shrink-0 [&_svg]:size-3.5"
-          aria-label="Close"
-        >
-          <X />
-        </Button>
+    <aside
+      aria-label="Node details"
+      className="w-[380px] shrink-0 h-full overflow-y-auto border-l border-border bg-card/80 backdrop-blur-md text-xs flex flex-col"
+    >
+      <div className="flex flex-col gap-2 px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <Badge variant="outline" className={`w-fit gap-1 ${NODE_TEXT_CLASS[node.type]}`}>
+            <KindIcon className="size-3" aria-hidden />
+            {NODE_LABEL[node.type]}
+          </Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="size-6 cursor-pointer text-muted-foreground hover:text-foreground [&_svg]:size-3.5"
+            aria-label="Close details"
+          >
+            <PanelRightClose />
+          </Button>
+        </div>
+
+        <p className="font-mono font-semibold text-foreground text-base break-all">
+          {symbol?.name ?? node.label}
+        </p>
+
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <span className="min-w-0 truncate font-mono text-[11px]" title={location}>
+            {shortPath(location)}
+          </span>
+          <button
+            type="button"
+            onClick={copyLocation}
+            aria-label="Copy location"
+            className="cursor-pointer shrink-0 hover:text-foreground"
+          >
+            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          </button>
+        </div>
+
+        <PanelActions
+          view={view}
+          onViewChange={setRequestedView}
+          hasSource={Boolean(source)}
+          onImpact={() => onShowImpact(node)}
+          onExpand={node.hasChildren ? () => onExpand(node) : undefined}
+        />
       </div>
 
-      <div className="px-4 py-3 flex items-center gap-2 border-b border-border">
-        <span
-          className="px-1.5 py-0.5 rounded text-[10px] font-medium border"
-          style={{ color: NODE_COLOR[node.type], borderColor: NODE_COLOR[node.type] }}
-        >
-          {NODE_LABEL[node.type]}
-        </span>
-        <span className="text-muted-foreground">
-          {connectionCount} connection{connectionCount === 1 ? "" : "s"}
-        </span>
-      </div>
+      {loading && <PanelSkeleton />}
+      {error && (
+        <div className="px-4 py-3">
+          <InlineError
+            title="Could not load details"
+            message={error}
+            action={<RetryButton onRetry={onRetry} />}
+          />
+        </div>
+      )}
+      {!loading && !error && !detail && (
+        <p className="px-4 py-3 border-t border-border text-muted-foreground">
+          No further details for this node.
+        </p>
+      )}
 
-      <div className="px-4 py-3 border-b border-border flex flex-col gap-1.5">
-        <Row label="id" value={node.id} mono />
-        <Row label="type" value={node.type} />
-        <Row label="file path" value={node.filePath} mono />
-      </div>
+      {detail && symbol && (
+        <>
+          {view === "source" && source && (
+            <div className="flex min-h-0 flex-1 flex-col border-t border-border">
+              <SourceCode source={source} startLine={symbol.line_start ?? 1} className="min-h-0 flex-1" />
+            </div>
+          )}
 
-      <div className="px-4 py-3">
-        <Button
-          variant="outline"
-          onClick={handleViewCode}
-          disabled={loadingCode}
-          className="w-full"
-        >
-          {loadingCode ? "Loading…" : code !== null ? "Hide code" : "View code"}
-        </Button>
-        {codeError && <p className="text-destructive mt-2">{codeError}</p>}
-        {code !== null && (
-          <pre className="mt-3 max-h-64 overflow-auto bg-muted/50 rounded-md p-2 text-[10px] leading-relaxed whitespace-pre-wrap break-words font-mono">
-            {code}
-          </pre>
-        )}
-      </div>
+          {view === "overview" && (
+            <div className="border-t border-border">
+              <Overview
+                sections={sectionsFor(detail)}
+                canSelect={canSelect}
+                onSelect={onSelectRelated}
+                truncated={detail.truncated}
+                about={node.type === "File" ? undefined : { docstring: detail.docstring, chips: metaChips(detail) }}
+              />
+            </div>
+          )}
+        </>
+      )}
+    </aside>
+  );
+}
+
+function PanelSkeleton() {
+  return (
+    <div className="px-4 py-3 border-t border-border flex flex-col gap-2" aria-busy>
+      <Skeleton className="h-3 w-2/3" />
+      <Skeleton className="h-3 w-1/2" />
+      <Skeleton className="h-24 w-full" />
     </div>
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <span className="text-muted-foreground flex-shrink-0">{label}</span>
-      <span className={`text-foreground text-right break-all ${mono ? "font-mono text-[10px]" : ""}`}>
-        {value}
-      </span>
-    </div>
-  );
+// The stored path may be absolute; the public id always carries the repo-relative one.
+function repoRelativePath(publicId: string): string {
+  return publicId.startsWith("file::") ? publicId.slice("file::".length) : publicId.split("::")[0];
 }

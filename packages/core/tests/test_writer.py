@@ -14,7 +14,8 @@ from compass_core.graph.db import GraphDB
 from compass_core.graph.schema import create_schema
 from compass_core.graph.writer import write
 from compass_core.ir.graph import CallEdge, ExternalCallEdge, ImportEdge, InheritEdge, ResolvedGraph
-from compass_core.ir.models import Definition, DefinitionKind, ParsedFile
+from compass_core.ir.models import Definition, ParsedFile
+from compass_core.shared_types import SymbolKind
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -57,7 +58,7 @@ def make_function(
     node_id = f"{file_path}::{parent.name}.{name}" if parent else f"{file_path}::{name}"
     return Definition(
         id=node_id,
-        kind=DefinitionKind.METHOD if is_method else DefinitionKind.FUNCTION,
+        kind=SymbolKind.METHOD if is_method else SymbolKind.FUNCTION,
         name=name,
         file_path=file_path,
         line_start=1,
@@ -79,7 +80,7 @@ def make_class(
 ) -> Definition:
     return Definition(
         id=f"{file_path}::{name}",
-        kind=DefinitionKind.CLASS,
+        kind=SymbolKind.CLASS,
         name=name,
         file_path=file_path,
         line_start=1,

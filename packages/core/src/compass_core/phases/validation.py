@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from compass_core.ir.graph import ResolvedGraph
 from compass_core.phases.base import IngestContext, IngestReport
+from compass_core.shared_types import Language
 
 
 class ValidationPhase:
@@ -36,24 +37,25 @@ class ValidationPhase:
         return ctx
 
 
-def _resolved_ratio_by_language(graph: ResolvedGraph) -> dict[str, float]:
-    call_count_by_language: dict[str, int] = {}
+def _resolved_ratio_by_language(graph: ResolvedGraph) -> dict[Language, float]:
+    call_count_by_language: dict[Language, int] = {}
     for pf in graph.files:
         call_count_by_language.setdefault(pf.language, 0)
         for d in pf.definitions:
             call_count_by_language[pf.language] += len(d.raw_calls)
 
-    id_to_language: dict[str, str] = {}
+    id_to_language: dict[str, Language] = {}
     for pf in graph.files:
         for d in pf.definitions:
             id_to_language[d.id] = pf.language
 
-    resolved_by_language: dict[str, int] = {}
+    resolved_by_language: dict[Language, int] = {}
     for edge in graph.call_edges:
-        lang = id_to_language.get(edge.caller_id, "unknown")
-        resolved_by_language[lang] = resolved_by_language.get(lang, 0) + 1
+        lang = id_to_language.get(edge.caller_id)
+        if lang is not None:
+            resolved_by_language[lang] = resolved_by_language.get(lang, 0) + 1
 
-    result: dict[str, float] = {}
+    result: dict[Language, float] = {}
     for lang, total_calls in call_count_by_language.items():
         if total_calls == 0:
             result[lang] = 1.0

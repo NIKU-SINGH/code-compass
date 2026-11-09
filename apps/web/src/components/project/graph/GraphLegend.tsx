@@ -2,7 +2,9 @@
 
 import { Minus, Plus } from "lucide-react";
 import type { NodeType, EdgeType } from "./useGraphData";
-import { NODE_COLOR, NODE_LABEL, EDGE_COLOR, EDGE_LABEL } from "./graphStyle";
+import { NODE_DOT_CLASS, NODE_LABEL, EDGE_LINE_CLASS, EDGE_LABEL } from "./graphStyle";
+import { FilterRow } from "./FilterRow";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
@@ -12,9 +14,11 @@ const EDGE_ORDER: EdgeType[] = ["CONTAINS", "IMPORTS", "INHERITS", "CALLS", "CAL
 interface Props {
   typeVisibility: Record<NodeType, boolean>;
   typeCounts: Record<NodeType, number>;
+  typeTotals: Record<NodeType, number>;
   onToggleType: (type: NodeType) => void;
   edgeTypeVisibility: Record<EdgeType, boolean>;
   edgeTypeCounts: Record<EdgeType, number>;
+  edgeTypeTotals: Record<EdgeType, number>;
   onToggleEdgeType: (type: EdgeType) => void;
   showLabels: boolean;
   onToggleLabels: () => void;
@@ -25,9 +29,11 @@ interface Props {
 export function GraphLegend({
   typeVisibility,
   typeCounts,
+  typeTotals,
   onToggleType,
   edgeTypeVisibility,
   edgeTypeCounts,
+  edgeTypeTotals,
   onToggleEdgeType,
   showLabels,
   onToggleLabels,
@@ -35,30 +41,27 @@ export function GraphLegend({
   onZoomOut,
 }: Props) {
   return (
-    <div className="absolute bottom-4 left-4 w-[220px] max-h-[calc(100%-2rem)] overflow-y-auto bg-card/95 backdrop-blur border border-border rounded-lg p-3.5 text-xs z-10 flex flex-col gap-3.5">
+    <Card className="absolute bottom-4 left-4 w-[220px] max-h-[calc(100%-2rem)] overflow-y-auto bg-card/80 backdrop-blur-md p-3.5 text-xs z-10 flex flex-col gap-3.5">
       <div>
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
           Entities
         </p>
-        <div className="flex flex-col gap-1.5">
-          {NODE_ORDER.filter((t) => typeCounts[t] > 0 || typeVisibility[t]).map((type) => (
-            <Button
+        <div className="flex flex-col">
+          {NODE_ORDER.map((type) => (
+            <FilterRow
               key={type}
-              variant="ghost"
-              onClick={() => onToggleType(type)}
-              className="flex items-center gap-2 w-full h-auto justify-start px-1.5 py-1 font-normal"
-            >
-              <span
-                className="size-2 rounded-full flex-shrink-0"
-                style={{ background: NODE_COLOR[type], opacity: typeVisibility[type] ? 1 : 0.25 }}
-              />
-              <span
-                className={`flex-1 text-left ${typeVisibility[type] ? "text-foreground" : "text-muted-foreground/50"}`}
-              >
-                {NODE_LABEL[type]}
-              </span>
-              <span className="text-muted-foreground">{typeCounts[type]}</span>
-            </Button>
+              id={`filter-node-${type}`}
+              label={NODE_LABEL[type]}
+              count={typeCounts[type]}
+              total={typeTotals[type]}
+              enabled={typeVisibility[type]}
+              onToggle={() => onToggleType(type)}
+              marker={
+                <span
+                  className={`size-2 rounded-full flex-shrink-0 ${NODE_DOT_CLASS[type]} ${typeVisibility[type] ? "" : "opacity-25"}`}
+                />
+              }
+            />
           ))}
         </div>
       </div>
@@ -67,25 +70,22 @@ export function GraphLegend({
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
           Relationships
         </p>
-        <div className="flex flex-col gap-1.5">
-          {EDGE_ORDER.filter((t) => edgeTypeCounts[t] > 0 || edgeTypeVisibility[t]).map((type) => (
-            <Button
+        <div className="flex flex-col">
+          {EDGE_ORDER.map((type) => (
+            <FilterRow
               key={type}
-              variant="ghost"
-              onClick={() => onToggleEdgeType(type)}
-              className="flex items-center gap-2 w-full h-auto justify-start px-1.5 py-1 font-normal"
-            >
-              <span
-                className="w-3 h-0.5 rounded-full flex-shrink-0"
-                style={{ background: EDGE_COLOR[type], opacity: edgeTypeVisibility[type] ? 1 : 0.25 }}
-              />
-              <span
-                className={`flex-1 text-left ${edgeTypeVisibility[type] ? "text-foreground" : "text-muted-foreground/50"}`}
-              >
-                {EDGE_LABEL[type]}
-              </span>
-              <span className="text-muted-foreground">{edgeTypeCounts[type]}</span>
-            </Button>
+              id={`filter-edge-${type}`}
+              label={EDGE_LABEL[type]}
+              count={edgeTypeCounts[type]}
+              total={edgeTypeTotals[type]}
+              enabled={edgeTypeVisibility[type]}
+              onToggle={() => onToggleEdgeType(type)}
+              marker={
+                <span
+                  className={`w-3 h-0.5 rounded-full flex-shrink-0 ${EDGE_LINE_CLASS[type]} ${edgeTypeVisibility[type] ? "" : "opacity-25"}`}
+                />
+              }
+            />
           ))}
         </div>
       </div>
@@ -118,6 +118,6 @@ export function GraphLegend({
           </Button>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

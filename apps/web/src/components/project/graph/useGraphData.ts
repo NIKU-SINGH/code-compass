@@ -2,26 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import type { components } from "@/lib/api-types";
 
 export type NodeType = "File" | "Class" | "Function" | "Method" | "ExternalDep";
 export type EdgeType = "CONTAINS" | "IMPORTS" | "INHERITS" | "CALLS" | "CALLS_EXTERN";
 
-export interface ApiNode {
-  id: string;
-  label: string;
-  type: string;
-  file_path: string;
-}
-export interface ApiEdge {
-  id: string;
-  source: string;
-  target: string;
-  type: string;
-}
-export interface GraphData {
-  nodes: ApiNode[];
-  edges: ApiEdge[];
-}
+export type ApiNode = components["schemas"]["GraphNode"];
+export type ApiEdge = components["schemas"]["GraphEdge"];
+export type GraphData = components["schemas"]["GraphResponse"];
 
 export function useGraphData() {
   const [data, setData] = useState<GraphData | null>(null);

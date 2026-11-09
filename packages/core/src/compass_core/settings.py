@@ -15,6 +15,10 @@ class Settings(BaseSettings):
         default=Path("."), description="Root path of the repository being analysed"
     )
 
+    QUERY_TIMEOUT_MS: int = Field(
+        default=10_000, description="Per-query timeout in milliseconds for graph queries"
+    )
+
     API_HOST: str = Field(default="127.0.0.1", description="Host the FastAPI server binds to")
     API_PORT: int = Field(default=8000, description="Port the FastAPI server listens on")
 

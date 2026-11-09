@@ -1,4 +1,4 @@
-.PHONY: install install-web dev build clean
+.PHONY: install install-web dev build clean openapi gen-api
 
 install:
 	pip install -e packages/core
@@ -19,3 +19,9 @@ clean:
 	rm -rf packages/core/src/compass_core/server/static/*
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type d -name "*.egg-info" -exec rm -rf {} +
+
+openapi:
+	uv run python packages/core/scripts/dump_openapi.py .build/openapi.json
+
+gen-api: openapi
+	cd apps/web && pnpm gen:api

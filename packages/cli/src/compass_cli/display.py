@@ -16,6 +16,7 @@ from rich.text import Text
 
 from compass_cli.progress import fmt_duration
 from compass_cli.types import IngestSummary
+from compass_core.shared_types import Language
 
 _GOLD = "color(214)"
 
@@ -84,7 +85,7 @@ def phase_header(num: int, total: int, title: str) -> None:
     console.print()
 
 
-def _language_grid(language_counts: dict[str, int]) -> Table:
+def _language_grid(language_counts: dict[Language, int]) -> Table:
     """Lay out a "Languages" label followed by a language -> file-count
     breakdown, three columns wide."""
     grid = Table.grid(padding=(0, 3))
@@ -123,6 +124,8 @@ def summary(summary: IngestSummary) -> None:
     right.add_column(style="bold")
     right.add_row("Nodes", f"{summary.node_count:,}")
     right.add_row("Edges", f"{summary.edge_count:,}")
+    if summary.dropped_edges:
+        right.add_row("Skipped", f"{summary.dropped_edges:,} edges")
     right.add_row("Resolved", f"{summary.resolved_pct:.0%}")
     right.add_row("Orphans", f"{summary.orphan_count:,}")
     right.add_row("DB size", fmt_size(summary.db_size))
@@ -151,7 +154,25 @@ def summary(summary: IngestSummary) -> None:
             expand=True,
         )
     )
+    if summary.dropped_edges:
+        console.print(f"  [dim]{skipped_edges_note(summary.dropped_edges)}[/dim]", soft_wrap=True)
     console.print()
+
+
+def skipped_edges_note(count: int) -> str:
+    """Explain why some resolved edges are missing from the database.
+
+    Args:
+        count: Number of edges the writer could not store.
+
+    Returns:
+        A one-line explanation, e.g. ``"3 edges skipped (callee is not a stored
+        function, e.g. class constructor calls)"``.
+    """
+    noun = "edge" if count == 1 else "edges"
+    return (
+        f"{count:,} {noun} skipped (callee is not a stored function, e.g. class constructor calls)"
+    )
 
 
 def next_steps() -> None:

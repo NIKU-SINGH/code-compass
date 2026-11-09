@@ -24,8 +24,9 @@ import hashlib
 from pathlib import Path
 from textwrap import dedent
 
-from compass_core.ir.models import DefinitionKind, ParsedFile
+from compass_core.ir.models import ParsedFile
 from compass_core.languages.python.extractor import PythonExtractor
+from compass_core.shared_types import SymbolKind
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -52,15 +53,15 @@ def parse(disk_path: Path, rel_path: str | Path | None = None) -> ParsedFile:
 
 
 def classes(pf: ParsedFile):
-    return [d for d in pf.definitions if d.kind is DefinitionKind.CLASS]
+    return [d for d in pf.definitions if d.kind is SymbolKind.CLASS]
 
 
 def functions(pf: ParsedFile):
-    return [d for d in pf.definitions if d.kind is DefinitionKind.FUNCTION]
+    return [d for d in pf.definitions if d.kind is SymbolKind.FUNCTION]
 
 
 def methods(pf: ParsedFile):
-    return [d for d in pf.definitions if d.kind is DefinitionKind.METHOD]
+    return [d for d in pf.definitions if d.kind is SymbolKind.METHOD]
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +97,7 @@ def test_extract_simple_function(tmp_path: Path) -> None:
     assert "def add" in fn.signature
     assert fn.line_start == 1
     assert fn.line_end == 2
-    assert fn.kind is DefinitionKind.FUNCTION
+    assert fn.kind is SymbolKind.FUNCTION
     assert fn.parent_id is None
     assert fn.id == "py::f::add"
 
@@ -194,7 +195,7 @@ def test_extract_class_with_methods(tmp_path: Path) -> None:
     method_defs = methods(pf)
     assert len(method_defs) == 2
     for m in method_defs:
-        assert m.kind is DefinitionKind.METHOD
+        assert m.kind is SymbolKind.METHOD
         assert m.parent_id == "py::f::Counter"
         assert m.id.startswith("py::f::Counter.")
 

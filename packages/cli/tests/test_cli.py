@@ -45,3 +45,24 @@ def test_ingest_command_wraps_oserror(tmp_path):
     result = runner.invoke(app, ["ingest", str(blocked_path)])
     assert result.exit_code == 1
     assert "Error" in result.output
+
+
+def test_ingest_reports_skipped_edges(tmp_path):
+    # app.py's call to the class constructor resolves, but CALLS edges only
+    # connect functions, so the writer cannot store it: the summary must say
+    # so instead of counting it as written.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "lib.py").write_text("class Widget:\n    pass\n\n\ndef helper():\n    pass\n")
+    (repo / "app.py").write_text(
+        "from lib import Widget, helper\n\n\n"
+        "def build():\n    return Widget()\n\n\n"
+        "def run():\n    helper()\n"
+    )
+
+    result = runner.invoke(app, ["ingest", str(repo), "--db", str(tmp_path / "g.ladybug")])
+
+    assert result.exit_code == 0, result.output
+    assert "1 edge skipped (callee is not a stored function, e.g. class constructor calls)" in (
+        result.output
+    )

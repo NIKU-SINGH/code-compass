@@ -15,14 +15,15 @@ from compass_core.ir.models import ParsedFile
 from compass_core.languages import registry
 from compass_core.languages.base import LanguageExtractor
 from compass_core.phases.base import IngestContext
+from compass_core.shared_types import Language
 
 
 @cache
-def _get_extractor(language_id: str) -> LanguageExtractor:
+def _get_extractor(language_id: Language) -> LanguageExtractor:
     return registry.get_extractor_for_language(language_id)
 
 
-def _parse_one(language_id: str, abs_path: str, rel_path: str) -> ParsedFile:
+def _parse_one(language_id: Language, abs_path: str, rel_path: str) -> ParsedFile:
     """rel_path is abs_path made relative to ctx.repo_root by the caller.
     Extractors receive the relative path (per the languages/python module-name
     contract established in Task 5: file_path is repo-relative, not absolute,
@@ -34,7 +35,7 @@ def _parse_one(language_id: str, abs_path: str, rel_path: str) -> ParsedFile:
     return extractor.parse(source, Path(rel_path))
 
 
-def _parse_worker(args: tuple[str, str, str]) -> ParsedFile:
+def _parse_worker(args: tuple[Language, str, str]) -> ParsedFile:
     language_id, abs_path, rel_path = args
     try:
         return _parse_one(language_id, abs_path, rel_path)

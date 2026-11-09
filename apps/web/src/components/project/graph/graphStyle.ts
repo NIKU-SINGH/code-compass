@@ -1,11 +1,45 @@
+import { resolveCssColor } from "@/lib/cssColor";
 import type { NodeType, EdgeType } from "./useGraphData";
 
-export const NODE_COLOR: Record<NodeType, string> = {
-  File: "#60a5fa",
-  Class: "#fb923c",
-  Function: "#4ade80",
-  Method: "#c084fc",
-  ExternalDep: "#f87171",
+const NODE_TOKEN: Record<NodeType, string> = {
+  File: "--kind-file",
+  Class: "--kind-class",
+  Function: "--kind-function",
+  Method: "--kind-method",
+  ExternalDep: "--kind-external",
+};
+
+const EDGE_TOKEN: Record<EdgeType, string> = {
+  CONTAINS: "--edge-contains",
+  IMPORTS: "--edge-imports",
+  INHERITS: "--edge-inherits",
+  CALLS: "--edge-calls",
+  CALLS_EXTERN: "--edge-external",
+};
+
+/** Tailwind background classes (static strings so Tailwind keeps them) for legend swatches. */
+export const NODE_DOT_CLASS: Record<NodeType, string> = {
+  File: "bg-kind-file",
+  Class: "bg-kind-class",
+  Function: "bg-kind-function",
+  Method: "bg-kind-method",
+  ExternalDep: "bg-kind-external",
+};
+
+export const NODE_TEXT_CLASS: Record<NodeType, string> = {
+  File: "text-kind-file",
+  Class: "text-kind-class",
+  Function: "text-kind-function",
+  Method: "text-kind-method",
+  ExternalDep: "text-kind-external",
+};
+
+export const EDGE_LINE_CLASS: Record<EdgeType, string> = {
+  CONTAINS: "bg-edge-contains",
+  IMPORTS: "bg-edge-imports",
+  INHERITS: "bg-edge-inherits",
+  CALLS: "bg-edge-calls",
+  CALLS_EXTERN: "bg-edge-external",
 };
 
 export const NODE_LABEL: Record<NodeType, string> = {
@@ -24,14 +58,6 @@ export const NODE_SIZE: Record<NodeType, number> = {
   ExternalDep: 3,
 };
 
-export const EDGE_COLOR: Record<EdgeType, string> = {
-  CONTAINS: "rgba(251,146,60,0.55)",
-  IMPORTS: "#60a5fa",
-  INHERITS: "#fb923c",
-  CALLS: "rgba(255,255,255,0.12)",
-  CALLS_EXTERN: "#f87171",
-};
-
 export const EDGE_LABEL: Record<EdgeType, string> = {
   CONTAINS: "Contains",
   IMPORTS: "Imports",
@@ -40,21 +66,12 @@ export const EDGE_LABEL: Record<EdgeType, string> = {
   CALLS_EXTERN: "Ext. Calls",
 };
 
-function hashString(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = (h * 31 + s.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h);
+/** `#rrggbb` for a node kind, for THREE.js. */
+export function colorForNode(type: NodeType): string {
+  return resolveCssColor(NODE_TOKEN[type] ?? "--kind-file");
 }
 
-// File nodes dominate most repos and all share the same NODE_COLOR, so a
-// graph made only of files would render as one flat color. Vary the hue by
-// top-level directory instead, so modules are visually distinguishable even
-// when entity-type diversity is low. Non-file types keep their fixed color.
-export function colorForNode(filePath: string, type: NodeType): string {
-  if (type !== "File") return NODE_COLOR[type];
-  const dir = filePath.split("/").slice(0, -1).join("/") || filePath;
-  const hue = hashString(dir) % 360;
-  return `hsl(${hue}, 62%, 62%)`;
+/** `#rrggbb` for an edge type, for THREE.js. */
+export function colorForEdge(type: EdgeType): string {
+  return resolveCssColor(EDGE_TOKEN[type] ?? "--edge-contains");
 }

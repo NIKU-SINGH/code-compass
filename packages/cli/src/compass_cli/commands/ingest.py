@@ -13,10 +13,10 @@ from compass_cli.errors import handle_errors
 from compass_cli.progress import IngestReporter
 from compass_cli.types import IngestSummary
 from compass_core.ir.graph import ResolvedGraph
-from compass_core.ir.models import DefinitionKind
 from compass_core.logger import setup as setup_logging
 from compass_core.phases.base import IngestContext
 from compass_core.phases.pipeline import Pipeline
+from compass_core.shared_types import Language, SymbolKind
 
 
 def _format_debug_section(phase: str, ctx: IngestContext) -> str:
@@ -91,13 +91,14 @@ def _format_debug_section(phase: str, ctx: IngestContext) -> str:
         lines.append(f"orphan_node_count={r.orphan_node_count}")
         lines.append(f"dangling_import_count={r.dangling_import_count}")
         lines.append(f"degraded_file_count={r.degraded_file_count}")
-        lines.append(f"resolved_by_language={r.resolved_by_language}")
-        lines.append(f"unresolved_by_language={r.unresolved_by_language}")
+        lines.append(f"resolved_by_language={_by_language_name(r.resolved_by_language)}")
+        lines.append(f"unresolved_by_language={_by_language_name(r.unresolved_by_language)}")
 
     elif phase == "persistence":
         assert ctx.write_result is not None
         lines.append(f"node_count={ctx.write_result.node_count}")
         lines.append(f"edge_count={ctx.write_result.edge_count}")
+        lines.append(f"dropped_edges={ctx.write_result.dropped_edges}")
 
     lines.append("")
     return "\n".join(lines)
@@ -109,9 +110,9 @@ def _count_definitions(resolved_graph: ResolvedGraph) -> tuple[int, int]:
     function_count = 0
     for pf in resolved_graph.files:
         for d in pf.definitions:
-            if d.kind is DefinitionKind.CLASS:
+            if d.kind is SymbolKind.CLASS:
                 class_count += 1
-            elif d.kind in (DefinitionKind.FUNCTION, DefinitionKind.METHOD):
+            elif d.kind in (SymbolKind.FUNCTION, SymbolKind.METHOD):
                 function_count += 1
     return class_count, function_count
 
@@ -133,9 +134,13 @@ def _resolved_pct(graph: ResolvedGraph) -> float:
     return len(graph.call_edges) / total_raw
 
 
-def _language_counts(ctx: IngestContext) -> dict[str, int]:
+def _by_language_name(ratios: dict[Language, float]) -> dict[str, float]:
+    return {language.value: ratio for language, ratio in ratios.items()}
+
+
+def _language_counts(ctx: IngestContext) -> dict[Language, int]:
     assert ctx.manifest is not None
-    counts: dict[str, int] = {}
+    counts: dict[Language, int] = {}
     for f in ctx.manifest.files:
         counts[f.language] = counts.get(f.language, 0) + 1
     return counts
@@ -208,7 +213,10 @@ def _stage_result(
         display_db = _relative_db_path(db_path, repo_path)
         primary = f"{ctx.write_result.node_count:,} nodes · {ctx.write_result.edge_count:,} edges"
         secondary = f"{display.fmt_size(_db_size(db_path))} · {display_db}"
-        return primary, secondary, False
+        dropped = ctx.write_result.dropped_edges
+        if dropped:
+            secondary = f"{dropped:,} skipped · {secondary}"
+        return primary, secondary, dropped > 0
 
     return "", "", False
 
@@ -268,6 +276,7 @@ def _run_ingest(
         resolved_pct=_resolved_pct(ctx.resolved_graph),
         orphan_count=ctx.report.orphan_node_count,
         language_counts=_language_counts(ctx),
+        dropped_edges=ctx.write_result.dropped_edges,
     )
 
 

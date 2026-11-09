@@ -3,16 +3,19 @@
 
 from __future__ import annotations
 
-import json
 import logging
+import os
+import shutil
 import subprocess
-import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from compass_core.graph.db import GraphDB
 from compass_core.graph.schema import create_schema
+from compass_core.index.locate import metadata_path_for
+from compass_core.index.metadata import IndexMetadata, save_metadata
 from compass_core.phases.base import IngestContext, Phase
 from compass_core.phases.discovery import DiscoveryPhase
 from compass_core.phases.parse import ParsePhase
@@ -21,13 +24,14 @@ from compass_core.phases.resolution import ResolutionPhase
 from compass_core.phases.symbol_table import SymbolTablePhase
 from compass_core.phases.validation import ValidationPhase
 from compass_core.progress import ProgressReporter
+from compass_core.shared_types import Language
 
 logger = logging.getLogger(__name__)
 
 _PHASE_ORDER = ["discovery", "parse", "symbol_table", "resolution", "validation", "persistence"]
 
-_GRAMMAR_PACKAGES: dict[str, str] = {
-    "python": "tree-sitter-python",
+_GRAMMAR_PACKAGES: dict[Language, str] = {
+    Language.PYTHON: "tree-sitter-python",
 }
 
 
@@ -44,6 +48,9 @@ class Pipeline:
         stop_after: str | None = None,
         on_phase_complete: Callable[[str, IngestContext], None] | None = None,
     ) -> IngestContext:
+        # Stamp the index with the time the ingest STARTS: a file edited while a long
+        # ingest runs has a later mtime and is reported stale, not silently trusted.
+        started_at = datetime.now(UTC)
         ctx = IngestContext(repo_root=repo_root, reporter=reporter)
 
         phases: dict[str, Phase] = {
@@ -64,31 +71,54 @@ class Pipeline:
                 return ctx
 
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        with GraphDB(db_path) as db:
-            create_schema(db)
-            ctx = PersistencePhase().run(ctx, db)
+        building = db_path.with_name(db_path.name + ".building")
+        _remove_db(building)
+        try:
+            with GraphDB(building) as db:
+                create_schema(db)
+                ctx = PersistencePhase().run(ctx, db)
+            os.replace(building, db_path)
+        except BaseException:
+            _remove_db(building)
+            raise
         if on_phase_complete is not None:
             on_phase_complete("persistence", ctx)
 
-        _save_metadata(repo_root)
+        _save_metadata(repo_root, metadata_path_for(db_path), started_at)
         return ctx
 
 
-def _save_metadata(repo_path: Path) -> None:
-    """Write .compass/metadata.json with indexed_commit, indexed_at, and the
-    grammar version of every registered language — moved from
-    ingest/engine.py::save_metadata + _get_git_commit + _save_metadata."""
-    commit = _get_git_commit(repo_path)
-    grammar_versions = _grammar_versions()
+def _remove_db(path: Path) -> None:
+    """Delete a LadybugDB file or directory plus its write-ahead log, if present.
 
-    meta_dir = repo_path / ".compass"
-    meta_dir.mkdir(parents=True, exist_ok=True)
-    meta = {
-        "indexed_commit": commit,
-        "indexed_at": int(time.time()),
-        "grammar_versions": grammar_versions,
-    }
-    (meta_dir / "metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    Args:
+        path: The database path; sibling files named ``<path>.wal`` are removed too.
+    """
+    for candidate in (path, path.with_name(path.name + ".wal")):
+        if candidate.is_dir():
+            shutil.rmtree(candidate)
+        elif candidate.exists():
+            candidate.unlink()
+
+
+def _save_metadata(repo_path: Path, metadata_path: Path, indexed_at: datetime) -> None:
+    """Write the index metadata (commit, time, grammar versions) via IndexMetadata.
+
+    Args:
+        repo_path: Repository root, used for the git commit.
+        metadata_path: Destination beside the database (``metadata_path_for``), so
+            ``require_index(..., override=db_path)`` finds it; for the default
+            database this is ``<repo>/.compass/metadata.json``.
+        indexed_at: When the ingest started (taken before discovery).
+    """
+    commit = _get_git_commit(repo_path)
+    meta = IndexMetadata(
+        indexed_commit=None if commit == "unknown" else commit,
+        indexed_at=indexed_at,
+        schema_version=1,
+        grammar_versions=_grammar_versions(),
+    )
+    save_metadata(metadata_path, meta)
     logger.debug("Metadata written: %s", meta)
 
 
@@ -109,11 +139,11 @@ def _get_git_commit(repo_path: Path) -> str:
     return "unknown"
 
 
-def _grammar_versions() -> dict[str, str]:
+def _grammar_versions() -> dict[Language, str]:
     """Pin the installed grammar package version for every registered
     language — an unpinned grammar version means incremental diffing would
     trust stale data unknowingly."""
-    versions: dict[str, str] = {}
+    versions: dict[Language, str] = {}
     for language_id, package in _GRAMMAR_PACKAGES.items():
         try:
             versions[language_id] = version(package)

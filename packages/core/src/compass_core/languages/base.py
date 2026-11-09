@@ -8,11 +8,12 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from compass_core.ir.models import ParsedFile
+from compass_core.shared_types import Language
 
 
 @runtime_checkable
 class LanguageExtractor(Protocol):
-    language_id: str
+    language_id: Language
     file_extensions: set[str]
 
     def parse(self, source: bytes, file_path: Path) -> ParsedFile: ...
@@ -20,6 +21,6 @@ class LanguageExtractor(Protocol):
 
 @runtime_checkable
 class ImportResolver(Protocol):
-    language_id: str
+    language_id: Language
 
     def resolve(self, files: list[ParsedFile]) -> dict[str, dict[str, str | None]]: ...

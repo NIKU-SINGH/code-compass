@@ -286,7 +286,7 @@ class ResultHeader:
 | `HierarchyResult` (`HIERARCHY`) | `root: SymbolRef`, `ancestors: tuple[ResultItem, ...]`, `descendants: tuple[ResultItem, ...]`, `edges` |
 | `ExternalUsageResult` (`EXTERNAL_USAGE`) | `library: str`, `groups: tuple[ExternalUsageGroup, ...]`, `total`, `truncated` — `ExternalUsageGroup(file_path: RepoPath, calls: tuple[ExternalCall, ...])`, `ExternalCall(caller: SymbolRef, external: SymbolRef, line: int \| None)` |
 | `StatusResult` (`STATUS`) | `metadata: IndexMetadata` (§6) |
-| `OverviewResult` (`OVERVIEW`) | `counts: IndexCounts`, `report: IngestReportSummary`, `entry_points: tuple[SymbolRef, ...]`, `most_imported_files`, `most_called_functions: tuple[RankedSymbol, ...]`, `top_external_libraries: tuple[LibraryUsage, ...]` — `RankedSymbol(symbol: SymbolRef, count: int)`, `LibraryUsage(library: str, call_count: int)` |
+| `OverviewResult` (`OVERVIEW`) | `counts: IndexCounts`, `report: IngestReportSummary`, `entry_points: tuple[SymbolRef, ...]`, `most_imported_files`, `most_called_functions: tuple[RankedSymbol, ...]`, `riskiest_to_change: tuple[RankedSymbol, ...]` (ranked by symbols affected within 3 hops), `top_external_libraries: tuple[LibraryUsage, ...]` — `RankedSymbol(symbol: SymbolRef, count: int)`, `LibraryUsage(library: str, call_count: int)` |
 | `SourceResult` (`SOURCE`) | `file_path: RepoPath`, `start_line: int`, `end_line: int` (1-indexed, inclusive, after clamping), `lines: tuple[str, ...]` |
 | `GraphMapResult` (`GRAPH_MAP`) | `nodes: tuple[SymbolRef, ...]` (files only), `edges: tuple[EdgeRef, ...]` (`IMPORTS` only) |
 | `NeighborhoodResult` (`NEIGHBORHOOD`) | `center: SymbolRef`, `depth`, `edge_types: frozenset[EdgeType]`, `nodes`, `edges`, `truncated` |
@@ -317,17 +317,17 @@ Lookup: TypeAlias = R | AmbiguousReference | SymbolNotFound
 **Operation signatures** (`db` is always a read-only `GraphDB`):
 
 ```python
-def find_symbols(db: GraphDB, params: SearchParams) -> SearchResult
+def find_symbols(db: GraphDB, location: IndexLocation, params: SearchParams) -> SearchResult
 def describe(db: GraphDB, ref: str, params: DescribeParams) -> Lookup[DescribeResult]
 def callers(db: GraphDB, ref: str, params: TraversalParams) -> Lookup[TraversalResult]
 def callees(db: GraphDB, ref: str, params: TraversalParams) -> Lookup[TraversalResult]
-def impact(db: GraphDB, ref: str, params: ImpactParams) -> Lookup[ImpactResult]
+def impact(db: GraphDB, location: IndexLocation, ref: str, params: ImpactParams) -> Lookup[ImpactResult]
 def call_path(db: GraphDB, source: str, target: str, params: CallPathParams) -> Lookup[CallPathResult]
 def outline(db: GraphDB, path: str) -> Lookup[OutlineResult]
 def hierarchy(db: GraphDB, ref: str) -> Lookup[HierarchyResult]
 def external_usage(db: GraphDB, library_or_ref: str, params: ExternalUsageParams) -> Lookup[ExternalUsageResult]
 def status(location: IndexLocation) -> StatusResult
-def overview(db: GraphDB) -> OverviewResult
+def overview(db: GraphDB, location: IndexLocation) -> OverviewResult
 def read_source(db: GraphDB, location: IndexLocation, params: SourceParams) -> Lookup[SourceResult]
 def graph_map(db: GraphDB) -> GraphMapResult
 def neighborhood(db: GraphDB, ref: str, params: NeighborhoodParams) -> Lookup[NeighborhoodResult]

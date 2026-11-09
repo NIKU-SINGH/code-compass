@@ -1,18 +1,13 @@
 import pytest
 
-from compass_core.ir.models import (
-    CallSite,
-    Definition,
-    DefinitionKind,
-    ImportStatement,
-    ParsedFile,
-)
+from compass_core.ir.models import CallSite, Definition, ImportStatement, ParsedFile
+from compass_core.shared_types import SymbolKind
 
 
 def test_definition_is_slotted_and_typed():
     d = Definition(
         id="py::pkg.mod::Foo",
-        kind=DefinitionKind.CLASS,
+        kind=SymbolKind.CLASS,
         name="Foo",
         file_path="pkg/mod.py",
         line_start=1,
