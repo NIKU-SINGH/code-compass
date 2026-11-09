@@ -1,5 +1,9 @@
 # Claude Project Instructions
 
+The rules every coding agent follows live in AGENTS.md; read and follow them:
+
+@AGENTS.md
+
 This project prioritizes high-quality, professional code with strict documentation standards.
 
 ### Standards Checklist:
