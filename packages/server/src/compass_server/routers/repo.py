@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -63,17 +62,6 @@ class GraphResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _repo_root() -> Path:
-    """Repo root as the query routes derive it, so public ids match theirs.
-
-    Falls back to ``settings.REPO_ROOT`` when no index can be located.
-    """
-    try:
-        return get_index().repo_root
-    except Exception:
-        return Path(settings.REPO_ROOT).resolve()
-
-
 def _open_index() -> GraphDB:
     """Open the index the query routes use (``get_index``), read-only.
 
@@ -96,7 +84,7 @@ async def repo_overview() -> OverviewResponse:
     try:
         with _open_index() as db:
             counts = index_counts(db)
-            entries = entry_points(db, _repo_root())
+            entries = entry_points(db)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Database unavailable: {exc}") from exc
 
@@ -117,7 +105,7 @@ async def repo_overview() -> OverviewResponse:
 async def repo_graph() -> GraphResponse:
     try:
         with _open_index() as db:
-            result = graph_map(db, _repo_root())
+            result = graph_map(db)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Database unavailable: {exc}") from exc
 

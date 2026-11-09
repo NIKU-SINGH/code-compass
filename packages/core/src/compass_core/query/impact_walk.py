@@ -2,8 +2,8 @@
 
 Each walk expands one distance level at a time with a fixed set of parameterized,
 single-hop queries (``WHERE x IN $ids``), so the cost is one query per level per edge
-family, never one per node. Nodes are keyed by their stored id (definitions) or stored
-path (files); a node is visited once, at its shortest distance, so cycles terminate and
+family, never one per node. Nodes are keyed by ``walk_key``: the id of a definition, the
+path of a file; a node is visited once, at its shortest distance, so cycles terminate and
 the target never lists itself. ``CALLS`` edges below ``min_confidence`` are not traversed;
 stored confidences are float32, so the threshold is compared with a ``1e-6`` tolerance
 (a stored ``0.9`` reads back as ``0.8999999761``).
@@ -20,19 +20,17 @@ confidence, then by the via symbol's id, so results are deterministic.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from compass_core.contract.models import EdgeRef, ResultItem, SymbolRef, Via
 from compass_core.contract.types import SymbolId, ViaKind
 from compass_core.errors import IndexIncompatibleError
 from compass_core.graph.db import GraphDB
-from compass_core.query.references import BY_PATH_AND_TAIL, FILES_AT_PATHS, stored_paths
+from compass_core.query.references import FILES_AT_PATHS
 from compass_core.query.walk_queries import (
     CALLERS_IN_FILES,
     CALLERS_OF_EXTERNALS,
     CALLERS_OF_FUNCTIONS,
     CALLERS_OF_METHODS,
-    EXTERNAL_KEY,
     IMPORTERS_OF_FILES,
     SUBCLASSES_IN_FILES,
     SUBCLASSES_OF,
@@ -55,11 +53,11 @@ class Reached:
     """A node the walk reached, with the item describing how.
 
     Attributes:
-        key: Stored id (definitions) or stored path (files) of the node.
+        key: ``walk_key`` of the node: id of a definition, path of a file.
         item: Distance, via and path confidence of the node.
 
     Example:
-        ``Reached(key="py::app.jobs::nightly", item=ResultItem(symbol=<nightly>,
+        ``Reached(key="app/jobs.py::nightly", item=ResultItem(symbol=<nightly>,
         distance=1, via=Via(kind=ViaKind.CALLS, symbol=<decode_token>),
         min_confidence=1.0))``
     """
@@ -175,51 +173,29 @@ def _structural_edge(source: SymbolRef, target: SymbolRef, kind: EdgeType) -> Ed
     )
 
 
-def stored_target_key(db: GraphDB, target: SymbolRef, repo_root: Path) -> str:
-    """Find the stored id (or, for a file, the stored path) of a resolved target.
+def walk_key(symbol: SymbolRef) -> str:
+    """The key a walk uses for a node: what the graph matches the node on.
 
     Args:
-        db: Open graph database.
-        target: A resolved file, class, function, method or external function.
-        repo_root: Absolute repository root.
+        symbol: A file, class, function, method or external function.
 
     Returns:
-        The stored key the walks use for ``target``.
-
-    Raises:
-        IndexIncompatibleError: The resolved symbol is not in the graph any more.
+        The id of a class or function, the path of a file, the full reference of an
+        external function.
 
     Example:
-        ``<app/auth.py::parse>`` maps to ``"py::app.auth::parse"``; ``<file::app/a.py>``
-        maps to ``"app/a.py"`` (or its absolute spelling, if stored that way);
-        ``<ext::json.dumps>`` maps to ``"json.dumps"``.
+        ``<app/auth.py::parse>`` maps to ``"app/auth.py::parse"``, ``<file::app/a.py>`` to
+        ``"app/a.py"`` and ``<ext::json.dumps>`` to ``"json.dumps"``.
     """
-    params = {"paths": stored_paths(target.file_path or "", repo_root)}
-    key: str | None
-    if target.kind is SymbolKind.EXTERNAL:
-        key = EXTERNAL_KEY.first(db, repo_root, {"ref": target.id.removeprefix("ext::")})
-    elif target.kind is SymbolKind.FILE:
-        node = FILES_AT_PATHS.first(db, repo_root, params)
-        key = node.key if node else None
-    else:
-        queries = BY_PATH_AND_TAIL
-        query = queries.classes if target.kind is SymbolKind.CLASS else queries.functions
-        node = query.first(db, repo_root, {**params, "tail": "::" + target.id.rsplit("::", 1)[1]})
-        key = node.key if node else None
-    if key is None:
-        raise IndexIncompatibleError(f"resolved symbol is missing from the graph: {target.id}")
-    return key
+    if symbol.kind is SymbolKind.FILE:
+        assert symbol.file_path is not None, "a file symbol always has a path"
+        return symbol.file_path
+    if symbol.kind is SymbolKind.EXTERNAL:
+        return symbol.id.removeprefix("ext::")
+    return symbol.id
 
 
-def walk_symbols(
-    db: GraphDB,
-    target: SymbolRef,
-    target_key: str,
-    *,
-    depth: int,
-    min_confidence: float,
-    repo_root: Path,
-) -> Walk:
+def walk_symbols(db: GraphDB, target: SymbolRef, *, depth: int, min_confidence: float) -> Walk:
     """Walk reverse ``CALLS`` (and, for classes, reverse ``INHERITS``) from a symbol.
 
     A function or method in the frontier pulls in its callers (``Via(CALLS, callee)``).
@@ -232,10 +208,8 @@ def walk_symbols(
     Args:
         db: Open graph database.
         target: The resolved class, function, method or external function.
-        target_key: Its stored id (``full_ref`` for an external).
         depth: Maximum distance.
         min_confidence: ``CALLS`` edges below this are not traversed.
-        repo_root: Absolute repository root.
 
     Returns:
         The affected symbols and every edge traversed from them; an edge endpoint may
@@ -248,6 +222,7 @@ def walk_symbols(
         From ``decode_token`` at depth 2 the walk reaches ``handle``, ``run`` and
         ``nightly`` at distance 1 and ``tick`` (which calls ``nightly``) at distance 2.
     """
+    target_key = walk_key(target)
     walker = _Walker(target_key, target)
     frontier = [target_key]
     for distance in range(1, depth + 1):
@@ -256,23 +231,21 @@ def walk_symbols(
         classes = [k for k in frontier if kinds[k] is SymbolKind.CLASS]
         externals = [k for k in frontier if kinds[k] is SymbolKind.EXTERNAL]
         if externals:
-            for ext in CALLERS_OF_EXTERNALS.run(db, repo_root, {"ids": externals}):
+            for ext in CALLERS_OF_EXTERNALS.run(db, {"ids": externals}):
                 _offer_external_caller(walker, ext, distance, target_key)
         minc = _threshold(min_confidence)
         if functions:
-            for call in CALLERS_OF_FUNCTIONS.run(db, repo_root, {"ids": functions, "minc": minc}):
-                _offer_caller(walker, call, distance, call.callee.key)
+            for call in CALLERS_OF_FUNCTIONS.run(db, {"ids": functions, "minc": minc}):
+                _offer_caller(walker, call, distance, call.callee.id)
         if classes:
             params = {"ids": classes, "minc": minc}
-            for method_call in CALLERS_OF_METHODS.run(db, repo_root, params):
+            for method_call in CALLERS_OF_METHODS.run(db, params):
                 _offer_caller(walker, method_call.call, distance, method_call.class_key)
-            for pair in SUBCLASSES_OF.run(db, repo_root, {"ids": classes}):
+            for pair in SUBCLASSES_OF.run(db, {"ids": classes}):
                 child, parent = pair.source, pair.target
-                via = Via(kind=ViaKind.INHERITS, symbol=parent.symbol)
-                walker.offer(child.key, child.symbol, distance, via, parent.key, None)
-                walker.edge(
-                    child.key, _structural_edge(child.symbol, parent.symbol, EdgeType.INHERITS)
-                )
+                via = Via(kind=ViaKind.INHERITS, symbol=parent)
+                walker.offer(child.id, child, distance, via, parent.id, None)
+                walker.edge(child.id, _structural_edge(child, parent, EdgeType.INHERITS))
         frontier = walker.close_level()
         if not frontier:
             break
@@ -280,9 +253,9 @@ def walk_symbols(
 
 
 def _offer_caller(walker: _Walker, call: CallRow, distance: int, parent_key: str) -> None:
-    via = Via(kind=ViaKind.CALLS, symbol=call.callee.symbol)
-    walker.offer(call.caller.key, call.caller.symbol, distance, via, parent_key, call.confidence)
-    walker.edge(call.caller.key, call.edge)
+    via = Via(kind=ViaKind.CALLS, symbol=call.callee)
+    walker.offer(call.caller.id, call.caller, distance, via, parent_key, call.confidence)
+    walker.edge(call.caller.id, call.edge)
 
 
 def _offer_external_caller(
@@ -290,27 +263,19 @@ def _offer_external_caller(
 ) -> None:
     external = walker.symbols[external_key]
     via = Via(kind=ViaKind.CALLS, symbol=external)
-    walker.offer(ext.caller.key, ext.caller.symbol, distance, via, external_key, None)
+    walker.offer(ext.caller.id, ext.caller, distance, via, external_key, None)
     edge = EdgeRef(
-        source_id=ext.caller.symbol.id,
+        source_id=ext.caller.id,
         target_id=external.id,
         type=EdgeType.CALLS_EXTERN,
         confidence=None,
         call_type=None,
         line=ext.line,
     )
-    walker.edge(ext.caller.key, edge)
+    walker.edge(ext.caller.id, edge)
 
 
-def walk_files(
-    db: GraphDB,
-    target: SymbolRef,
-    target_key: str,
-    *,
-    depth: int,
-    min_confidence: float,
-    repo_root: Path,
-) -> Walk:
+def walk_files(db: GraphDB, target: SymbolRef, *, depth: int, min_confidence: float) -> Walk:
     """Walk dependent files: importers, files of callers and files of subclasses.
 
     Each affected file is one ``FILE`` item. Its via is ``IMPORTS`` (symbol: the
@@ -320,10 +285,8 @@ def walk_files(
     Args:
         db: Open graph database.
         target: The resolved file.
-        target_key: Its stored path.
         depth: Maximum distance.
         min_confidence: ``CALLS`` edges below this are not traversed.
-        repo_root: Absolute repository root.
 
     Returns:
         The affected files and the edges traversed (``IMPORTS`` between files,
@@ -338,33 +301,31 @@ def walk_files(
         ``app/jobs.py`` and ``app/__init__.py`` at distance 1 (they import it) and
         ``app/scheduler.py`` at distance 2 (it imports ``app/jobs.py``).
     """
+    target_key = walk_key(target)
     walker = _Walker(target_key, target)
     frontier = [target_key]
     for distance in range(1, depth + 1):
         # (owner path, via, parent path, confidence) per proposal; files resolved below.
         pending: list[tuple[str, Via, str, float | None]] = []
-        for pair in IMPORTERS_OF_FILES.run(db, repo_root, {"paths": frontier}):
+        for pair in IMPORTERS_OF_FILES.run(db, {"paths": frontier}):
             importer, imported = pair.source, pair.target
-            walker.symbols.setdefault(importer.key, importer.symbol)
-            via = Via(kind=ViaKind.IMPORTS, symbol=imported.symbol)
-            pending.append((importer.key, via, imported.key, None))
-            walker.edge(
-                importer.key,
-                _structural_edge(importer.symbol, imported.symbol, EdgeType.IMPORTS),
-            )
+            importer_key = walk_key(importer)
+            walker.symbols.setdefault(importer_key, importer)
+            via = Via(kind=ViaKind.IMPORTS, symbol=imported)
+            pending.append((importer_key, via, walk_key(imported), None))
+            walker.edge(importer_key, _structural_edge(importer, imported, EdgeType.IMPORTS))
         params = {"paths": frontier, "minc": _threshold(min_confidence)}
-        for call in CALLERS_IN_FILES.run(db, repo_root, params):
-            via = Via(kind=ViaKind.CALLS, symbol=call.callee.symbol)
-            pending.append((call.caller.path, via, call.callee.path, call.confidence))
-            walker.edge(call.caller.path, call.edge)
-        for pair in SUBCLASSES_IN_FILES.run(db, repo_root, {"paths": frontier}):
+        for call in CALLERS_IN_FILES.run(db, params):
+            owner = _path(call.caller)
+            via = Via(kind=ViaKind.CALLS, symbol=call.callee)
+            pending.append((owner, via, _path(call.callee), call.confidence))
+            walker.edge(owner, call.edge)
+        for pair in SUBCLASSES_IN_FILES.run(db, {"paths": frontier}):
             child, parent = pair.source, pair.target
-            via = Via(kind=ViaKind.INHERITS, symbol=parent.symbol)
-            pending.append((child.path, via, parent.path, None))
-            walker.edge(
-                child.path, _structural_edge(child.symbol, parent.symbol, EdgeType.INHERITS)
-            )
-        _load_files(db, walker, [p[0] for p in pending], repo_root)
+            via = Via(kind=ViaKind.INHERITS, symbol=parent)
+            pending.append((_path(child), via, _path(parent), None))
+            walker.edge(_path(child), _structural_edge(child, parent, EdgeType.INHERITS))
+        _load_files(db, walker, [p[0] for p in pending])
         for owner, via, parent_path, path_confidence in pending:
             walker.offer(owner, walker.symbols[owner], distance, via, parent_path, path_confidence)
         frontier = walker.close_level()
@@ -373,13 +334,19 @@ def walk_files(
     return walker.result()
 
 
-def _load_files(db: GraphDB, walker: _Walker, paths: list[str], repo_root: Path) -> None:
+def _path(symbol: SymbolRef) -> str:
+    """The file path of a class or function, which keys its file in a file walk."""
+    assert symbol.file_path is not None, "definitions always have a file path"
+    return symbol.file_path
+
+
+def _load_files(db: GraphDB, walker: _Walker, paths: list[str]) -> None:
     """Make sure every stored path in ``paths`` has a ``FILE`` symbol (one query)."""
     missing = sorted({p for p in paths if p not in walker.symbols})
     if not missing:
         return
-    for node in FILES_AT_PATHS.run(db, repo_root, {"paths": missing}):
-        walker.symbols[node.key] = node.symbol
+    for file in FILES_AT_PATHS.run(db, {"paths": missing}):
+        walker.symbols[walk_key(file)] = file
     absent = [p for p in missing if p not in walker.symbols]
     if absent:
         raise IndexIncompatibleError(f"definitions reference unindexed files: {absent}")

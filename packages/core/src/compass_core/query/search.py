@@ -9,9 +9,8 @@ then classified (see ``SearchMatch``) and ranked by match class, fan-in, then na
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
-from compass_core.contract.models import SymbolRef
+from compass_core.contract.models import IndexStatus, SymbolRef
 from compass_core.contract.params import SearchParams
 from compass_core.contract.results import SearchHit, SearchResult
 from compass_core.contract.types import SearchMatch
@@ -37,10 +36,10 @@ _RANK = {match: i for i, match in enumerate(SearchMatch)}
 
 
 def _with_fan_in(
-    decode: Callable[[Row, Path], SymbolRef], width: int
-) -> Callable[[Row, Path], tuple[SymbolRef, int]]:
+    decode: Callable[[Row], SymbolRef], width: int
+) -> Callable[[Row], tuple[SymbolRef, int]]:
     """Decoder for rows of symbol columns followed by one count column."""
-    return lambda row, root: (decode(row, root), count_value(row[width]))
+    return lambda row: (decode(row), count_value(row[width]))
 
 
 # Candidates are fetched by the last dotted segment of the query ("User.save" -> "save"),
@@ -100,9 +99,7 @@ def _classify_file(symbol: SymbolRef, query: str) -> SearchMatch | None:
     return None
 
 
-def _definition_hits(
-    db: GraphDB, kind: SymbolKind | None, text: str, repo_root: Path
-) -> list[SearchHit]:
+def _definition_hits(db: GraphDB, kind: SymbolKind | None, text: str) -> list[SearchHit]:
     params = {"last": text.rsplit(".", 1)[-1]}
     lowered = text.lower()
     hits: list[SearchHit] = []
@@ -113,19 +110,19 @@ def _definition_hits(
             hits.append(SearchHit(symbol=symbol, match=match, fan_in=fan_in))
 
     if kind in (None, SymbolKind.CLASS):
-        for symbol in _CLASSES_NAMED.run(db, repo_root, params):
+        for symbol in _CLASSES_NAMED.run(db, params):
             add(symbol, 0)
     if kind in (None, SymbolKind.FUNCTION, SymbolKind.METHOD):
-        for symbol, fan_in in _FUNCTIONS_NAMED.run(db, repo_root, params):
+        for symbol, fan_in in _FUNCTIONS_NAMED.run(db, params):
             if kind in (None, symbol.kind):
                 add(symbol, fan_in)
     return hits
 
 
-def _file_hits(db: GraphDB, text: str, repo_root: Path) -> list[SearchHit]:
+def _file_hits(db: GraphDB, text: str) -> list[SearchHit]:
     lowered = text.lower()
     hits: list[SearchHit] = []
-    for symbol, fan_in in _FILES_WITH_PATH.run(db, repo_root, {"q": text}):
+    for symbol, fan_in in _FILES_WITH_PATH.run(db, {"q": text}):
         match = _classify_file(symbol, lowered)
         if match is not None:
             hits.append(SearchHit(symbol=symbol, match=match, fan_in=fan_in))
@@ -161,24 +158,22 @@ def find_symbols(db: GraphDB, location: IndexLocation, params: SearchParams) -> 
         ``find_symbols(db, loc, SearchParams(query="User.save"))`` returns
         ``app/models.py::User.save`` first with ``SearchMatch.QUALIFIED_SUFFIX``.
     """
-    repo_root = location.repo_root.resolve()
+    status = index_status(location, db)  # first: rejects an incompatible index
     text = params.query.strip()
     hits: list[SearchHit] = []
     if text.endswith("."):
         # Empty last segment: a CONTAINS '' scan would match everything.
-        return _result(db, location, params, hits)
+        return _result(status, params, hits)
     if params.kind in (None, SymbolKind.FILE):
-        hits += _file_hits(db, text, repo_root)
-    hits += _definition_hits(db, params.kind, text, repo_root)
-    return _result(db, location, params, hits)
+        hits += _file_hits(db, text)
+    hits += _definition_hits(db, params.kind, text)
+    return _result(status, params, hits)
 
 
-def _result(
-    db: GraphDB, location: IndexLocation, params: SearchParams, hits: list[SearchHit]
-) -> SearchResult:
+def _result(status: IndexStatus, params: SearchParams, hits: list[SearchHit]) -> SearchResult:
     hits.sort(key=lambda h: (_RANK[h.match], -h.fan_in, h.symbol.name, h.symbol.id))
     return SearchResult(
-        index=index_status(location, db),
+        index=status,
         caveats=(),
         query=params.query,
         kind=params.kind,
