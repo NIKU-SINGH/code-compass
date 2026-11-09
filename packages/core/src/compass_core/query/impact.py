@@ -240,7 +240,7 @@ def impact(
         class defined in the file (its own functions are not counted). A dependent's
         other unresolved calls (builtins, methods on locals) are not counted.
         ``min_confidence`` is compared with a ``1e-6`` tolerance because stored
-        confidences are float32. Overrides (``Via(OVERRIDES)``) are not walked.
+        confidences are float32. Overriding methods in subclasses are not walked.
 
     Example:
         ``impact(db, loc, "app/auth.py::decode_token", ImpactParams(depth=2))`` returns
