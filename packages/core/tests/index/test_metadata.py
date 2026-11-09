@@ -5,7 +5,12 @@ from pathlib import Path
 import pytest
 
 from compass_core.errors import IndexIncompatibleError
-from compass_core.index.metadata import IndexMetadata, load_metadata, save_metadata
+from compass_core.index.metadata import (
+    SCHEMA_VERSION,
+    IndexMetadata,
+    load_metadata,
+    save_metadata,
+)
 from compass_core.shared_types import Language
 
 
@@ -13,7 +18,7 @@ def test_round_trip(tmp_path: Path):
     meta = IndexMetadata(
         indexed_commit="abc",
         indexed_at=datetime(2026, 10, 10, tzinfo=UTC),
-        schema_version=1,
+        schema_version=SCHEMA_VERSION,
         grammar_versions={Language.PYTHON: "0.25.0"},
     )
     path = tmp_path / "metadata.json"
@@ -21,19 +26,19 @@ def test_round_trip(tmp_path: Path):
     assert load_metadata(path) == meta
 
 
-def test_pre_v1_metadata_loads_with_defaults(tmp_path: Path):
+@pytest.mark.parametrize("version", [None, 1])
+def test_older_schema_is_rejected_with_reingest_hint(tmp_path: Path, version: int | None):
+    raw: dict[str, object] = {
+        "indexed_commit": "x",
+        "indexed_at": 1788431823,
+        "grammar_versions": {"python": "0.25.0"},
+    }
+    if version is not None:
+        raw["schema_version"] = version
     path = tmp_path / "metadata.json"
-    path.write_text(
-        json.dumps(
-            {
-                "indexed_commit": "x",
-                "indexed_at": 1788431823,
-                "grammar_versions": {"python": "0.25.0"},
-            }
-        )
-    )
-    meta = load_metadata(path)
-    assert meta.schema_version == 1 and meta.indexed_at.tzinfo is not None
+    path.write_text(json.dumps(raw))
+    with pytest.raises(IndexIncompatibleError, match="compass ingest"):
+        load_metadata(path)
 
 
 @pytest.mark.parametrize(
@@ -69,7 +74,7 @@ def test_failed_save_cleans_tmp_and_keeps_existing(tmp_path: Path, monkeypatch: 
     meta = IndexMetadata(
         indexed_commit=None,
         indexed_at=datetime(2026, 10, 10, tzinfo=UTC),
-        schema_version=1,
+        schema_version=SCHEMA_VERSION,
         grammar_versions={},
     )
 

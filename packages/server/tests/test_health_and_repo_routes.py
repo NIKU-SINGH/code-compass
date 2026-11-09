@@ -45,8 +45,8 @@ def test_repo_overview_returns_shape():
         else:
             # entry points query
             result.get_all.return_value = [
-                ("/repo/main.py", "main"),
-                ("/repo/server.py", "server"),
+                ("main.py", "main"),
+                ("server.py", "server"),
             ]
         return result
 

@@ -29,6 +29,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from compass_core.graph.db import GraphDB, as_row
+from compass_core.graph.stored_ids import with_stored_ids
 from compass_core.ir.graph import CallEdge, ExternalCallEdge, ImportEdge, InheritEdge, ResolvedGraph
 from compass_core.ir.models import Definition, ParsedFile
 from compass_core.progress import ProgressReporter
@@ -108,6 +109,8 @@ def write(
         actually written — failed DB writes and edges whose endpoints do not
         exist are not included; they are counted in ``dropped_edges``.
     """
+    stored = with_stored_ids(graph)
+    graph = stored.graph
     node_total = _calculate_expected_nodes(graph)
     edge_total = _calculate_expected_edges(graph)
     node_count = 0
@@ -132,10 +135,11 @@ def write(
         _write_file(db, pf)
         _node()
         for d in pf.definitions:
+            qualified = stored.qualified_names[d.id]
             if d.kind is SymbolKind.CLASS:
-                _write_class(db, d)
+                _write_class(db, d, qualified)
             else:
-                _write_function(db, d, id_to_name)
+                _write_function(db, d, qualified, id_to_name)
             _node()
 
     seen_ext: set[str] = set()
@@ -195,22 +199,25 @@ def _write_file(db: GraphDB, f: ParsedFile) -> None:
     )
 
 
-def _write_class(db: GraphDB, cls: Definition) -> None:
+def _write_class(db: GraphDB, cls: Definition, qualified_name: str) -> None:
     """Persist a class node to the database.
 
     Args:
         db: Active database connection.
-        cls: The `Definition` (kind=CLASS) metadata, including 1-indexed line
-            numbers and source content.
+        cls: The `Definition` (kind=CLASS) metadata, keyed by its public id, including
+            1-indexed line numbers and source content.
+        qualified_name: Dotted qualified name, e.g. ``app.models.User``.
     """
     db.execute(
         """
         MERGE (n:Class {id: $id})
-        ON CREATE SET n.name = $name, n.file_path = $file_path,
+        ON CREATE SET n.name = $name, n.qualified_name = $qualified_name,
+                      n.file_path = $file_path,
                       n.line_start = $line_start, n.line_end = $line_end,
                       n.source = $source, n.docstring = $docstring,
                       n.bases = $bases
-        ON MATCH  SET n.name = $name, n.file_path = $file_path,
+        ON MATCH  SET n.name = $name, n.qualified_name = $qualified_name,
+                      n.file_path = $file_path,
                       n.line_start = $line_start, n.line_end = $line_end,
                       n.source = $source, n.docstring = $docstring,
                       n.bases = $bases
@@ -218,6 +225,7 @@ def _write_class(db: GraphDB, cls: Definition) -> None:
         {
             "id": cls.id,
             "name": cls.name,
+            "qualified_name": qualified_name,
             "file_path": cls.file_path,
             "line_start": cls.line_start,
             "line_end": cls.line_end,
@@ -228,13 +236,16 @@ def _write_class(db: GraphDB, cls: Definition) -> None:
     )
 
 
-def _write_function(db: GraphDB, func: Definition, id_to_name: dict[str, str]) -> None:
+def _write_function(
+    db: GraphDB, func: Definition, qualified_name: str, id_to_name: dict[str, str]
+) -> None:
     """Persist a function or method node to the database.
 
     Args:
         db: Active database connection.
-        func: The `Definition` (kind=FUNCTION or METHOD) metadata, including
-            1-indexed line numbers, signature details, and decorators.
+        func: The `Definition` (kind=FUNCTION or METHOD) metadata, keyed by its public
+            id, including 1-indexed line numbers, signature details, and decorators.
+        qualified_name: Dotted qualified name, e.g. ``app.models.User.save``.
         id_to_name: Maps every `Definition.id` in the graph to its short name,
             used to recover the parent class's short name from `func.parent_id`.
     """
@@ -243,13 +254,15 @@ def _write_function(db: GraphDB, func: Definition, id_to_name: dict[str, str]) -
     db.execute(
         """
         MERGE (n:Function {id: $id})
-        ON CREATE SET n.name = $name, n.signature = $signature,
+        ON CREATE SET n.name = $name, n.qualified_name = $qualified_name,
+                      n.signature = $signature,
                       n.file_path = $file_path, n.line_start = $line_start,
                       n.line_end = $line_end, n.source = $source,
                       n.docstring = $docstring, n.is_method = $is_method,
                       n.parent_class = $parent_class,
                       n.decorators = $decorators, n.raw_calls = $raw_calls
-        ON MATCH  SET n.name = $name, n.signature = $signature,
+        ON MATCH  SET n.name = $name, n.qualified_name = $qualified_name,
+                      n.signature = $signature,
                       n.file_path = $file_path, n.line_start = $line_start,
                       n.line_end = $line_end, n.source = $source,
                       n.docstring = $docstring, n.is_method = $is_method,
@@ -259,6 +272,7 @@ def _write_function(db: GraphDB, func: Definition, id_to_name: dict[str, str]) -
         {
             "id": func.id,
             "name": func.name,
+            "qualified_name": qualified_name,
             "signature": func.signature or "",
             "file_path": func.file_path,
             "line_start": func.line_start,

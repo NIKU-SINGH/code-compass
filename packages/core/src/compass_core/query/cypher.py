@@ -13,7 +13,6 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Generic, TypeVar
 
 from compass_core.graph.db import GraphDB, QueryParams, Row, as_rows
@@ -29,31 +28,27 @@ class Query(Generic[T]):
 
     Attributes:
         cypher: The full statement. User input appears only as ``$name`` parameters.
-        decode: Turns one result row into a typed value. Receives the absolute repository
-            root so it can build repo-relative paths and public ids.
+        decode: Turns one result row into a typed value.
         parameters: Names of the ``$parameters`` the statement uses, derived from
             ``cypher``.
 
     Example:
-        ``FILE_PATHS = Query("MATCH (f:File) RETURN f.path", lambda row, _: text_value(row[0],
-        "path"))`` makes ``FILE_PATHS.run(db, root)`` return ``["app/auth.py", ...]``.
+        ``FILE_PATHS = Query("MATCH (f:File) RETURN f.path", lambda row: text_value(row[0],
+        "path"))`` makes ``FILE_PATHS.run(db)`` return ``["app/auth.py", ...]``.
     """
 
     cypher: str
-    decode: Callable[[Row, Path], T]
+    decode: Callable[[Row], T]
     parameters: frozenset[str] = field(init=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "parameters", frozenset(_PARAMETER.findall(self.cypher)))
 
-    def run(
-        self, db: GraphDB, repo_root: Path, params: Mapping[str, object] | None = None
-    ) -> list[T]:
+    def run(self, db: GraphDB, params: Mapping[str, object] | None = None) -> list[T]:
         """Execute the statement and decode every row.
 
         Args:
             db: Open graph database.
-            repo_root: Absolute repository root, passed to the decoder.
             params: A value for every ``$parameter`` of the statement, and nothing else.
 
         Returns:
@@ -65,7 +60,7 @@ class Query(Generic[T]):
             IndexIncompatibleError: A row does not have the shape the decoder expects.
 
         Example:
-            ``ENTRY_POINTS.run(db, root, {"limit": 5})`` returns up to five file symbols.
+            ``ENTRY_POINTS.run(db, {"limit": 5})`` returns up to five file symbols.
         """
         supplied: QueryParams = dict(params or {})
         if supplied.keys() != self.parameters:
@@ -74,16 +69,13 @@ class Query(Generic[T]):
             )
         result = db.execute(self.cypher, supplied) if supplied else db.execute(self.cypher)
         rows = as_rows(result)
-        return [self.decode(row, repo_root) for row in rows]
+        return [self.decode(row) for row in rows]
 
-    def first(
-        self, db: GraphDB, repo_root: Path, params: Mapping[str, object] | None = None
-    ) -> T | None:
+    def first(self, db: GraphDB, params: Mapping[str, object] | None = None) -> T | None:
         """Like ``run`` but return only the first decoded row, or ``None`` when empty.
 
         Args:
             db: Open graph database.
-            repo_root: Absolute repository root, passed to the decoder.
             params: A value for every ``$parameter`` of the statement, and nothing else.
 
         Returns:
@@ -94,7 +86,7 @@ class Query(Generic[T]):
             IndexIncompatibleError: The row does not have the shape the decoder expects.
 
         Example:
-            ``FUNCTION_COUNT.first(db, root)`` returns ``412`` on a repo with 412 functions.
+            ``FUNCTION_COUNT.first(db)`` returns ``412`` on a repo with 412 functions.
         """
-        found = self.run(db, repo_root, params)
+        found = self.run(db, params)
         return found[0] if found else None

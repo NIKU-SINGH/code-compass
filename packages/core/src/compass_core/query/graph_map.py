@@ -6,23 +6,17 @@ about the index, so it carries neither an ``IndexStatus`` nor caveats.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
-from pathlib import Path
 
 from compass_core.contract.types import SymbolId
-from compass_core.errors import IndexIncompatibleError
 from compass_core.graph.db import GraphDB, Row
 from compass_core.query.cypher import Query
 from compass_core.query.rows import (
     is_method_flag,
-    public_definition_id,
     public_file_id,
     text_value,
 )
 from compass_core.shared_types import EdgeType, SymbolKind
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -30,13 +24,13 @@ class _StoredDefinition:
     """A class or function as stored: id, name and path.
 
     Attributes:
-        id: Stored id.
+        id: Public id.
         name: Unqualified name.
         kind: ``CLASS``, ``FUNCTION`` or ``METHOD``.
         path: Stored ``file_path``.
 
     Example:
-        ``class User`` in ``app/models.py`` gives ``_StoredDefinition(id="py::app.models::User",
+        ``class User`` in ``app/models.py`` gives ``_StoredDefinition(id="app/models.py::User",
         name="User", kind=SymbolKind.CLASS, path="app/models.py")``.
     """
 
@@ -58,7 +52,7 @@ def _definition(row: Row, kind: SymbolKind) -> _StoredDefinition:
 def _edge_query(cypher: str, edge_type: EdgeType) -> Query[MapEdge]:
     return Query(
         cypher,
-        lambda row, _: MapEdge(
+        lambda row: MapEdge(
             source=text_value(row[0], "source"), target=text_value(row[1], "target"), type=edge_type
         ),
     )
@@ -69,14 +63,15 @@ class MapNode:
     """One file, class, function or method in the map.
 
     Attributes:
-        id: Stored id, the value ``MapEdge.source`` and ``MapEdge.target`` refer to.
+        id: What ``MapEdge.source`` and ``MapEdge.target`` refer to: the public id of a
+            class or function, the path of a file.
         label: Short display name.
         kind: Kind of node; never ``EXTERNAL``.
-        file_path: Path as stored in the graph.
+        file_path: Repo-relative path.
         public_id: Public id, accepted wherever a query takes a reference.
 
     Example:
-        ``def f(): ...`` in ``a.py`` becomes ``MapNode(id="py::a::f", label="f",
+        ``def f(): ...`` in ``a.py`` becomes ``MapNode(id="a.py::f", label="f",
         kind=SymbolKind.FUNCTION, file_path="a.py", public_id=SymbolId("a.py::f"))``.
     """
 
@@ -124,15 +119,15 @@ class GraphMap:
 
 
 _FILE_PATHS: Query[str] = Query(
-    "MATCH (f:File) RETURN f.path", lambda row, _: text_value(row[0], "path")
+    "MATCH (f:File) RETURN f.path", lambda row: text_value(row[0], "path")
 )
 _CLASSES: Query[_StoredDefinition] = Query(
     "MATCH (c:Class) RETURN c.id, c.name, c.file_path",
-    lambda row, _: _definition(row, SymbolKind.CLASS),
+    lambda row: _definition(row, SymbolKind.CLASS),
 )
 _FUNCTIONS: Query[_StoredDefinition] = Query(
     "MATCH (fn:Function) RETURN fn.id, fn.name, fn.file_path, fn.is_method",
-    lambda row, _: _definition(
+    lambda row: _definition(
         row, SymbolKind.METHOD if is_method_flag(row[3]) else SymbolKind.FUNCTION
     ),
 )
@@ -146,67 +141,46 @@ _EDGES: tuple[Query[MapEdge], ...] = (
 )
 
 
-def _file_nodes(db: GraphDB, repo_root: Path) -> list[MapNode]:
-    nodes: list[MapNode] = []
-    for path in _FILE_PATHS.run(db, repo_root):
-        nodes.append(
-            MapNode(
-                id=path,
-                label=path.split("/")[-1],
-                kind=SymbolKind.FILE,
-                file_path=path,
-                public_id=public_file_id(path, repo_root),
-            )
+def _file_nodes(db: GraphDB) -> list[MapNode]:
+    return [
+        MapNode(
+            id=path,
+            label=path.split("/")[-1],
+            kind=SymbolKind.FILE,
+            file_path=path,
+            public_id=public_file_id(path),
         )
-    return nodes
+        for path in _FILE_PATHS.run(db)
+    ]
 
 
-def _definition_node(
-    stored_id: str, name: str, kind: SymbolKind, path: str, repo_root: Path
-) -> MapNode | None:
-    try:
-        public_id = public_definition_id(stored_id, path, repo_root)
-    except IndexIncompatibleError:
-        return None
-    return MapNode(id=stored_id, label=name, kind=kind, file_path=path, public_id=public_id)
+def _definition_nodes(db: GraphDB) -> list[MapNode]:
+    return [
+        MapNode(id=d.id, label=d.name, kind=d.kind, file_path=d.path, public_id=SymbolId(d.id))
+        for d in (*_CLASSES.run(db), *_FUNCTIONS.run(db))
+    ]
 
 
-def _definition_nodes(db: GraphDB, repo_root: Path) -> list[MapNode]:
-    found: list[MapNode | None] = []
-    for d in (*_CLASSES.run(db, repo_root), *_FUNCTIONS.run(db, repo_root)):
-        found.append(_definition_node(d.id, d.name, d.kind, d.path, repo_root))
-
-    nodes = [node for node in found if node is not None]
-    if len(nodes) < len(found):
-        logger.warning(
-            "graph map: skipped %d definition(s) with malformed stored ids",
-            len(found) - len(nodes),
-        )
-    return nodes
-
-
-def _edges(db: GraphDB, repo_root: Path) -> tuple[MapEdge, ...]:
-    edges = (edge for query in _EDGES for edge in query.run(db, repo_root))
+def _edges(db: GraphDB) -> tuple[MapEdge, ...]:
+    edges = (edge for query in _EDGES for edge in query.run(db))
     return tuple(dict.fromkeys(edges))
 
 
-def graph_map(db: GraphDB, repo_root: Path) -> GraphMap:
+def graph_map(db: GraphDB) -> GraphMap:
     """Read every node and edge of an index.
 
     Args:
         db: Open, read-only graph database.
-        repo_root: Absolute repository root, used to build public ids.
 
     Returns:
-        The map. A definition whose stored id is malformed is left out and logged, so
-        one odd row never hides the rest of the graph; its edges are kept.
+        The map: files, then classes, then functions and methods, and the distinct
+        edges between them.
 
     Raises:
         IndexIncompatibleError: A stored column has an unexpected type.
 
     Example:
-        ``graph_map(db, root).nodes[0].public_id`` is ``"file::app/auth.py"`` when
+        ``graph_map(db).nodes[0].public_id`` is ``"file::app/auth.py"`` when
         ``app/auth.py`` is the first indexed file.
     """
-    nodes = (*_file_nodes(db, repo_root), *_definition_nodes(db, repo_root))
-    return GraphMap(nodes=nodes, edges=_edges(db, repo_root))
+    return GraphMap(nodes=(*_file_nodes(db), *_definition_nodes(db)), edges=_edges(db))

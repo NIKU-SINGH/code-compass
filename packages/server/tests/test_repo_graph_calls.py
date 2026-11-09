@@ -13,11 +13,11 @@ from compass_core.settings import settings
 from compass_server.main import app
 
 EXPECTED_CALLS = {
-    ("py::app.api::handle", "py::app.auth::decode_token"),
-    ("py::app.cli::run", "py::app.auth::decode_token"),
-    ("py::app.jobs::nightly", "py::app.auth::decode_token"),
-    ("py::app.scheduler::tick", "py::app.jobs::nightly"),
-    ("py::app.models::User.save", "py::app.models::Base.save"),
+    ("app/api.py::handle", "app/auth.py::decode_token"),
+    ("app/cli.py::run", "app/auth.py::decode_token"),
+    ("app/jobs.py::nightly", "app/auth.py::decode_token"),
+    ("app/scheduler.py::tick", "app/jobs.py::nightly"),
+    ("app/models.py::User.save", "app/models.py::Base.save"),
 }
 
 
@@ -47,7 +47,7 @@ def test_call_edges_connect_emitted_nodes(graph: dict[str, Any]) -> None:
 
 def test_method_call_edge_present(graph: dict[str, Any]) -> None:
     types = {n["id"]: n["type"] for n in graph["nodes"]}
-    source, target = "py::app.models::User.save", "py::app.models::Base.save"
+    source, target = "app/models.py::User.save", "app/models.py::Base.save"
 
     assert any(
         e["type"] == "CALLS" and e["source"] == source and e["target"] == target

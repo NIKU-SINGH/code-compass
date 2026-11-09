@@ -8,10 +8,8 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from compass_core.errors import IndexIncompatibleError
 from compass_core.graph.db import GraphDB
 from compass_core.index.locate import IndexLocation
-from compass_core.query import graph_map
 from compass_core.query.references import ResolvedReference, resolve
 from compass_core.settings import settings
 from compass_server.main import app
@@ -37,33 +35,14 @@ def test_expected_public_ids(nodes: list[Any]) -> None:
     assert {"file::app/auth.py", "app/auth.py::decode_token", "app/models.py::User.save"} <= ids
 
 
-def test_ids_follow_stored_format_and_kind(nodes: list[Any]) -> None:
+def test_definition_ids_are_public_ids(nodes: list[Any]) -> None:
     for n in nodes:
         if n["type"] == "File":
             assert n["id"] == n["file_path"]
             assert n["public_id"] == f"file::{n['file_path']}"
         else:
-            assert n["id"].startswith("py::")
+            assert n["id"] == n["public_id"]
             assert n["public_id"].startswith(f"{n['file_path']}::")
-
-
-def test_malformed_definition_id_is_skipped(
-    fixture_index: IndexLocation, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(settings, "LADYBUG_DB_PATH", str(fixture_index.db_path))
-    real = graph_map.public_definition_id
-
-    def flaky(stored_id: str, stored_path: str, root: Any) -> Any:
-        if stored_id.endswith("::decode_token"):
-            raise IndexIncompatibleError("bad id")
-        return real(stored_id, stored_path, root)
-
-    monkeypatch.setattr(graph_map, "public_definition_id", flaky)
-    response = TestClient(app).get("/api/repo/graph")
-    assert response.status_code == 200
-    ids = {n["public_id"] for n in response.json()["nodes"]}
-    assert "app/auth.py::decode_token" not in ids
-    assert "app/models.py::User.save" in ids
 
 
 def test_public_ids_round_trip_through_resolve(

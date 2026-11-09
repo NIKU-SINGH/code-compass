@@ -1,10 +1,9 @@
-from pathlib import Path
-
 import pytest
 
 from compass_core.errors import IndexIncompatibleError
 from compass_core.query.rows import (
     call_type_value,
+    class_from_row,
     confidence_value,
     external_from_row,
     file_from_row,
@@ -12,53 +11,52 @@ from compass_core.query.rows import (
     line_value,
     symbol_from_row,
     text_list_value,
-    to_repo_path,
 )
 from compass_core.shared_types import CallType, SymbolKind
 
 
-def test_wrong_typed_column_raises_incompatible(tmp_path: Path) -> None:
+def test_wrong_typed_column_raises_incompatible() -> None:
     with pytest.raises(IndexIncompatibleError):
-        symbol_from_row(["id", 123, "f.py", 1, 2, "def f()"], SymbolKind.FUNCTION, tmp_path)
+        symbol_from_row(["f.py::f", 123, "f", "f.py", 1, 2, "def f()"], SymbolKind.FUNCTION)
 
 
-def test_wrong_typed_line_and_short_row_raise(tmp_path: Path) -> None:
+def test_wrong_typed_line_and_short_row_raise() -> None:
     with pytest.raises(IndexIncompatibleError):
-        symbol_from_row(["f.py::f", "f", "f.py", "1", 2, "def f()"], SymbolKind.FUNCTION, tmp_path)
+        symbol_from_row(["f.py::f", "f", "f", "f.py", "1", 2, "def f()"], SymbolKind.FUNCTION)
     with pytest.raises(IndexIncompatibleError):
-        symbol_from_row(["f.py::f", "f"], SymbolKind.FUNCTION, tmp_path)
+        symbol_from_row(["f.py::f", "f"], SymbolKind.FUNCTION)
 
 
-def test_stored_zero_line_becomes_none(tmp_path: Path) -> None:
-    sym = symbol_from_row(["f.py::f", "f", "f.py", 0, 0, "def f()"], SymbolKind.FUNCTION, tmp_path)
+def test_stored_zero_line_becomes_none() -> None:
+    sym = symbol_from_row(["f.py::f", "f", "f", "f.py", 0, 0, "def f()"], SymbolKind.FUNCTION)
     assert sym.line_start is None and sym.line_end is None
 
 
-def test_stored_id_becomes_public_id(tmp_path: Path) -> None:
+def test_stored_columns_are_the_public_symbol() -> None:
     sym = symbol_from_row(
-        ["py::app.models::User.save", "save", "app/models.py", 6, 7, "def save(self):"],
+        [
+            "app/models.py::User.save",
+            "save",
+            "app.models.User.save",
+            "app/models.py",
+            6,
+            7,
+            "def save(self):",
+        ],
         SymbolKind.METHOD,
-        tmp_path,
     )
     assert sym.id == "app/models.py::User.save"
     assert sym.qualified_name == "app.models.User.save"
+    assert (sym.file_path, sym.line_start, sym.signature) == ("app/models.py", 6, "def save(self):")
 
 
-def test_absolute_stored_path_is_made_relative(tmp_path: Path) -> None:
-    stored = (tmp_path / "app" / "a.py").as_posix()
-    sym = symbol_from_row(
-        [f"{stored}::f", "f", stored, 1, 2, "def f():"], SymbolKind.FUNCTION, tmp_path
-    )
-    assert sym.id == "app/a.py::f" and sym.file_path == "app/a.py"
-    assert sym.qualified_name == "app.a.f"
+def test_class_row_has_no_signature_column() -> None:
+    cls = class_from_row(["app/models.py::User", "User", "app.models.User", "app/models.py", 4, 9])
+    assert (cls.id, cls.kind, cls.signature) == ("app/models.py::User", SymbolKind.CLASS, None)
 
 
-def test_to_repo_path_outside_root_unchanged(tmp_path: Path) -> None:
-    assert to_repo_path("/elsewhere/a.py", tmp_path) == "/elsewhere/a.py"
-
-
-def test_file_and_external_rows(tmp_path: Path) -> None:
-    f = file_from_row(["app/auth.py", "app.auth"], tmp_path)
+def test_file_and_external_rows() -> None:
+    f = file_from_row(["app/auth.py", "app.auth"])
     assert (f.id, f.kind, f.name, f.qualified_name) == (
         "file::app/auth.py",
         SymbolKind.FILE,
@@ -68,12 +66,21 @@ def test_file_and_external_rows(tmp_path: Path) -> None:
     e = external_from_row(["json.dumps", "dumps"])
     assert (e.id, e.kind, e.file_path) == ("ext::json.dumps", SymbolKind.EXTERNAL, None)
     with pytest.raises(IndexIncompatibleError):
-        file_from_row([1, "x"], tmp_path)
+        file_from_row([1, "x"])
 
 
 def test_function_from_row_uses_is_method_flag() -> None:
-    row = ["py::app.models::User.save", "save", "app/models.py", 6, 7, "def save(self):", True]
-    symbol = function_from_row(row, Path("/r"))
+    row = [
+        "app/models.py::User.save",
+        "save",
+        "app.models.User.save",
+        "app/models.py",
+        6,
+        7,
+        "def save(self):",
+        True,
+    ]
+    symbol = function_from_row(row)
     assert symbol.kind is SymbolKind.METHOD and symbol.id == "app/models.py::User.save"
 
 

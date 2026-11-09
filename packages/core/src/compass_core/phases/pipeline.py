@@ -15,7 +15,7 @@ from pathlib import Path
 from compass_core.graph.db import GraphDB
 from compass_core.graph.schema import create_schema
 from compass_core.index.locate import metadata_path_for
-from compass_core.index.metadata import IndexMetadata, save_metadata
+from compass_core.index.metadata import SCHEMA_VERSION, IndexMetadata, save_metadata
 from compass_core.phases.base import IngestContext, Phase
 from compass_core.phases.discovery import DiscoveryPhase
 from compass_core.phases.parse import ParsePhase
@@ -115,7 +115,7 @@ def _save_metadata(repo_path: Path, metadata_path: Path, indexed_at: datetime) -
     meta = IndexMetadata(
         indexed_commit=None if commit == "unknown" else commit,
         indexed_at=indexed_at,
-        schema_version=1,
+        schema_version=SCHEMA_VERSION,
         grammar_versions=_grammar_versions(),
     )
     save_metadata(metadata_path, meta)
