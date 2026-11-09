@@ -12,7 +12,8 @@ from pathlib import Path
 
 from compass_core.contract.types import SymbolId
 from compass_core.errors import IndexIncompatibleError
-from compass_core.graph.db import GraphDB, as_rows
+from compass_core.graph.db import GraphDB, Row
+from compass_core.query.cypher import Query
 from compass_core.query.rows import (
     is_method_flag,
     public_definition_id,
@@ -23,17 +24,44 @@ from compass_core.shared_types import EdgeType, SymbolKind
 
 logger = logging.getLogger(__name__)
 
-_FILES = "MATCH (f:File) RETURN f.path"
-_CLASSES = "MATCH (c:Class) RETURN c.id, c.name, c.file_path"
-_FUNCTIONS = "MATCH (fn:Function) RETURN fn.id, fn.name, fn.file_path, fn.is_method"
-_EDGES: tuple[tuple[str, EdgeType], ...] = (
-    ("MATCH (a:File)-[:CONTAINS]->(b:Class) RETURN a.path, b.id", EdgeType.CONTAINS),
-    ("MATCH (a:File)-[:CONTAINS]->(b:Function) RETURN a.path, b.id", EdgeType.CONTAINS),
-    ("MATCH (a:Class)-[:CONTAINS]->(b:Function) RETURN a.id, b.id", EdgeType.CONTAINS),
-    ("MATCH (a:File)-[:IMPORTS]->(b:File) RETURN a.path, b.path", EdgeType.IMPORTS),
-    ("MATCH (a:Class)-[:INHERITS]->(b:Class) RETURN a.id, b.id", EdgeType.INHERITS),
-    ("MATCH (a:Function)-[:CALLS]->(b:Function) RETURN a.id, b.id", EdgeType.CALLS),
-)
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _StoredDefinition:
+    """A class or function as stored: id, name and path.
+
+    Attributes:
+        id: Stored id.
+        name: Unqualified name.
+        kind: ``CLASS``, ``FUNCTION`` or ``METHOD``.
+        path: Stored ``file_path``.
+
+    Example:
+        ``class User`` in ``app/models.py`` gives ``_StoredDefinition(id="py::app.models::User",
+        name="User", kind=SymbolKind.CLASS, path="app/models.py")``.
+    """
+
+    id: str
+    name: str
+    kind: SymbolKind
+    path: str
+
+
+def _definition(row: Row, kind: SymbolKind) -> _StoredDefinition:
+    return _StoredDefinition(
+        id=text_value(row[0], "id"),
+        name=text_value(row[1], "name"),
+        kind=kind,
+        path=text_value(row[2], "file_path"),
+    )
+
+
+def _edge_query(cypher: str, edge_type: EdgeType) -> Query[MapEdge]:
+    return Query(
+        cypher,
+        lambda row, _: MapEdge(
+            source=text_value(row[0], "source"), target=text_value(row[1], "target"), type=edge_type
+        ),
+    )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -95,10 +123,32 @@ class GraphMap:
     edges: tuple[MapEdge, ...]
 
 
+_FILE_PATHS: Query[str] = Query(
+    "MATCH (f:File) RETURN f.path", lambda row, _: text_value(row[0], "path")
+)
+_CLASSES: Query[_StoredDefinition] = Query(
+    "MATCH (c:Class) RETURN c.id, c.name, c.file_path",
+    lambda row, _: _definition(row, SymbolKind.CLASS),
+)
+_FUNCTIONS: Query[_StoredDefinition] = Query(
+    "MATCH (fn:Function) RETURN fn.id, fn.name, fn.file_path, fn.is_method",
+    lambda row, _: _definition(
+        row, SymbolKind.METHOD if is_method_flag(row[3]) else SymbolKind.FUNCTION
+    ),
+)
+_EDGES: tuple[Query[MapEdge], ...] = (
+    _edge_query("MATCH (a:File)-[:CONTAINS]->(b:Class) RETURN a.path, b.id", EdgeType.CONTAINS),
+    _edge_query("MATCH (a:File)-[:CONTAINS]->(b:Function) RETURN a.path, b.id", EdgeType.CONTAINS),
+    _edge_query("MATCH (a:Class)-[:CONTAINS]->(b:Function) RETURN a.id, b.id", EdgeType.CONTAINS),
+    _edge_query("MATCH (a:File)-[:IMPORTS]->(b:File) RETURN a.path, b.path", EdgeType.IMPORTS),
+    _edge_query("MATCH (a:Class)-[:INHERITS]->(b:Class) RETURN a.id, b.id", EdgeType.INHERITS),
+    _edge_query("MATCH (a:Function)-[:CALLS]->(b:Function) RETURN a.id, b.id", EdgeType.CALLS),
+)
+
+
 def _file_nodes(db: GraphDB, repo_root: Path) -> list[MapNode]:
     nodes: list[MapNode] = []
-    for row in as_rows(db.execute(_FILES)):
-        path = text_value(row[0], "path")
+    for path in _FILE_PATHS.run(db, repo_root):
         nodes.append(
             MapNode(
                 id=path,
@@ -123,13 +173,8 @@ def _definition_node(
 
 def _definition_nodes(db: GraphDB, repo_root: Path) -> list[MapNode]:
     found: list[MapNode | None] = []
-    for row in as_rows(db.execute(_CLASSES)):
-        id_, name, path = (text_value(row[i], c) for i, c in enumerate(("id", "name", "file_path")))
-        found.append(_definition_node(id_, name, SymbolKind.CLASS, path, repo_root))
-    for row in as_rows(db.execute(_FUNCTIONS)):
-        id_, name, path = (text_value(row[i], c) for i, c in enumerate(("id", "name", "file_path")))
-        kind = SymbolKind.METHOD if is_method_flag(row[3]) else SymbolKind.FUNCTION
-        found.append(_definition_node(id_, name, kind, path, repo_root))
+    for d in (*_CLASSES.run(db, repo_root), *_FUNCTIONS.run(db, repo_root)):
+        found.append(_definition_node(d.id, d.name, d.kind, d.path, repo_root))
 
     nodes = [node for node in found if node is not None]
     if len(nodes) < len(found):
@@ -140,14 +185,8 @@ def _definition_nodes(db: GraphDB, repo_root: Path) -> list[MapNode]:
     return nodes
 
 
-def _edges(db: GraphDB) -> tuple[MapEdge, ...]:
-    edges = (
-        MapEdge(
-            source=text_value(row[0], "source"), target=text_value(row[1], "target"), type=edge_type
-        )
-        for query, edge_type in _EDGES
-        for row in as_rows(db.execute(query))
-    )
+def _edges(db: GraphDB, repo_root: Path) -> tuple[MapEdge, ...]:
+    edges = (edge for query in _EDGES for edge in query.run(db, repo_root))
     return tuple(dict.fromkeys(edges))
 
 
@@ -170,4 +209,4 @@ def graph_map(db: GraphDB, repo_root: Path) -> GraphMap:
         ``app/auth.py`` is the first indexed file.
     """
     nodes = (*_file_nodes(db, repo_root), *_definition_nodes(db, repo_root))
-    return GraphMap(nodes=nodes, edges=_edges(db))
+    return GraphMap(nodes=nodes, edges=_edges(db, repo_root))

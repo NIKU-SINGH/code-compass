@@ -8,43 +8,65 @@ then classified (see ``SearchMatch``) and ranked by match class, fan-in, then na
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from compass_core.contract.models import SymbolRef
 from compass_core.contract.params import SearchParams
 from compass_core.contract.results import SearchHit, SearchResult
 from compass_core.contract.types import SearchMatch
-from compass_core.graph.db import GraphDB, QueryParams, as_rows
+from compass_core.graph.db import GraphDB, Row
 from compass_core.index.locate import IndexLocation
+from compass_core.query.cypher import Query
 from compass_core.query.rows import (
+    CLASS_FIELDS,
+    FILE_FIELDS,
+    FILE_WIDTH,
+    FUNCTION_FIELDS,
+    FUNCTION_WIDTH,
+    class_from_row,
+    columns,
     count_value,
     file_from_row,
-    is_method_flag,
-    symbol_from_row,
-    to_repo_path,
+    function_from_row,
 )
 from compass_core.query.status import index_status
 from compass_core.shared_types import SymbolKind
 
 _RANK = {match: i for i, match in enumerate(SearchMatch)}
 
+
+def _with_fan_in(
+    decode: Callable[[Row, Path], SymbolRef], width: int
+) -> Callable[[Row, Path], tuple[SymbolRef, int]]:
+    """Decoder for rows of symbol columns followed by one count column."""
+    return lambda row, root: (decode(row, root), count_value(row[width]))
+
+
 # Candidates are fetched by the last dotted segment of the query ("User.save" -> "save"),
 # then classified in Python against the full qualified name.
-_DEFINITION_WHERE = "lower(n.name) CONTAINS lower($last)"
-_FUNCTION_QUERY = (
-    "MATCH (n:Function) WHERE " + _DEFINITION_WHERE + " "
-    "OPTIONAL MATCH (c:Function)-[:CALLS]->(n) "
-    "RETURN n.id, n.name, n.file_path, n.line_start, n.line_end, n.signature, n.is_method, "
-    "count(c)"
+_FUNCTIONS_NAMED: Query[tuple[SymbolRef, int]] = Query(
+    f"""
+    MATCH (n:Function) WHERE lower(n.name) CONTAINS lower($last)
+    OPTIONAL MATCH (c:Function)-[:CALLS]->(n)
+    RETURN {columns("n", FUNCTION_FIELDS)}, count(c)
+    """,
+    _with_fan_in(function_from_row, FUNCTION_WIDTH),
 )
-_CLASS_QUERY = (
-    "MATCH (n:Class) WHERE " + _DEFINITION_WHERE + " "
-    "RETURN n.id, n.name, n.file_path, n.line_start, n.line_end, '' AS signature, 0"
+_CLASSES_NAMED: Query[SymbolRef] = Query(
+    f"""
+    MATCH (n:Class) WHERE lower(n.name) CONTAINS lower($last)
+    RETURN {columns("n", CLASS_FIELDS)}
+    """,
+    class_from_row,
 )
-_FILE_QUERY = (
-    "MATCH (n:File) WHERE lower(n.path) CONTAINS lower($q) "
-    "OPTIONAL MATCH (i:File)-[:IMPORTS]->(n) "
-    "RETURN n.path, n.module_name, count(i)"
+_FILES_WITH_PATH: Query[tuple[SymbolRef, int]] = Query(
+    f"""
+    MATCH (n:File) WHERE lower(n.path) CONTAINS lower($q)
+    OPTIONAL MATCH (i:File)-[:IMPORTS]->(n)
+    RETURN {columns("n", FILE_FIELDS)}, count(i)
+    """,
+    _with_fan_in(file_from_row, FILE_WIDTH),
 )
 
 
@@ -81,7 +103,7 @@ def _classify_file(symbol: SymbolRef, query: str) -> SearchMatch | None:
 def _definition_hits(
     db: GraphDB, kind: SymbolKind | None, text: str, repo_root: Path
 ) -> list[SearchHit]:
-    params: QueryParams = {"last": text.rsplit(".", 1)[-1]}
+    params = {"last": text.rsplit(".", 1)[-1]}
     lowered = text.lower()
     hits: list[SearchHit] = []
 
@@ -91,27 +113,22 @@ def _definition_hits(
             hits.append(SearchHit(symbol=symbol, match=match, fan_in=fan_in))
 
     if kind in (None, SymbolKind.CLASS):
-        for row in as_rows(db.execute(_CLASS_QUERY, params)):
-            add(symbol_from_row(row, SymbolKind.CLASS, repo_root), 0)
+        for symbol in _CLASSES_NAMED.run(db, repo_root, params):
+            add(symbol, 0)
     if kind in (None, SymbolKind.FUNCTION, SymbolKind.METHOD):
-        for row in as_rows(db.execute(_FUNCTION_QUERY, params)):
-            row_kind = SymbolKind.METHOD if is_method_flag(row[6]) else SymbolKind.FUNCTION
-            if kind in (None, row_kind):
-                add(symbol_from_row(row, row_kind, repo_root), count_value(row[7]))
+        for symbol, fan_in in _FUNCTIONS_NAMED.run(db, repo_root, params):
+            if kind in (None, symbol.kind):
+                add(symbol, fan_in)
     return hits
 
 
 def _file_hits(db: GraphDB, text: str, repo_root: Path) -> list[SearchHit]:
     lowered = text.lower()
     hits: list[SearchHit] = []
-    for row in as_rows(db.execute(_FILE_QUERY, {"q": text})):
-        symbol = file_from_row(row, repo_root)
-        # Stored paths may be absolute; classify on the repo-relative path so the
-        # repo root directory never matches.
-        symbol_path = to_repo_path(row[0], repo_root)
-        match = _classify_file(symbol, lowered) if symbol_path == symbol.file_path else None
+    for symbol, fan_in in _FILES_WITH_PATH.run(db, repo_root, {"q": text}):
+        match = _classify_file(symbol, lowered)
         if match is not None:
-            hits.append(SearchHit(symbol=symbol, match=match, fan_in=count_value(row[2])))
+            hits.append(SearchHit(symbol=symbol, match=match, fan_in=fan_in))
     return hits
 
 

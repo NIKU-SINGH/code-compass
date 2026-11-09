@@ -10,6 +10,7 @@ items, and adds the ``UNRESOLVED_CALLS`` and ``STALE_INDEX`` caveats.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from itertools import groupby
 from pathlib import Path
 
@@ -17,27 +18,71 @@ from compass_core.contract.models import Caveat, EdgeRef, ResultItem, SymbolRef
 from compass_core.contract.params import ImpactParams
 from compass_core.contract.results import ImpactGroup, ImpactResult, Lookup
 from compass_core.contract.types import CaveatCode, RepoPath
-from compass_core.graph.db import GraphDB, as_rows
+from compass_core.graph.db import GraphDB, Row
 from compass_core.index.locate import IndexLocation
+from compass_core.query.cypher import Query
 from compass_core.query.impact_walk import Walk, stored_target_key, walk_files, walk_symbols
 from compass_core.query.references import ResolvedReference, resolve
 from compass_core.query.rows import text_list_value, text_value
 from compass_core.query.status import index_status
 from compass_core.shared_types import SymbolKind
 
-# Every function with raw calls, with the names its resolved CALLS / CALLS_EXTERN reach.
-RAW_CALLERS = (
-    "MATCH (f:Function) WHERE size(f.raw_calls) > 0 "
-    "OPTIONAL MATCH (f)-[:CALLS]->(g:Function) WITH f, collect(g.name) AS internal "
-    "OPTIONAL MATCH (f)-[:CALLS_EXTERN]->(x:ExternalFunction) "
-    "RETURN f.id, f.raw_calls, internal, collect(x.name), f.file_path"
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RawCaller:
+    """A function with raw call sites, and the names its resolved edges reach.
+
+    Attributes:
+        key: Stored id of the function.
+        path: Its stored ``file_path``.
+        raw_calls: Its raw call strings, in source order.
+        reached: Names of the functions and externals it has a ``CALLS`` or
+            ``CALLS_EXTERN`` edge to.
+
+    Example:
+        ``def run(): parse(x); getattr(o, n)()`` with only ``parse`` resolved gives
+        ``RawCaller(key="py::app.cli::run", path="app/cli.py",
+        raw_calls=("parse", "getattr(o, n)"), reached=frozenset({"parse"}))``.
+    """
+
+    key: str
+    path: str
+    raw_calls: tuple[str, ...]
+    reached: frozenset[str]
+
+
+RAW_CALLERS: Query[RawCaller] = Query(
+    """
+    MATCH (f:Function) WHERE size(f.raw_calls) > 0
+    OPTIONAL MATCH (f)-[:CALLS]->(g:Function) WITH f, collect(g.name) AS internal
+    OPTIONAL MATCH (f)-[:CALLS_EXTERN]->(x:ExternalFunction)
+    RETURN f.id, f.file_path, f.raw_calls, internal, collect(x.name)
+    """,
+    lambda row, _: RawCaller(
+        key=text_value(row[0], "id"),
+        path=text_value(row[1], "file_path"),
+        raw_calls=text_list_value(row[2], "raw_calls"),
+        reached=frozenset(text_list_value(row[3], "name") + text_list_value(row[4], "name")),
+    ),
 )
-_METHOD_NAMES = "MATCH (c:Class)-[:CONTAINS]->(m:Function) WHERE c.id IN $ids RETURN m.name"
-# Names of every definition in a file: functions, methods and classes.
-_FILE_DEFINITION_NAMES = (
-    "MATCH (f:Function) WHERE f.file_path = $path RETURN f.name "
-    "UNION MATCH (c:Class) WHERE c.file_path = $path RETURN c.name"
+"""Every function with raw calls, with the names its resolved edges reach."""
+
+
+def _name(row: Row, _: Path) -> str:
+    return text_value(row[0], "name")
+
+
+_METHOD_NAMES: Query[str] = Query(
+    "MATCH (c:Class)-[:CONTAINS]->(m:Function) WHERE c.id IN $ids RETURN m.name", _name
 )
+_FILE_DEFINITION_NAMES: Query[str] = Query(
+    """
+    MATCH (f:Function) WHERE f.file_path = $path RETURN f.name
+    UNION MATCH (c:Class) WHERE c.file_path = $path RETURN c.name
+    """,
+    _name,
+)
+"""Names of every definition in a file: functions, methods and classes."""
 
 
 def bare_call_name(raw_call: str) -> str:
@@ -73,18 +118,14 @@ def _watched_names(db: GraphDB, target: SymbolRef, target_key: str, walk: Walk) 
     if target.kind is SymbolKind.CLASS:
         classes.append(target_key)
     if classes:
-        rows = as_rows(db.execute(_METHOD_NAMES, {"ids": sorted(classes)}))
-        names |= {text_value(row[0], "name") for row in rows}
+        names |= set(_METHOD_NAMES.run(db, Path(), {"ids": sorted(classes)}))
     return names
 
 
 def _file_watched_names(db: GraphDB, path: str) -> set[str]:
     """Bare names whose unresolved calls may hide dependents of the file at ``path``:
     every function, method and class defined in it."""
-    return {
-        text_value(row[0], "name")
-        for row in as_rows(db.execute(_FILE_DEFINITION_NAMES, {"path": path}))
-    }
+    return set(_FILE_DEFINITION_NAMES.run(db, Path(), {"path": path}))
 
 
 def _unresolved_callers(
@@ -106,14 +147,12 @@ def _unresolved_callers(
         The stored ids of the flagged functions.
     """
     found: set[str] = set()
-    for row in as_rows(db.execute(RAW_CALLERS)):
-        key = text_value(row[0], "id")
-        if key == skip_id or text_value(row[4], "file_path") == skip_file:
+    for caller in RAW_CALLERS.run(db, Path()):
+        if caller.key == skip_id or caller.path == skip_file:
             continue
-        resolved = set(text_list_value(row[2], "name")) | set(text_list_value(row[3], "name"))
-        called = {bare_call_name(c) for c in text_list_value(row[1], "raw_calls")}
-        if (called & names) - resolved:
-            found.add(key)
+        called = {bare_call_name(c) for c in caller.raw_calls}
+        if (called & names) - caller.reached:
+            found.add(caller.key)
     return found
 
 

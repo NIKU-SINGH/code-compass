@@ -19,67 +19,27 @@ confidence, then by the via symbol's id, so results are deterministic.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from compass_core.contract.models import EdgeRef, ResultItem, SymbolRef, Via
 from compass_core.contract.types import SymbolId, ViaKind
 from compass_core.errors import IndexIncompatibleError
-from compass_core.graph.db import GraphDB, QueryParams, Row, as_rows
-from compass_core.query.references import stored_paths
-from compass_core.query.rows import (
-    call_type_value,
-    confidence_value,
-    file_from_row,
-    function_from_row,
-    line_value,
-    symbol_from_row,
-    text_value,
+from compass_core.graph.db import GraphDB
+from compass_core.query.references import BY_PATH_AND_TAIL, FILES_AT_PATHS, stored_paths
+from compass_core.query.walk_queries import (
+    CALLERS_IN_FILES,
+    CALLERS_OF_EXTERNALS,
+    CALLERS_OF_FUNCTIONS,
+    CALLERS_OF_METHODS,
+    EXTERNAL_KEY,
+    IMPORTERS_OF_FILES,
+    SUBCLASSES_IN_FILES,
+    SUBCLASSES_OF,
+    CallRow,
+    ExternalCallRow,
 )
 from compass_core.shared_types import EdgeType, SymbolKind
-
-_FN = "{v}.id, {v}.name, {v}.file_path, {v}.line_start, {v}.line_end, {v}.signature, {v}.is_method"
-_CLS = "{v}.id, {v}.name, {v}.file_path, {v}.line_start, {v}.line_end, '' AS {v}_sig"
-_CALL = "r.confidence, r.call_type, r.line"
-
-# Callers of the given functions: [caller x7, callee x7, confidence, call_type, line].
-_CALLERS_OF_FUNCTIONS = (
-    "MATCH (a:Function)-[r:CALLS]->(b:Function) "
-    "WHERE b.id IN $ids AND r.confidence >= $minc "
-    f"RETURN {_FN.format(v='a')}, {_FN.format(v='b')}, {_CALL}"
-)
-# Callers of methods of the given classes: as above plus the class id.
-_CALLERS_OF_METHODS = (
-    "MATCH (c:Class)-[:CONTAINS]->(b:Function)<-[r:CALLS]-(a:Function) "
-    "WHERE c.id IN $ids AND r.confidence >= $minc "
-    f"RETURN {_FN.format(v='a')}, {_FN.format(v='b')}, {_CALL}, c.id"
-)
-# Callers of the given external functions: [caller x7, line].
-_CALLERS_OF_EXTERNALS = (
-    "MATCH (a:Function)-[r:CALLS_EXTERN]->(e:ExternalFunction) WHERE e.full_ref IN $ids "
-    f"RETURN {_FN.format(v='a')}, r.line"
-)
-# Direct subclasses of the given classes: [child x6, parent x6].
-_SUBCLASSES_OF = (
-    "MATCH (a:Class)-[:INHERITS]->(b:Class) WHERE b.id IN $ids "
-    f"RETURN {_CLS.format(v='a')}, {_CLS.format(v='b')}"
-)
-# File-target variants keyed by the stored file paths of the frontier.
-_IMPORTERS_OF_FILES = (
-    "MATCH (a:File)-[:IMPORTS]->(b:File) WHERE b.path IN $paths "
-    "RETURN a.path, a.module_name, b.path, b.module_name"
-)
-_CALLERS_IN_FILES = (
-    "MATCH (a:Function)-[r:CALLS]->(b:Function) "
-    "WHERE b.file_path IN $paths AND r.confidence >= $minc "
-    f"RETURN {_FN.format(v='a')}, {_FN.format(v='b')}, {_CALL}"
-)
-_SUBCLASSES_IN_FILES = (
-    "MATCH (a:Class)-[:INHERITS]->(b:Class) WHERE b.file_path IN $paths "
-    f"RETURN {_CLS.format(v='a')}, {_CLS.format(v='b')}"
-)
-_FILES = "MATCH (f:File) WHERE f.path IN $paths RETURN f.path, f.module_name"
 
 _PRIORITY = {ViaKind.IMPORTS: 0, ViaKind.CALLS: 1, ViaKind.INHERITS: 2}
 _CONFIDENCE_TOLERANCE = 1e-6
@@ -203,20 +163,6 @@ class _Walker:
         return Walk(reached=tuple(self._reached), edges=tuple(edges))
 
 
-def _calls_edge(caller: SymbolRef, callee: SymbolRef, row: Row) -> tuple[float, EdgeRef]:
-    """The confidence and ``CALLS`` edge from a row whose columns 14..16 are the call."""
-    confidence = confidence_value(row[14])
-    edge = EdgeRef(
-        source_id=caller.id,
-        target_id=callee.id,
-        type=EdgeType.CALLS,
-        confidence=confidence,
-        call_type=call_type_value(row[15]),
-        line=line_value(row[16], "line"),
-    )
-    return confidence, edge
-
-
 def _structural_edge(source: SymbolRef, target: SymbolRef, kind: EdgeType) -> EdgeRef:
     """An ``IMPORTS`` or ``INHERITS`` edge (no confidence, call type or line)."""
     return EdgeRef(
@@ -227,14 +173,6 @@ def _structural_edge(source: SymbolRef, target: SymbolRef, kind: EdgeType) -> Ed
         call_type=None,
         line=None,
     )
-
-
-def _rows(db: GraphDB, query: str, params: QueryParams) -> Sequence[Row]:
-    return as_rows(db.execute(query, params))
-
-
-def _class(row: Row, repo_root: Path) -> SymbolRef:
-    return symbol_from_row(row, SymbolKind.CLASS, repo_root)
 
 
 def stored_target_key(db: GraphDB, target: SymbolRef, repo_root: Path) -> str:
@@ -256,25 +194,21 @@ def stored_target_key(db: GraphDB, target: SymbolRef, repo_root: Path) -> str:
         maps to ``"app/a.py"`` (or its absolute spelling, if stored that way);
         ``<ext::json.dumps>`` maps to ``"json.dumps"``.
     """
-    paths = stored_paths(target.file_path or "", repo_root)
+    params = {"paths": stored_paths(target.file_path or "", repo_root)}
+    key: str | None
     if target.kind is SymbolKind.EXTERNAL:
-        rows = _rows(
-            db,
-            "MATCH (e:ExternalFunction) WHERE e.full_ref = $ref RETURN e.full_ref",
-            {"ref": target.id.removeprefix("ext::")},
-        )
+        key = EXTERNAL_KEY.first(db, repo_root, {"ref": target.id.removeprefix("ext::")})
     elif target.kind is SymbolKind.FILE:
-        rows = _rows(db, _FILES, {"paths": paths})
+        node = FILES_AT_PATHS.first(db, repo_root, params)
+        key = node.key if node else None
     else:
-        label = "Class" if target.kind is SymbolKind.CLASS else "Function"
-        rows = _rows(
-            db,
-            f"MATCH (n:{label}) WHERE n.file_path IN $paths AND n.id ENDS WITH $tail RETURN n.id",
-            {"paths": paths, "tail": "::" + target.id.rsplit("::", 1)[1]},
-        )
-    if not rows:
+        queries = BY_PATH_AND_TAIL
+        query = queries.classes if target.kind is SymbolKind.CLASS else queries.functions
+        node = query.first(db, repo_root, {**params, "tail": "::" + target.id.rsplit("::", 1)[1]})
+        key = node.key if node else None
+    if key is None:
         raise IndexIncompatibleError(f"resolved symbol is missing from the graph: {target.id}")
-    return text_value(rows[0][0], "id")
+    return key
 
 
 def walk_symbols(
@@ -322,58 +256,50 @@ def walk_symbols(
         classes = [k for k in frontier if kinds[k] is SymbolKind.CLASS]
         externals = [k for k in frontier if kinds[k] is SymbolKind.EXTERNAL]
         if externals:
-            for row in _rows(db, _CALLERS_OF_EXTERNALS, {"ids": externals}):
-                _offer_external_caller(walker, row, distance, target_key, repo_root)
+            for ext in CALLERS_OF_EXTERNALS.run(db, repo_root, {"ids": externals}):
+                _offer_external_caller(walker, ext, distance, target_key)
+        minc = _threshold(min_confidence)
         if functions:
-            params: QueryParams = {"ids": functions, "minc": _threshold(min_confidence)}
-            for row in _rows(db, _CALLERS_OF_FUNCTIONS, params):
-                _offer_caller(walker, row, distance, text_value(row[7], "id"), repo_root)
+            for call in CALLERS_OF_FUNCTIONS.run(db, repo_root, {"ids": functions, "minc": minc}):
+                _offer_caller(walker, call, distance, call.callee.key)
         if classes:
-            params = {"ids": classes, "minc": _threshold(min_confidence)}
-            for row in _rows(db, _CALLERS_OF_METHODS, params):
-                _offer_caller(walker, row, distance, text_value(row[17], "id"), repo_root)
-            for row in _rows(db, _SUBCLASSES_OF, {"ids": classes}):
-                child, parent = _class(row[:6], repo_root), _class(row[6:], repo_root)
-                child_key = text_value(row[0], "id")
-                parent_key = text_value(row[6], "id")
-                via = Via(kind=ViaKind.INHERITS, symbol=parent)
-                walker.offer(child_key, child, distance, via, parent_key, None)
-                walker.edge(child_key, _structural_edge(child, parent, EdgeType.INHERITS))
+            params = {"ids": classes, "minc": minc}
+            for method_call in CALLERS_OF_METHODS.run(db, repo_root, params):
+                _offer_caller(walker, method_call.call, distance, method_call.class_key)
+            for pair in SUBCLASSES_OF.run(db, repo_root, {"ids": classes}):
+                child, parent = pair.source, pair.target
+                via = Via(kind=ViaKind.INHERITS, symbol=parent.symbol)
+                walker.offer(child.key, child.symbol, distance, via, parent.key, None)
+                walker.edge(
+                    child.key, _structural_edge(child.symbol, parent.symbol, EdgeType.INHERITS)
+                )
         frontier = walker.close_level()
         if not frontier:
             break
     return walker.result()
 
 
-def _offer_caller(
-    walker: _Walker, row: Row, distance: int, parent_key: str, repo_root: Path
-) -> None:
-    caller = function_from_row(row[:7], repo_root)
-    callee = function_from_row(row[7:14], repo_root)
-    confidence, edge = _calls_edge(caller, callee, row)
-    caller_key = text_value(row[0], "id")
-    via = Via(kind=ViaKind.CALLS, symbol=callee)
-    walker.offer(caller_key, caller, distance, via, parent_key, confidence)
-    walker.edge(caller_key, edge)
+def _offer_caller(walker: _Walker, call: CallRow, distance: int, parent_key: str) -> None:
+    via = Via(kind=ViaKind.CALLS, symbol=call.callee.symbol)
+    walker.offer(call.caller.key, call.caller.symbol, distance, via, parent_key, call.confidence)
+    walker.edge(call.caller.key, call.edge)
 
 
 def _offer_external_caller(
-    walker: _Walker, row: Row, distance: int, external_key: str, repo_root: Path
+    walker: _Walker, ext: ExternalCallRow, distance: int, external_key: str
 ) -> None:
-    caller = function_from_row(row[:7], repo_root)
     external = walker.symbols[external_key]
-    caller_key = text_value(row[0], "id")
     via = Via(kind=ViaKind.CALLS, symbol=external)
-    walker.offer(caller_key, caller, distance, via, external_key, None)
+    walker.offer(ext.caller.key, ext.caller.symbol, distance, via, external_key, None)
     edge = EdgeRef(
-        source_id=caller.id,
+        source_id=ext.caller.symbol.id,
         target_id=external.id,
         type=EdgeType.CALLS_EXTERN,
         confidence=None,
         call_type=None,
-        line=line_value(row[7], "line"),
+        line=ext.line,
     )
-    walker.edge(caller_key, edge)
+    walker.edge(ext.caller.key, edge)
 
 
 def walk_files(
@@ -417,31 +343,27 @@ def walk_files(
     for distance in range(1, depth + 1):
         # (owner path, via, parent path, confidence) per proposal; files resolved below.
         pending: list[tuple[str, Via, str, float | None]] = []
-        for row in _rows(db, _IMPORTERS_OF_FILES, {"paths": frontier}):
-            importer, imported = (
-                file_from_row(row[:2], repo_root),
-                file_from_row(row[2:], repo_root),
+        for pair in IMPORTERS_OF_FILES.run(db, repo_root, {"paths": frontier}):
+            importer, imported = pair.source, pair.target
+            walker.symbols.setdefault(importer.key, importer.symbol)
+            via = Via(kind=ViaKind.IMPORTS, symbol=imported.symbol)
+            pending.append((importer.key, via, imported.key, None))
+            walker.edge(
+                importer.key,
+                _structural_edge(importer.symbol, imported.symbol, EdgeType.IMPORTS),
             )
-            owner = text_value(row[0], "path")
-            walker.symbols.setdefault(owner, importer)
-            via = Via(kind=ViaKind.IMPORTS, symbol=imported)
-            pending.append((owner, via, text_value(row[2], "path"), None))
-            walker.edge(owner, _structural_edge(importer, imported, EdgeType.IMPORTS))
-        params: QueryParams = {"paths": frontier, "minc": _threshold(min_confidence)}
-        for row in _rows(db, _CALLERS_IN_FILES, params):
-            caller = function_from_row(row[:7], repo_root)
-            callee = function_from_row(row[7:14], repo_root)
-            confidence, edge = _calls_edge(caller, callee, row)
-            owner = text_value(row[2], "file_path")
-            via = Via(kind=ViaKind.CALLS, symbol=callee)
-            pending.append((owner, via, text_value(row[9], "file_path"), confidence))
-            walker.edge(owner, edge)
-        for row in _rows(db, _SUBCLASSES_IN_FILES, {"paths": frontier}):
-            child, parent = _class(row[:6], repo_root), _class(row[6:], repo_root)
-            owner = text_value(row[2], "file_path")
-            via = Via(kind=ViaKind.INHERITS, symbol=parent)
-            pending.append((owner, via, text_value(row[8], "file_path"), None))
-            walker.edge(owner, _structural_edge(child, parent, EdgeType.INHERITS))
+        params = {"paths": frontier, "minc": _threshold(min_confidence)}
+        for call in CALLERS_IN_FILES.run(db, repo_root, params):
+            via = Via(kind=ViaKind.CALLS, symbol=call.callee.symbol)
+            pending.append((call.caller.path, via, call.callee.path, call.confidence))
+            walker.edge(call.caller.path, call.edge)
+        for pair in SUBCLASSES_IN_FILES.run(db, repo_root, {"paths": frontier}):
+            child, parent = pair.source, pair.target
+            via = Via(kind=ViaKind.INHERITS, symbol=parent.symbol)
+            pending.append((child.path, via, parent.path, None))
+            walker.edge(
+                child.path, _structural_edge(child.symbol, parent.symbol, EdgeType.INHERITS)
+            )
         _load_files(db, walker, [p[0] for p in pending], repo_root)
         for owner, via, parent_path, path_confidence in pending:
             walker.offer(owner, walker.symbols[owner], distance, via, parent_path, path_confidence)
@@ -456,8 +378,8 @@ def _load_files(db: GraphDB, walker: _Walker, paths: list[str], repo_root: Path)
     missing = sorted({p for p in paths if p not in walker.symbols})
     if not missing:
         return
-    for row in _rows(db, _FILES, {"paths": missing}):
-        walker.symbols[text_value(row[0], "path")] = file_from_row(row, repo_root)
+    for node in FILES_AT_PATHS.run(db, repo_root, {"paths": missing}):
+        walker.symbols[node.key] = node.symbol
     absent = [p for p in missing if p not in walker.symbols]
     if absent:
         raise IndexIncompatibleError(f"definitions reference unindexed files: {absent}")

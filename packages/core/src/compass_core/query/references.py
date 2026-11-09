@@ -8,7 +8,7 @@ hit resolves, several hits are an ``AmbiguousReference``, and no hit at all is a
 
 Public ids are repo-relative; the graph stores ``py::<module>::<tail>`` ids with
 ``file_path`` columns. User input only ever reaches Cypher as a ``$parameter``; the
-only text interpolated into a query is the constant ``WHERE`` templates below.
+only text composed into a query is the constant ``WHERE`` conditions below, at import.
 """
 
 from __future__ import annotations
@@ -20,27 +20,82 @@ from pathlib import Path
 from compass_core.contract.models import SymbolRef
 from compass_core.contract.results import AmbiguousReference, Lookup, SymbolNotFound
 from compass_core.contract.types import MatchRule
-from compass_core.graph.db import GraphDB, QueryParams, as_rows
+from compass_core.graph.db import GraphDB, QueryParams
+from compass_core.query.cypher import Query
 from compass_core.query.rows import (
+    CLASS_FIELDS,
+    FILE_FIELDS,
+    FUNCTION_FIELDS,
+    columns,
     count_value,
     external_from_row,
-    file_from_row,
-    is_method_flag,
-    symbol_from_row,
 )
+from compass_core.query.stored import StoredNode, stored_class, stored_file, stored_function
 from compass_core.shared_types import SymbolKind
 
 _SEP = "::"
 _MAX_QUALIFIED_PARTS = 64
 """Most dotted segments a qualified name may have (deeper nesting is not real code)."""
 _MAX_SUGGESTIONS = 5
-_FUNCTION_QUERY = (
-    "MATCH (n:Function) WHERE {where} "
-    "RETURN n.id, n.name, n.file_path, n.line_start, n.line_end, n.signature, n.is_method"
+
+
+@dataclass(frozen=True, slots=True)
+class DefinitionQueries:
+    """The class and the function query for one definition filter over node ``n``.
+
+    Attributes:
+        classes: Matching classes.
+        functions: Matching functions and methods.
+
+    Example:
+        ``_BY_NAME.functions.run(db, root, {"q": "save"})`` returns both ``save`` methods
+        as ``StoredNode`` values (stored id and path, plus the public symbol).
+    """
+
+    classes: Query[StoredNode]
+    functions: Query[StoredNode]
+
+
+def _definitions_where(condition: str) -> DefinitionQueries:
+    """Build the query pair for a constant ``WHERE`` condition (module load time only)."""
+    return DefinitionQueries(
+        classes=Query(
+            f"MATCH (n:Class) WHERE {condition} RETURN {columns('n', CLASS_FIELDS)}",
+            stored_class,
+        ),
+        functions=Query(
+            f"MATCH (n:Function) WHERE {condition} RETURN {columns('n', FUNCTION_FIELDS)}",
+            stored_function,
+        ),
+    )
+
+
+_BY_STORED_ID = _definitions_where("n.id IN $ids")
+BY_PATH_AND_TAIL = _definitions_where("n.file_path IN $paths AND n.id ENDS WITH $tail")
+"""Definitions in a file (``$paths``) whose stored id ends with ``$tail``."""
+_BY_PATH_SUFFIX_AND_TAIL = _definitions_where(
+    "(n.file_path IN $paths OR n.file_path ENDS WITH $suffix) AND n.id ENDS WITH $tail"
 )
-_CLASS_QUERY = (
-    "MATCH (n:Class) WHERE {where} "
-    "RETURN n.id, n.name, n.file_path, n.line_start, n.line_end, '' AS signature"
+_BY_TAIL = _definitions_where("n.id ENDS WITH $tail")
+_BY_NAME = _definitions_where("n.name = $q")
+_NAME_CONTAINS = _definitions_where("lower(n.name) CONTAINS lower($q)")
+
+FILES_AT_PATHS: Query[StoredNode] = Query(
+    f"MATCH (f:File) WHERE f.path IN $paths RETURN {columns('f', FILE_FIELDS)}",
+    stored_file,
+)
+"""Files stored under any of ``$paths`` (see ``stored_paths``)."""
+_EXTERNAL: Query[SymbolRef] = Query(
+    "MATCH (e:ExternalFunction) WHERE e.full_ref = $q RETURN e.full_ref, e.name",
+    lambda row, _: external_from_row(row),
+)
+_FAN_IN: Query[int] = Query(
+    """
+    MATCH (c:Function)-[:CALLS]->(f:Function)
+    WHERE f.file_path IN $paths AND f.id ENDS WITH $tail
+    RETURN count(c)
+    """,
+    lambda row, _: count_value(row[0]),
 )
 
 
@@ -61,19 +116,14 @@ class ResolvedReference:
     rule: MatchRule
 
 
-def _definitions(db: GraphDB, where: str, params: QueryParams, repo_root: Path) -> list[SymbolRef]:
-    """Classes and functions satisfying a constant ``where`` template over node ``n``."""
-    classes = [
-        symbol_from_row(r, SymbolKind.CLASS, repo_root)
-        for r in as_rows(db.execute(_CLASS_QUERY.format(where=where), params))
-    ]
-    functions = [
-        symbol_from_row(
-            r, SymbolKind.METHOD if is_method_flag(r[6]) else SymbolKind.FUNCTION, repo_root
-        )
-        for r in as_rows(db.execute(_FUNCTION_QUERY.format(where=where), params))
-    ]
-    return classes + functions
+def _definitions(
+    db: GraphDB, queries: DefinitionQueries, params: QueryParams, repo_root: Path
+) -> list[SymbolRef]:
+    """Classes, then functions and methods, matching one definition filter."""
+    found = queries.classes.run(db, repo_root, params) + queries.functions.run(
+        db, repo_root, params
+    )
+    return [node.symbol for node in found]
 
 
 def stored_paths(rel: str, repo_root: Path) -> list[str]:
@@ -107,33 +157,20 @@ def _by_path_and_tail(
     db: GraphDB, path: str, tail: str, repo_root: Path, *, suffix: bool
 ) -> list[SymbolRef]:
     """Definitions in ``path`` (or any file whose path ends with it) named ``tail``."""
-    where = "(n.file_path IN $paths" + (" OR n.file_path ENDS WITH $suffix)" if suffix else ")")
-    params: QueryParams = {
-        "paths": stored_paths(path, repo_root),
-        "suffix": "/" + path,
-        "tail": _SEP + tail,
-    }
-    return _definitions(db, where + " AND n.id ENDS WITH $tail", params, repo_root)
+    params: QueryParams = {"paths": stored_paths(path, repo_root), "tail": _SEP + tail}
+    if suffix:
+        params["suffix"] = "/" + path
+        return _definitions(db, _BY_PATH_SUFFIX_AND_TAIL, params, repo_root)
+    return _definitions(db, BY_PATH_AND_TAIL, params, repo_root)
 
 
 def _file(db: GraphDB, path: str, repo_root: Path) -> list[SymbolRef]:
-    rows = as_rows(
-        db.execute(
-            "MATCH (f:File) WHERE f.path IN $paths RETURN f.path, f.module_name",
-            {"paths": stored_paths(path, repo_root)},
-        )
-    )
-    return [file_from_row(r, repo_root) for r in rows]
+    files = FILES_AT_PATHS.run(db, repo_root, {"paths": stored_paths(path, repo_root)})
+    return [node.symbol for node in files]
 
 
 def _external(db: GraphDB, full_ref: str) -> list[SymbolRef]:
-    rows = as_rows(
-        db.execute(
-            "MATCH (e:ExternalFunction) WHERE e.full_ref = $q RETURN e.full_ref, e.name",
-            {"q": full_ref},
-        )
-    )
-    return [external_from_row(r) for r in rows]
+    return _EXTERNAL.run(db, Path(), {"q": full_ref})
 
 
 def _exact_id(db: GraphDB, ref: str, repo_root: Path, allow_file: bool) -> list[SymbolRef]:
@@ -159,7 +196,7 @@ def _qualified(db: GraphDB, ref: str, repo_root: Path) -> list[SymbolRef]:
     ids = [
         f"py{_SEP}{'.'.join(parts[:i])}{_SEP}{'.'.join(parts[i:])}" for i in range(1, len(parts))
     ]
-    return _definitions(db, "n.id IN $ids", {"ids": ids}, repo_root)
+    return _definitions(db, _BY_STORED_ID, {"ids": ids}, repo_root)
 
 
 def _path_and_name(db: GraphDB, ref: str, repo_root: Path) -> list[SymbolRef]:
@@ -168,11 +205,11 @@ def _path_and_name(db: GraphDB, ref: str, repo_root: Path) -> list[SymbolRef]:
 
 
 def _class_member(db: GraphDB, ref: str, repo_root: Path) -> list[SymbolRef]:
-    return _definitions(db, "n.id ENDS WITH $tail", {"tail": _SEP + ref}, repo_root)
+    return _definitions(db, _BY_TAIL, {"tail": _SEP + ref}, repo_root)
 
 
 def _bare_name(db: GraphDB, ref: str, repo_root: Path) -> list[SymbolRef]:
-    return _definitions(db, "n.name = $q", {"q": ref}, repo_root)
+    return _definitions(db, _BY_NAME, {"q": ref}, repo_root)
 
 
 def _hits(
@@ -199,24 +236,18 @@ def _fan_in(db: GraphDB, symbols: Sequence[SymbolRef], repo_root: Path) -> dict[
     for symbol in symbols:
         if symbol.kind not in (SymbolKind.FUNCTION, SymbolKind.METHOD) or not symbol.file_path:
             continue
-        rows = as_rows(
-            db.execute(
-                "MATCH (c:Function)-[:CALLS]->(f:Function) "
-                "WHERE f.file_path IN $paths AND f.id ENDS WITH $tail RETURN count(c)",
-                {
-                    "paths": stored_paths(symbol.file_path, repo_root),
-                    "tail": _SEP + symbol.id.rsplit(_SEP, 1)[1],
-                },
-            )
-        )
-        counts[symbol.id] = count_value(rows[0][0]) if rows else 0
+        params = {
+            "paths": stored_paths(symbol.file_path, repo_root),
+            "tail": _SEP + symbol.id.rsplit(_SEP, 1)[1],
+        }
+        counts[symbol.id] = _FAN_IN.first(db, repo_root, params) or 0
     return counts
 
 
 def _suggestions(db: GraphDB, text: str, repo_root: Path) -> tuple[SymbolRef, ...]:
     if not text:
         return ()
-    found = _definitions(db, "lower(n.name) CONTAINS lower($q)", {"q": text}, repo_root)
+    found = _definitions(db, _NAME_CONTAINS, {"q": text}, repo_root)
     found.sort(key=lambda s: (s.name.lower() != text.lower(), len(s.name), s.id))
     return tuple(found[:_MAX_SUGGESTIONS])
 

@@ -100,6 +100,19 @@ def test_only_the_query_layer_and_ingest_run_graph_queries() -> None:
     assert offenders == []
 
 
+def test_query_layer_runs_cypher_only_through_query_objects() -> None:
+    # Every statement in query/ is a ``Query`` (statement + row decoder); only
+    # ``Query.run`` in query/cypher.py executes Cypher or reads raw result rows.
+    runner = PACKAGE_ROOT / "query" / "cypher.py"
+    offenders = [
+        str(path.relative_to(PACKAGE_ROOT))
+        for path in (PACKAGE_ROOT / "query").rglob("*.py")
+        if path != runner
+        and any(call in path.read_text(encoding="utf-8") for call in (".execute(", "as_rows("))
+    ]
+    assert offenders == []
+
+
 def test_every_enum_name_is_defined_once() -> None:
     seen: dict[str, str] = {}
     duplicates: list[str] = []
