@@ -159,9 +159,10 @@ class IngestReporter:
 
             if row.status == "running":
                 stage_text = Text(label, style=f"bold {_GOLD}")
-                result = Text(f"{row.current:,} / {row.total:,}" if row.total else "working…")
-                time_cell = Spinner("dots", style=_GOLD)
-                table.add_row(stage_text, result, time_cell)
+                progress_text = Text(
+                    f"{row.current:,} / {row.total:,}" if row.total else "working…"
+                )
+                table.add_row(stage_text, progress_text, Spinner("dots", style=_GOLD))
                 continue
 
             style = _WARN if row.warn else "bold"
@@ -171,7 +172,7 @@ class IngestReporter:
                 if row.secondary
                 else Text(row.primary, style=style)
             )
-            frac = (row.duration / max_duration) if max_duration else 0.0
+            frac = ((row.duration or 0.0) / max_duration) if max_duration else 0.0
             bar_style = _WARN if row.warn else (_GREEN if frac >= _DOT_THRESHOLD else _DIM)
             time_cell = Group(
                 Text(fmt_duration(row.duration or 0.0), justify="right"),

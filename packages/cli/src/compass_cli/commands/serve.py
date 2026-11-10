@@ -40,7 +40,7 @@ def serve(
     setup_logging(level="DEBUG" if verbose else "WARNING", show_path=verbose)
 
     web_dir = Path(__file__).parents[5] / "apps" / "web"
-    procs: list[subprocess.Popen] = []
+    procs: list[subprocess.Popen[bytes]] = []
 
     frontend_url = server_settings.FRONTEND_URL
 

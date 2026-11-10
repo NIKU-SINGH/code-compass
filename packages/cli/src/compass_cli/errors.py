@@ -27,4 +27,4 @@ def handle_errors(func: F) -> F:
             display.error(str(exc))
             raise typer.Exit(code=1) from exc
 
-    return wrapper  # type: ignore[return-value]
+    return wrapper  # type: ignore[return-value]  # functools.wraps keeps the signature; mypy cannot prove wrapper is F

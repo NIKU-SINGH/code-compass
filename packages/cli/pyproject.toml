@@ -19,3 +19,7 @@ compass = "compass_cli.main:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/compass_cli"]
+
+[tool.mypy]
+strict = true
+files = ["src/compass_cli"]

@@ -36,6 +36,9 @@ jobs:
       - name: Run mypy (compass_server)
         run: cd packages/server && uv run mypy
 
+      - name: Run mypy (compass_cli)
+        run: cd packages/cli && uv run mypy
+
   test:
     name: Test
     runs-on: ubuntu-latest
