@@ -1,14 +1,19 @@
 # Code Compass
 
-**A code graph of your repository that you and your coding agents can query: where
-something is defined, who calls it, and what may break if it changes.**
+**A local-first code knowledge graph for coding agents and the people working with them.
+Ask where something is defined, who calls it, and what may break if it changes, over MCP,
+from the CLI, or in a 3D web view.**
 
-Code Compass parses a repository with [Tree-sitter](https://tree-sitter.github.io/), stores
-its files, classes, functions and methods, and the calls, imports and inheritance between
-them, in an embedded graph database ([LadybugDB](https://pypi.org/project/real-ladybug/)),
-and answers structural questions from that graph. You can ask it from the command line,
-coding agents (Claude Code, Codex, Cursor) can ask it over MCP, and a web UI draws the
-graph. Everything runs on your machine; no code leaves it.
+Code Compass parses a repository with [Tree-sitter](https://tree-sitter.github.io/) into a
+knowledge graph: files, classes, functions and methods are nodes, and the calls, imports
+and inheritance between them are edges, each call with a confidence. The graph lives in an
+embedded graph database ([LadybugDB](https://pypi.org/project/real-ladybug/)) inside the
+repository's `.compass/` folder. Agents (Claude Code, Codex, Cursor) query it through an
+MCP server, you query it with the `compass` CLI, and a web UI draws it in 3D.
+
+**Local-first:** parsing is deterministic (an AST, not a language model), so there are no
+API keys, no embeddings or vector store, and no network calls. Your code never leaves your
+machine.
 
 **Why:** grep finds text; it does not know that `save` on line 6 overrides `Base.save`, or
 that changing `decode_token` reaches `handle` and then `nightly`. Code Compass answers those
