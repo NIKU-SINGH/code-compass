@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from compass_core.package_version import installed_version
 from compass_server.main import app
 
 
@@ -11,5 +12,5 @@ def test_health_check() -> None:
     assert response.json() == {
         "status": "ok",
         "service": "Code Compass Core API",
-        "version": "0.1.0",
+        "version": installed_version(),
     }
