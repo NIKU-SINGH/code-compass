@@ -1,9 +1,16 @@
+from importlib.metadata import version
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from compass_server.errors import register_error_handlers
 from compass_server.routers.query import router as query_router
 from compass_server.settings import server_settings
+from compass_server.web_bundle import STATIC_DIR, has_bundled_ui
+
+VERSION = version("compass-code-server")
+"""The installed package version, reported by ``/health``."""
 
 app = FastAPI(
     title="Code Compass API", description="Backend for the Code Compass visual knowledge graph."
@@ -25,7 +32,11 @@ app.add_middleware(
 @app.get("/health")
 def health_check() -> dict[str, str]:
     """Basic health check route for the frontend to verify connection."""
-    return {"status": "ok", "service": "Code Compass Core API", "version": "0.1.0"}
+    return {"status": "ok", "service": "Code Compass Core API", "version": VERSION}
 
 
 app.include_router(query_router, prefix="/api")
+
+# Mounted last so the API routes above take precedence over the UI's files.
+if has_bundled_ui():
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="web")

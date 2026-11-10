@@ -44,3 +44,6 @@ Thumbs.db
 
 # Generated OpenAPI dump
 .build/
+
+# Static export of the web app (make web-static)
+apps/web/out/

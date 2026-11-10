@@ -1,3 +1,5 @@
+from importlib.metadata import version
+
 import typer
 
 from compass_cli import display
@@ -14,8 +16,23 @@ app = typer.Typer(
 )
 
 
+DISTRIBUTION = "compass-code"
+"""The PyPI package that installs the ``compass`` command."""
+
+
+def _print_version(value: bool) -> None:
+    if value:
+        typer.echo(f"{DISTRIBUTION} {version(DISTRIBUTION)}")
+        raise typer.Exit()
+
+
+VERSION = typer.Option(
+    False, "--version", "-V", callback=_print_version, is_eager=True, help="Print the version."
+)
+
+
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context) -> None:
+def main(ctx: typer.Context, show_version: bool = VERSION) -> None:
     """Code Compass — Navigate your codebase with ease."""
     if ctx.invoked_subcommand is None:
         display.help_commands()

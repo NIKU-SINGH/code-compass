@@ -23,8 +23,7 @@ right code first instead of opening files one by one.
 > **Status: alpha.** Python repositories only. Call resolution is partial: calls through
 > imports, module attributes, re-exports and inherited methods are linked; constructor
 > calls, calls on typed variables and dynamic dispatch are not yet. Every answer says so
-> (lines starting with `!`), and an empty list never means "no callers". Not yet published
-> to PyPI; install from source (below).
+> (lines starting with `!`), and an empty list never means "no callers".
 
 ## What you can ask
 
@@ -38,7 +37,14 @@ right code first instead of opening files one by one.
 
 ## Install
 
-Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.11+. Install the `compass` command with [uv](https://docs.astral.sh/uv/)
+or [pipx](https://pipx.pypa.io/):
+
+```bash
+uv tool install compass-code      # or: pipx install compass-code
+```
+
+Until the first release reaches PyPI, install from a clone instead:
 
 ```bash
 git clone https://github.com/NIKU-SINGH/code-compass.git
@@ -46,8 +52,9 @@ cd code-compass
 uv tool install ./packages/cli --with ./packages/core --with ./packages/mcp --with ./packages/server
 ```
 
-This puts `compass` on your `PATH` (run `uv tool update-shell` once if it is not). To work
-on Code Compass itself instead, see [Development](#development).
+Either way `compass` ends up on your `PATH` (run `uv tool update-shell` once if it is not).
+To work on Code Compass itself, see [Development](#development); releases are described in
+[docs/RELEASING.md](docs/RELEASING.md).
 
 ## Quick start
 
@@ -111,13 +118,14 @@ writing anything. `compass` must be on the `PATH` the agent starts the server wi
 ## Web UI
 
 ```bash
-make install-web        # once: install the web app's dependencies (needs pnpm)
-compass serve           # API on http://127.0.0.1:8000, UI on http://localhost:3000
+compass serve           # the API and the UI on http://127.0.0.1:8000, opened in a browser
 ```
 
-The UI draws the whole graph in 3D and lets you search and open any node. It currently
-runs the Next.js dev server from this checkout, so it needs the source tree and pnpm;
-`compass serve --no-frontend` starts only the API.
+The UI draws the whole graph in 3D and lets you search and open any node. The released
+package serves a prebuilt copy of the UI from the API's own port. In a source checkout
+without that copy (`make web-static` builds it), `compass serve` runs the Next.js dev
+server on http://localhost:3000 instead, which needs pnpm and `make install-web`; `--dev`
+forces that mode and `--no-frontend` starts only the API.
 
 ## How it works
 
@@ -145,15 +153,19 @@ code-compass/
 │
 ├── packages/                     ← Python
 │   ├── core/                     ← compass_core: the engine (ingest, graph, index, query)
-│   ├── server/                   ← compass_server: HTTP API (FastAPI) used by the web app
+│   ├── server/                   ← compass_server: HTTP API (FastAPI) and the bundled web UI
 │   ├── cli/                      ← compass_cli: the `compass` command
 │   └── mcp/                      ← compass_mcp: MCP server for coding agents
+│
+├── scripts/                      ← release tooling: version check/bump, wheel smoke test
 │
 └── apps/                         ← JavaScript
     └── web/                      ← Next.js UI, talks to compass_server over HTTP
 ```
 
 **Layout rule:** Python packages go in `packages/`, JavaScript apps go in `apps/`.
+On PyPI they are `compass-code-core`, `compass-code-server`, `compass-code` (the CLI) and
+`compass-code-mcp`, always released together with one version.
 
 `compass_core` depends on none of the others. The CLI, the MCP server and the HTTP
 server are adapters over it, and only the web app talks to the HTTP server:

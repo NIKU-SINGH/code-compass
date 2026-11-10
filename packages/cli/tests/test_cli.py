@@ -92,3 +92,10 @@ def test_ingest_reports_skipped_edges(tmp_path):
 def test_query_commands_exist(command: str) -> None:
     result = runner.invoke(app, [command, "--help"])
     assert result.exit_code == 0
+
+
+def test_version_flag_names_the_package():
+    result = runner.invoke(app, ["--version"])
+
+    assert result.exit_code == 0
+    assert result.output.startswith("compass-code ")

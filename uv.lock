@@ -9,10 +9,10 @@ resolution-markers = [
 [manifest]
 members = [
     "code-compass",
-    "compass-cli",
-    "compass-core",
-    "compass-mcp",
-    "compass-server",
+    "compass-code",
+    "compass-code-core",
+    "compass-code-mcp",
+    "compass-code-server",
 ]
 
 [[package]]
@@ -217,10 +217,10 @@ source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
-    { name = "compass-cli" },
-    { name = "compass-core" },
-    { name = "compass-mcp" },
-    { name = "compass-server" },
+    { name = "compass-code" },
+    { name = "compass-code-core" },
+    { name = "compass-code-mcp" },
+    { name = "compass-code-server" },
     { name = "httpx" },
     { name = "mypy" },
     { name = "pytest" },
@@ -232,10 +232,10 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "compass-cli", editable = "packages/cli" },
-    { name = "compass-core", editable = "packages/core" },
-    { name = "compass-mcp", editable = "packages/mcp" },
-    { name = "compass-server", editable = "packages/server" },
+    { name = "compass-code", editable = "packages/cli" },
+    { name = "compass-code-core", editable = "packages/core" },
+    { name = "compass-code-mcp", editable = "packages/mcp" },
+    { name = "compass-code-server", editable = "packages/server" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "mypy", specifier = ">=1.13.0" },
     { name = "pytest", specifier = ">=8.0.0" },
@@ -253,28 +253,28 @@ wheels = [
 ]
 
 [[package]]
-name = "compass-cli"
+name = "compass-code"
 version = "0.1.0"
 source = { editable = "packages/cli" }
 dependencies = [
-    { name = "compass-core" },
-    { name = "compass-mcp" },
-    { name = "compass-server" },
+    { name = "compass-code-core" },
+    { name = "compass-code-mcp" },
+    { name = "compass-code-server" },
     { name = "rich" },
     { name = "typer" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "compass-core", editable = "packages/core" },
-    { name = "compass-mcp", editable = "packages/mcp" },
-    { name = "compass-server", editable = "packages/server" },
+    { name = "compass-code-core", editable = "packages/core" },
+    { name = "compass-code-mcp", editable = "packages/mcp" },
+    { name = "compass-code-server", editable = "packages/server" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "typer", specifier = ">=0.9.0" },
 ]
 
 [[package]]
-name = "compass-core"
+name = "compass-code-core"
 version = "0.1.0"
 source = { editable = "packages/core" }
 dependencies = [
@@ -299,26 +299,26 @@ requires-dist = [
 ]
 
 [[package]]
-name = "compass-mcp"
+name = "compass-code-mcp"
 version = "0.1.0"
 source = { editable = "packages/mcp" }
 dependencies = [
-    { name = "compass-core" },
+    { name = "compass-code-core" },
     { name = "mcp" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "compass-core", editable = "packages/core" },
+    { name = "compass-code-core", editable = "packages/core" },
     { name = "mcp", specifier = ">=1.26.0,<2" },
 ]
 
 [[package]]
-name = "compass-server"
+name = "compass-code-server"
 version = "0.1.0"
 source = { editable = "packages/server" }
 dependencies = [
-    { name = "compass-core" },
+    { name = "compass-code-core" },
     { name = "fastapi" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -327,7 +327,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "compass-core", editable = "packages/core" },
+    { name = "compass-code-core", editable = "packages/core" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },

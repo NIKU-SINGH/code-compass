@@ -1,10 +1,7 @@
-.PHONY: install install-web dev build clean openapi gen-api
+.PHONY: install install-web dev build web-static clean openapi gen-api
 
 install:
-	pip install -e packages/core
-	pip install -e packages/server
-	pip install -e packages/cli
-	pip install -e packages/mcp
+	uv sync --all-packages --all-groups
 
 install-web:
 	cd apps/web && pnpm install
@@ -14,7 +11,13 @@ dev:
 
 build:
 	cd apps/web && pnpm build
-	cp -r apps/web/dist/* packages/server/src/compass_server/static/
+
+# The web UI as static files inside compass_server, so the published package serves it.
+# An empty NEXT_PUBLIC_API_URL makes the UI call the API on the same origin.
+web-static:
+	cd apps/web && STATIC_EXPORT=1 NEXT_PUBLIC_API_URL= pnpm build
+	rm -rf packages/server/src/compass_server/static
+	cp -r apps/web/out packages/server/src/compass_server/static
 
 clean:
 	rm -rf packages/server/src/compass_server/static/*

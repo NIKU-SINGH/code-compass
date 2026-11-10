@@ -81,3 +81,5 @@ to get green:
   `cd packages/mcp && uv run mypy` and `cd packages/cli && uv run mypy`
 - Web: `pnpm exec tsc --noEmit` and `pnpm build` in `apps/web`
 - If an API shape changed: `make gen-api` and commit the regenerated `lib/api-types.ts`
+- If packaging changed: `python scripts/release_version.py check`, and
+  `make web-static && uv build --all-packages -o dist && scripts/smoke_test.sh dist`

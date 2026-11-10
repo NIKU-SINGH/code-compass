@@ -1,22 +1,43 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "compass-server"
+name = "compass-code-server"
 version = "0.1.0"
-description = "HTTP API (FastAPI) over the code-compass engine, consumed by the web app"
+description = "HTTP API and bundled web UI of Code Compass."
 requires-python = ">=3.11"
+license = "Apache-2.0"
+keywords = ["code-graph", "knowledge-graph", "mcp", "tree-sitter", "coding-agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development",
+]
 dependencies = [
-    "compass-core",
+    "compass-code-core==0.1.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/NIKU-SINGH/code-compass"
+Repository = "https://github.com/NIKU-SINGH/code-compass"
+Issues = "https://github.com/NIKU-SINGH/code-compass/issues"
+
+[tool.hatch.build.targets.sdist]
+artifacts = ["src/compass_server/static/**"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/compass_server"]
+# The exported web UI is git-ignored; ship it when `make web-static` has built it.
+artifacts = ["src/compass_server/static/**"]
 
 [tool.mypy]
 strict = true

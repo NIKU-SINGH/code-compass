@@ -1,22 +1,39 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "compass-cli"
+name = "compass-code"
 version = "0.1.0"
-description = "CLI for code-compass"
+description = "Local-first code knowledge graph for AI coding agents: the compass command and its MCP server."
 requires-python = ">=3.11"
+readme = "README.md"
+license = "Apache-2.0"
+keywords = ["code-graph", "knowledge-graph", "mcp", "tree-sitter", "coding-agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development",
+]
 dependencies = [
-    "compass-core",
-    "compass-mcp",
-    "compass-server",
+    "compass-code-core==0.1.0",
+    "compass-code-mcp==0.1.0",
+    "compass-code-server==0.1.0",
     "typer>=0.9.0",
     "rich>=13.0.0",
 ]
 
 [project.scripts]
 compass = "compass_cli.main:app"
+
+[project.urls]
+Homepage = "https://github.com/NIKU-SINGH/code-compass"
+Repository = "https://github.com/NIKU-SINGH/code-compass"
+Issues = "https://github.com/NIKU-SINGH/code-compass/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/compass_cli"]
