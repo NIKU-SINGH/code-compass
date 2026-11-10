@@ -160,10 +160,14 @@ jobs:
     name: Smoke test (${{ matrix.os }}, Python ${{ matrix.python }})
     needs: package
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # macOS runners can sit in GitHub's queue for many minutes and get cancelled, which
+        # would block a release. The wheel is pure Python and its commit already passed the
+        # macOS smoke tests on its PR, so a release (a tag) smoke-tests on Linux only.
+        os: ${{ startsWith(github.ref, 'refs/tags/') && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "macos-latest"]') }}
         python: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4

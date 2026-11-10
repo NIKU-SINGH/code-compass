@@ -46,11 +46,13 @@ you do. Only the wheel is published; an sdist cannot carry the sibling folders.
 The tag starts `.github/workflows/release.yml`, which:
 
 1. checks the tag matches the version of `compass-code`,
-2. runs all of CI (lint, types, tests, web build, wheel build, smoke tests),
+2. runs all of CI (lint, types, tests, web build, wheel build, smoke tests on Linux; the
+   macOS smoke tests run on the release PR instead, as macOS runners can queue for a long
+   time),
 3. publishes the wheel to PyPI through Trusted Publishing (no API token is stored),
 4. creates a GitHub release with generated notes and the wheel attached.
 
-If any step fails nothing is published; fix it on `main`, delete the tag
+If any step fails nothing is published. Do not re-run the old run; fix it on `main`, delete the tag
 (`git push --delete origin v0.2.0 && git tag -d v0.2.0`) and tag again. A version that
 reached PyPI can never be uploaded again; release the fix as the next patch version.
 
