@@ -293,9 +293,9 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "real-ladybug" },
-    { name = "tree-sitter", specifier = ">=0.23.0" },
-    { name = "tree-sitter-python", specifier = ">=0.25.0" },
+    { name = "real-ladybug", specifier = ">=0.15.3,<0.16" },
+    { name = "tree-sitter", specifier = ">=0.25.0,<0.26" },
+    { name = "tree-sitter-python", specifier = ">=0.25.0,<0.26" },
 ]
 
 [[package]]
@@ -310,7 +310,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "compass-core", editable = "packages/core" },
-    { name = "mcp", specifier = ">=1.0.0" },
+    { name = "mcp", specifier = ">=1.26.0,<2" },
 ]
 
 [[package]]

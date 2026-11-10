@@ -9,7 +9,7 @@ description = "MCP server for Cursor/Claude integration"
 requires-python = ">=3.11"
 dependencies = [
     "compass-core",
-    "mcp>=1.0.0",
+    "mcp>=1.26.0,<2",
 ]
 
 [tool.hatch.build.targets.wheel]
