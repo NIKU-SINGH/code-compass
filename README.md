@@ -49,7 +49,7 @@ Until the first release reaches PyPI, install from a clone instead:
 ```bash
 git clone https://github.com/NIKU-SINGH/code-compass.git
 cd code-compass
-uv tool install ./packages/cli --with ./packages/core --with ./packages/mcp --with ./packages/server
+uv tool install ./packages/cli
 ```
 
 Either way `compass` ends up on your `PATH` (run `uv tool update-shell` once if it is not).
@@ -164,8 +164,8 @@ code-compass/
 ```
 
 **Layout rule:** Python packages go in `packages/`, JavaScript apps go in `apps/`.
-On PyPI they are `compass-code-core`, `compass-code-server`, `compass-code` (the CLI) and
-`compass-code-mcp`, always released together with one version.
+They are published together as one PyPI package, `compass-code`, whose wheel bundles all
+four (see [docs/RELEASING.md](docs/RELEASING.md)).
 
 `compass_core` depends on none of the others. The CLI, the MCP server and the HTTP
 server are adapters over it, and only the web app talks to the HTTP server:

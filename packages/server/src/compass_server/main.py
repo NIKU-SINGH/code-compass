@@ -9,8 +9,8 @@ from compass_server.routers.query import router as query_router
 from compass_server.settings import server_settings
 from compass_server.web_bundle import STATIC_DIR, has_bundled_ui
 
-VERSION = version("compass-code-server")
-"""The installed package version, reported by ``/health``."""
+VERSION = version("compass-code")
+"""The version of ``compass-code``, the one published package that ships this server."""
 
 app = FastAPI(
     title="Code Compass API", description="Backend for the Code Compass visual knowledge graph."

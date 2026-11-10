@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the built wheels into a fresh environment, the way a user would, and run every
+# Install the built wheel into a fresh environment, the way a user would, and run every
 # command once against the sample repository. Catches what the workspace tests cannot:
 # missing files in a wheel, wrong dependency bounds, a UI that was not bundled.
 #
@@ -13,8 +13,8 @@ work=$(mktemp -d)
 trap 'kill "${server_pid:-}" 2>/dev/null || true; rm -rf "$work"' EXIT
 
 uv venv --quiet --python "$python" "$work/venv"
-# Our four packages come from DIST_DIR only; their dependencies from PyPI.
-VIRTUAL_ENV="$work/venv" uv pip install --quiet --find-links "$dist" compass-code
+# compass-code comes from DIST_DIR only; its dependencies from PyPI.
+VIRTUAL_ENV="$work/venv" uv pip install --quiet "$dist"/compass_code-*.whl
 compass="$work/venv/bin/compass"
 [ -x "$compass" ] || compass="$work/venv/Scripts/compass.exe"
 
@@ -54,7 +54,8 @@ for _ in $(seq 1 40); do
   curl -fs "http://127.0.0.1:$port/health" > /dev/null && break
   sleep 0.25
 done
-curl -fs "http://127.0.0.1:$port/health"; echo
+curl -fs "http://127.0.0.1:$port/health" || { echo "server did not start:"; cat "$work/server.log"; exit 1; }
+echo
 curl -fs "http://127.0.0.1:$port/" | grep -q "<html" && echo "web UI served"
 curl -fs "http://127.0.0.1:$port/api/status" > /dev/null && echo "API served"
 echo "smoke test passed"

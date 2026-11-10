@@ -1,16 +1,15 @@
 # Releasing Code Compass
 
-Code Compass is published to PyPI as four packages that always share one version:
+Code Compass is developed as four workspace packages (`packages/core`, `mcp`, `server`
+and `cli`) but published to PyPI as **one** package, **`compass-code`**. Its wheel is built
+from `packages/cli` and bundles the other three (`packages/cli/hatch_build.py`), including
+the web UI that `make web-static` exports into `compass_server/static`. Users install it
+with `uv tool install compass-code` or `pipx install compass-code`.
 
-| Package | Contents |
-|---|---|
-| `compass-code` | the `compass` command (users install this one) |
-| `compass-code-core` | the engine: ingest, graph, queries |
-| `compass-code-mcp` | the MCP server |
-| `compass-code-server` | the HTTP API and the bundled web UI |
-
-`compass-code` pins the other three to exactly its own version, so an install never mixes
-versions. Users install with `uv tool install compass-code` or `pipx install compass-code`.
+Because the wheel bundles the other packages, `packages/cli/pyproject.toml` lists their
+third-party dependencies too. When you add or change a dependency in `core`, `mcp` or
+`server`, copy it there; `python scripts/release_version.py check` (run by CI) fails until
+you do. Only the wheel is published; an sdist cannot carry the sibling folders.
 
 ## Versioning
 
@@ -27,7 +26,7 @@ versions. Users install with `uv tool install compass-code` or `pipx install com
 
 ## Cutting a release
 
-1. On a branch from `main`, set the version of all four packages and refresh the lockfile:
+1. On a branch from `main`, set the version of `compass-code` and refresh the lockfile:
 
    ```bash
    python scripts/release_version.py set 0.2.0
@@ -35,7 +34,7 @@ versions. Users install with `uv tool install compass-code` or `pipx install com
    ```
 
 2. Open a PR titled `Release 0.2.0` and merge it once CI is green. CI already builds the
-   packages and smoke-tests them on Linux and macOS with Python 3.11 and 3.13.
+   wheel and smoke-tests it on Linux and macOS with Python 3.11 and 3.13.
 3. Tag the merge commit on `main` and push the tag:
 
    ```bash
@@ -46,10 +45,10 @@ versions. Users install with `uv tool install compass-code` or `pipx install com
 
 The tag starts `.github/workflows/release.yml`, which:
 
-1. checks the tag matches every package's version,
-2. runs all of CI (lint, types, tests, web build, package build, smoke tests),
-3. publishes the built files to PyPI through Trusted Publishing (no API token is stored),
-4. creates a GitHub release with generated notes and the built files attached.
+1. checks the tag matches the version of `compass-code`,
+2. runs all of CI (lint, types, tests, web build, wheel build, smoke tests),
+3. publishes the wheel to PyPI through Trusted Publishing (no API token is stored),
+4. creates a GitHub release with generated notes and the wheel attached.
 
 If any step fails nothing is published; fix it on `main`, delete the tag
 (`git push --delete origin v0.2.0 && git tag -d v0.2.0`) and tag again. A version that
@@ -57,15 +56,19 @@ reached PyPI can never be uploaded again; release the fix as the next patch vers
 
 ## One-time setup (before the first release)
 
-**PyPI**: sign in at https://pypi.org, then open *Your projects → Publishing → Add a new
-pending publisher* and add one entry **for each of the four package names** above, with:
+**PyPI**: sign in at https://pypi.org, open https://pypi.org/manage/account/publishing/
+and add one pending publisher (GitHub):
 
 | Field | Value |
 |---|---|
+| PyPI project name | `compass-code` |
 | Owner | `NIKU-SINGH` |
 | Repository name | `code-compass` |
 | Workflow name | `release.yml` |
 | Environment name | `pypi` |
+
+A pending publisher does not reserve the name; the first upload does. Release soon after
+adding it.
 
 **GitHub**: in the repository's *Settings → Environments*, create an environment named
 `pypi`. Optionally add yourself as a required reviewer, so every publish waits for your
@@ -75,6 +78,6 @@ approval.
 
 ```bash
 make install-web && make web-static     # bundle the web UI into compass_server
-uv build --all-packages -o dist
-scripts/smoke_test.sh dist 3.11         # install the wheels fresh and run every command
+uv build --wheel packages/cli -o dist   # the one wheel, with every package inside
+scripts/smoke_test.sh dist 3.11         # install it fresh and run every command
 ```

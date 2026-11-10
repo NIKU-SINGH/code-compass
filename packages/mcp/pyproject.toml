@@ -1,32 +1,16 @@
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "compass-code-mcp"
+name = "compass-mcp"
 version = "0.1.0"
-description = "MCP server that lets coding agents query a Code Compass graph."
+description = "MCP server for Cursor/Claude integration"
 requires-python = ">=3.11"
-license = "Apache-2.0"
-keywords = ["code-graph", "knowledge-graph", "mcp", "tree-sitter", "coding-agents"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Environment :: Console",
-    "Intended Audience :: Developers",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3 :: Only",
-    "Topic :: Software Development",
-]
 dependencies = [
-    "compass-code-core==0.1.0",
+    "compass-core",
     "mcp>=1.26.0,<2",
 ]
-
-[project.urls]
-Homepage = "https://github.com/NIKU-SINGH/code-compass"
-Repository = "https://github.com/NIKU-SINGH/code-compass"
-Issues = "https://github.com/NIKU-SINGH/code-compass/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/compass_mcp"]

@@ -19,12 +19,26 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Software Development",
 ]
+# Published as one package: the wheel bundles compass_core, compass_mcp and compass_server
+# (hatch_build.py), so it lists their third-party dependencies, not them.
+# `scripts/release_version.py check` fails when this list misses one of theirs.
 dependencies = [
-    "compass-code-core==0.1.0",
-    "compass-code-mcp==0.1.0",
-    "compass-code-server==0.1.0",
+    # compass_cli
     "typer>=0.9.0",
     "rich>=13.0.0",
+    # compass_core
+    "real-ladybug>=0.15.3,<0.16",
+    "tree-sitter>=0.25.0,<0.26",
+    "tree-sitter-python>=0.25.0,<0.26",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "pathspec>=1.0.4",
+    # compass_mcp
+    "mcp>=1.26.0,<2",
+    # compass_server
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
 ]
 
 [project.scripts]
@@ -37,6 +51,10 @@ Issues = "https://github.com/NIKU-SINGH/code-compass/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/compass_cli"]
+
+# hatch_build.py copies compass_core, compass_mcp and compass_server into the release wheel
+# (not into editable installs, which use the workspace packages directly).
+[tool.hatch.build.targets.wheel.hooks.custom]
 
 [tool.mypy]
 strict = true

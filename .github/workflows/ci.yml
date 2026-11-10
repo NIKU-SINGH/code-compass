@@ -139,11 +139,16 @@ jobs:
       - name: Bundle the web UI into compass_server
         run: make web-static
 
-      - name: Build sdists and wheels
-        run: uv build --all-packages -o dist
+      - name: Build the compass-code wheel (it bundles every workspace package)
+        run: uv build --wheel packages/cli -o dist
 
-      - name: The server wheel carries the web UI
-        run: unzip -l dist/compass_code_server-*.whl | grep -q "compass_server/static/index.html"
+      - name: The wheel carries the engine, the MCP server, the API and the web UI
+        run: |
+          contents=$(unzip -l dist/compass_code-*.whl)
+          for path in compass_cli/main.py compass_core/query/search.py compass_mcp/server.py \
+                      compass_server/main.py compass_server/static/index.html; do
+            grep -q "$path" <<< "$contents" || { echo "missing $path"; exit 1; }
+          done
 
       - uses: actions/upload-artifact@v4
         with:
