@@ -35,6 +35,8 @@ _COMMANDS: tuple[tuple[str, str], ...] = (
     ("describe", "Show one symbol: location, docstring, callers, callees"),
     ("impact", "List what may break if a symbol or file changes"),
     ("overview", "Summarise the repository: entry points and hot spots"),
+    ("setup", "Tell coding agents in this repo to use Code Compass"),
+    ("mcp", "Serve the code graph to coding agents over MCP"),
     ("serve", "Start the API server and the web UI"),
 )
 """Commands listed by ``compass`` with no arguments, in the order a user needs them."""

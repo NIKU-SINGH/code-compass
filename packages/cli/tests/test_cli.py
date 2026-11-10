@@ -19,7 +19,17 @@ def test_cli_without_command_shows_concise_help():
     assert result.exit_code == 0
     assert "Navigate your codebase with ease" in result.output
     assert "Usage:" in result.output
-    for command in ("ingest", "status", "search", "describe", "impact", "overview", "serve"):
+    for command in (
+        "ingest",
+        "status",
+        "search",
+        "describe",
+        "impact",
+        "overview",
+        "setup",
+        "mcp",
+        "serve",
+    ):
         assert command in result.output
     assert "██████╗" not in result.output
 
@@ -69,7 +79,9 @@ def test_ingest_reports_skipped_edges(tmp_path):
     )
 
 
-@pytest.mark.parametrize("command", ["status", "search", "describe", "impact", "overview"])
+@pytest.mark.parametrize(
+    "command", ["status", "search", "describe", "impact", "overview", "setup", "mcp"]
+)
 def test_query_commands_exist(command: str) -> None:
     result = runner.invoke(app, [command, "--help"])
     assert result.exit_code == 0

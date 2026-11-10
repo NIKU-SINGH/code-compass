@@ -258,6 +258,7 @@ version = "0.1.0"
 source = { editable = "packages/cli" }
 dependencies = [
     { name = "compass-core" },
+    { name = "compass-mcp" },
     { name = "compass-server" },
     { name = "rich" },
     { name = "typer" },
@@ -266,6 +267,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "compass-core", editable = "packages/core" },
+    { name = "compass-mcp", editable = "packages/mcp" },
     { name = "compass-server", editable = "packages/server" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "typer", specifier = ">=0.9.0" },
