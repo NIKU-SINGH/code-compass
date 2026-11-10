@@ -1,9 +1,12 @@
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from compass_core.errors import IndexNotFoundError
+from compass_core.errors import IndexIncompatibleError, IndexNotFoundError
 from compass_core.index.locate import find_index, locate_index, require_index
+from compass_core.index.metadata import SCHEMA_VERSION, IndexMetadata, save_metadata
 from compass_core.settings import settings
 
 
@@ -11,6 +14,13 @@ def _make_index(root: Path) -> Path:
     db = root / ".compass" / "graph.ladybug"
     db.parent.mkdir(parents=True)
     db.write_text("")
+    meta = IndexMetadata(
+        indexed_commit=None,
+        indexed_at=datetime(2026, 11, 1, tzinfo=UTC),
+        schema_version=SCHEMA_VERSION,
+        grammar_versions={},
+    )
+    save_metadata(db.parent / "metadata.json", meta)
     return db
 
 
@@ -67,4 +77,12 @@ def test_locate_index_walks_up_when_configured_path_is_missing(tmp_path: Path, m
 def test_locate_index_raises_when_nothing_is_found(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(settings, "LADYBUG_DB_PATH", str(tmp_path / "missing.ladybug"))
     with pytest.raises(IndexNotFoundError):
+        locate_index(tmp_path)
+
+
+def test_locate_index_rejects_an_index_built_by_an_older_compass(tmp_path: Path, monkeypatch):
+    db = _make_index(tmp_path)
+    (db.parent / "metadata.json").write_text(json.dumps({"indexed_at": 1, "schema_version": 1}))
+    monkeypatch.setattr(settings, "LADYBUG_DB_PATH", str(tmp_path / "missing.ladybug"))
+    with pytest.raises(IndexIncompatibleError, match="compass ingest"):
         locate_index(tmp_path)

@@ -28,21 +28,28 @@ console = Console()
 # ---------------------------------------------------------------------------
 
 
-def help_commands() -> None:
-    """Print the available CLI commands.
+_COMMANDS: tuple[tuple[str, str], ...] = (
+    ("ingest", "Index a repository (run again after code changes)"),
+    ("status", "Show which index is used and whether it is up to date"),
+    ("search", "Find files, classes, functions and methods by name"),
+    ("describe", "Show one symbol: location, docstring, callers, callees"),
+    ("impact", "List what may break if a symbol or file changes"),
+    ("overview", "Summarise the repository: entry points and hot spots"),
+    ("setup", "Tell coding agents in this repo to use Code Compass"),
+    ("mcp", "Serve the code graph to coding agents over MCP"),
+    ("serve", "Start the API server and the web UI"),
+)
+"""Commands listed by ``compass`` with no arguments, in the order a user needs them."""
 
-    Summarizes the base usage and primary subcommands (`ingest`, `serve`)
-    with brief descriptions and formatting.
-    """
+
+def help_commands() -> None:
+    """Print the available CLI commands with one line each."""
+    width = max(len(name) for name, _ in _COMMANDS)
     console.print(f"[bold {_GOLD}]Code Compass[/bold {_GOLD}] — Navigate your codebase with ease\n")
     console.print("[bold]Usage:[/bold]  compass [OPTIONS] COMMAND [ARGS]...\n")
     console.print("[bold]Commands:[/bold]")
-    console.print(
-        f"  [bold {_GOLD}]ingest[/bold {_GOLD}]  Ingest a repository for code intelligence"
-    )
-    console.print(
-        f"  [bold {_GOLD}]serve[/bold {_GOLD}]   Start the API server and frontend dev server"
-    )
+    for name, summary in _COMMANDS:
+        console.print(f"  [bold {_GOLD}]{name:<{width}}[/bold {_GOLD}]  {summary}")
     console.print()
     console.print(
         "[dim]Run [bold]compass COMMAND --help[/bold] for command-specific options.[/dim]"

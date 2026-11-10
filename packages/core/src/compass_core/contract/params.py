@@ -20,6 +20,15 @@ MAX_LIMIT = 500
 MAX_TEXT_LENGTH = 512
 """Longest allowed search query or symbol reference, in characters."""
 
+DEFAULT_LIMIT = 50
+"""Result limit when the caller gives none."""
+
+DEFAULT_IMPACT_DEPTH = 3
+"""Impact traversal depth when the caller gives none."""
+
+DEFAULT_MIN_CONFIDENCE = 0.0
+"""Lowest ``CALLS`` confidence traversed when the caller gives none: every edge."""
+
 
 def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
@@ -59,7 +68,7 @@ class SearchParams:
 
     query: str
     kind: SymbolKind | None = None
-    limit: int = 50
+    limit: int = DEFAULT_LIMIT
 
     def __post_init__(self) -> None:
         if not isinstance(self.query, str) or not self.query.strip():
@@ -80,9 +89,9 @@ class ImpactParams:
         ``ImpactParams(depth=3, min_confidence=0.5, limit=100)``
     """
 
-    depth: int = 3
-    min_confidence: float = 0.0
-    limit: int = 50
+    depth: int = DEFAULT_IMPACT_DEPTH
+    min_confidence: float = DEFAULT_MIN_CONFIDENCE
+    limit: int = DEFAULT_LIMIT
 
     def __post_init__(self) -> None:
         _check_depth(self.depth)

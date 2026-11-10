@@ -2,7 +2,10 @@ import typer
 
 from compass_cli import display
 from compass_cli.commands.ingest import ingest
+from compass_cli.commands.mcp import mcp
+from compass_cli.commands.query import describe, impact, overview, search, status
 from compass_cli.commands.serve import serve
+from compass_cli.commands.setup import setup
 
 app = typer.Typer(
     help="Code Compass CLI",
@@ -19,7 +22,14 @@ def main(ctx: typer.Context) -> None:
 
 
 app.command(name="ingest")(ingest)
+app.command(name="status")(status)
+app.command(name="search")(search)
+app.command(name="describe")(describe)
+app.command(name="impact")(impact)
+app.command(name="overview")(overview)
 app.command(name="serve")(serve)
+app.command(name="mcp")(mcp)
+app.command(name="setup")(setup)
 
 
 if __name__ == "__main__":

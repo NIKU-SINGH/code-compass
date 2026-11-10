@@ -1,7 +1,7 @@
-"""Fixtures for the server tests: the core sample repo, ingested once per session.
+"""Fixtures shared by the tests of every package: the sample repo, ingested once.
 
-The sample repo lives with the engine's tests (``packages/core/tests/fixtures``) so
-there is a single copy of it.
+The sample repo lives with the engine's tests (``packages/core/tests/fixtures``); core,
+server, MCP and CLI tests all query the same index built from it.
 """
 
 import shutil
@@ -15,7 +15,7 @@ from compass_core.graph.db import GraphDB
 from compass_core.index.locate import IndexLocation, require_index
 from compass_core.phases.pipeline import Pipeline
 
-FIXTURE = Path(__file__).parents[2] / "core" / "tests" / "fixtures" / "sample_repo"
+FIXTURE = Path(__file__).parent / "packages" / "core" / "tests" / "fixtures" / "sample_repo"
 
 
 @pytest.fixture(scope="session")

@@ -9,6 +9,7 @@ description = "CLI for code-compass"
 requires-python = ">=3.11"
 dependencies = [
     "compass-core",
+    "compass-mcp",
     "compass-server",
     "typer>=0.9.0",
     "rich>=13.0.0",
@@ -19,3 +20,7 @@ compass = "compass_cli.main:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/compass_cli"]
+
+[tool.mypy]
+strict = true
+files = ["src/compass_cli"]

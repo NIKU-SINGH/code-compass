@@ -21,16 +21,15 @@ QualifiedName = NewType("QualifiedName", str)
 
 
 class ViaKind(StrEnum):
-    """Relationship through which a node was reached."""
+    """Relationship through which an impact item was reached from the item before it.
+
+    Only values the query layer produces are listed; add one with the operation that
+    produces it.
+    """
 
     CALLS = "CALLS"
-    CALLED_BY = "CALLED_BY"
     IMPORTS = "IMPORTS"
-    IMPORTED_BY = "IMPORTED_BY"
     INHERITS = "INHERITS"
-    INHERITED_BY = "INHERITED_BY"
-    OVERRIDES = "OVERRIDES"
-    CONTAINED_IN = "CONTAINED_IN"
 
 
 class MatchRule(StrEnum):
@@ -54,22 +53,12 @@ class SearchMatch(StrEnum):
 
 
 class Operation(StrEnum):
-    """Query operations exposed by the engine."""
+    """Query operations that return a ``ResultHeader`` result (the JSON discriminator)."""
 
     FIND = "FIND"
     DESCRIBE = "DESCRIBE"
-    CALLERS = "CALLERS"
-    CALLEES = "CALLEES"
     IMPACT = "IMPACT"
-    CALL_PATH = "CALL_PATH"
-    OUTLINE = "OUTLINE"
-    HIERARCHY = "HIERARCHY"
-    EXTERNAL_USAGE = "EXTERNAL_USAGE"
-    STATUS = "STATUS"
     OVERVIEW = "OVERVIEW"
-    SOURCE = "SOURCE"
-    GRAPH_MAP = "GRAPH_MAP"
-    NEIGHBORHOOD = "NEIGHBORHOOD"
 
 
 class Outcome(StrEnum):
@@ -81,10 +70,7 @@ class Outcome(StrEnum):
 
 
 class CaveatCode(StrEnum):
-    """Reasons an answer may be incomplete."""
+    """Reasons an answer may be incomplete; only codes the query layer emits."""
 
     STALE_INDEX = "STALE_INDEX"
     UNRESOLVED_CALLS = "UNRESOLVED_CALLS"
-    DEGRADED_FILES = "DEGRADED_FILES"
-    TRUNCATED = "TRUNCATED"
-    DEPTH_LIMIT_REACHED = "DEPTH_LIMIT_REACHED"

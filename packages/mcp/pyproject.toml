@@ -14,3 +14,8 @@ dependencies = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/compass_mcp"]
+
+[tool.mypy]
+strict = true
+files = ["src/compass_mcp"]
+plugins = ["pydantic.mypy"]

@@ -10,6 +10,7 @@ from __future__ import annotations
 from pydantic import TypeAdapter
 
 from compass_core.contract.errors import ErrorResponse
+from compass_core.contract.models import IndexStatus
 from compass_core.contract.results import (
     AmbiguousReference,
     ImpactResult,
@@ -26,6 +27,7 @@ Serializable = (
     | NodeDetail
     | AmbiguousReference
     | SymbolNotFound
+    | IndexStatus
     | ErrorResponse
 )
 

@@ -8,9 +8,8 @@ symbols they return.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
-from compass_core.contract.models import EdgeRef
+from compass_core.contract.models import EdgeRef, SymbolRef
 from compass_core.graph.db import Row
 from compass_core.query.cypher import Query
 from compass_core.query.rows import (
@@ -21,12 +20,14 @@ from compass_core.query.rows import (
     FUNCTION_FIELDS,
     FUNCTION_WIDTH,
     call_type_value,
+    class_from_row,
     columns,
     confidence_value,
+    file_from_row,
+    function_from_row,
     line_value,
     text_value,
 )
-from compass_core.query.stored import StoredNode, stored_class, stored_file, stored_function
 from compass_core.shared_types import EdgeType
 
 
@@ -45,8 +46,8 @@ class CallRow:
         callee=<decode_token>, confidence=1.0, edge=EdgeRef(type=EdgeType.CALLS, ...))``.
     """
 
-    caller: StoredNode
-    callee: StoredNode
+    caller: SymbolRef
+    callee: SymbolRef
     confidence: float
     edge: EdgeRef
 
@@ -57,11 +58,11 @@ class MethodCallRow:
 
     Attributes:
         call: The ``CALLS`` edge to the method.
-        class_key: Stored id of the class that owns the method.
+        class_key: Id of the class that owns the method.
 
     Example:
         ``User().save()`` resolved to ``User.save`` gives
-        ``MethodCallRow(call=<caller CALLS User.save>, class_key="py::app.models::User")``.
+        ``MethodCallRow(call=<caller CALLS User.save>, class_key="app/models.py::User")``.
     """
 
     call: CallRow
@@ -81,7 +82,7 @@ class ExternalCallRow:
         ``ExternalCallRow(caller=<encode>, line=None)`` (call lines are not stored yet).
     """
 
-    caller: StoredNode
+    caller: SymbolRef
     line: int | None
 
 
@@ -99,21 +100,21 @@ class PairRow:
         ``PairRow(source=<app/api.py>, target=<app/auth.py>)``.
     """
 
-    source: StoredNode
-    target: StoredNode
+    source: SymbolRef
+    target: SymbolRef
 
 
 _CALL_END = 2 * FUNCTION_WIDTH
 _CALL_COLUMNS = "r.confidence, r.call_type, r.line"
 
 
-def _call_row(row: Row, root: Path) -> CallRow:
-    caller = stored_function(row[:FUNCTION_WIDTH], root)
-    callee = stored_function(row[FUNCTION_WIDTH:_CALL_END], root)
+def _call_row(row: Row) -> CallRow:
+    caller = function_from_row(row[:FUNCTION_WIDTH])
+    callee = function_from_row(row[FUNCTION_WIDTH:_CALL_END])
     confidence = confidence_value(row[_CALL_END])
     edge = EdgeRef(
-        source_id=caller.symbol.id,
-        target_id=callee.symbol.id,
+        source_id=caller.id,
+        target_id=callee.id,
         type=EdgeType.CALLS,
         confidence=confidence,
         call_type=call_type_value(row[_CALL_END + 1]),
@@ -122,27 +123,25 @@ def _call_row(row: Row, root: Path) -> CallRow:
     return CallRow(caller=caller, callee=callee, confidence=confidence, edge=edge)
 
 
-def _method_call_row(row: Row, root: Path) -> MethodCallRow:
-    return MethodCallRow(call=_call_row(row, root), class_key=text_value(row[_CALL_END + 3], "id"))
+def _method_call_row(row: Row) -> MethodCallRow:
+    return MethodCallRow(call=_call_row(row), class_key=text_value(row[_CALL_END + 3], "id"))
 
 
-def _external_call_row(row: Row, root: Path) -> ExternalCallRow:
+def _external_call_row(row: Row) -> ExternalCallRow:
     return ExternalCallRow(
-        caller=stored_function(row[:FUNCTION_WIDTH], root),
+        caller=function_from_row(row[:FUNCTION_WIDTH]),
         line=line_value(row[FUNCTION_WIDTH], "line"),
     )
 
 
-def _class_pair(row: Row, root: Path) -> PairRow:
+def _class_pair(row: Row) -> PairRow:
     return PairRow(
-        source=stored_class(row[:CLASS_WIDTH], root), target=stored_class(row[CLASS_WIDTH:], root)
+        source=class_from_row(row[:CLASS_WIDTH]), target=class_from_row(row[CLASS_WIDTH:])
     )
 
 
-def _file_pair(row: Row, root: Path) -> PairRow:
-    return PairRow(
-        source=stored_file(row[:FILE_WIDTH], root), target=stored_file(row[FILE_WIDTH:], root)
-    )
+def _file_pair(row: Row) -> PairRow:
+    return PairRow(source=file_from_row(row[:FILE_WIDTH]), target=file_from_row(row[FILE_WIDTH:]))
 
 
 _A_FUNCTION = columns("a", FUNCTION_FIELDS)
@@ -200,8 +199,4 @@ SUBCLASSES_IN_FILES: Query[PairRow] = Query(
     RETURN {columns("a", CLASS_FIELDS)}, {columns("b", CLASS_FIELDS)}
     """,
     _class_pair,
-)
-EXTERNAL_KEY: Query[str] = Query(
-    "MATCH (e:ExternalFunction) WHERE e.full_ref = $ref RETURN e.full_ref",
-    lambda row, _: text_value(row[0], "full_ref"),
 )

@@ -26,3 +26,4 @@ openapi:
 
 gen-api: openapi
 	cd apps/web && pnpm gen:api
+	uv run python packages/server/scripts/dump_web_limits.py apps/web/src/lib/limits.ts

@@ -15,7 +15,7 @@ from compass_core.graph.db import GraphDB
 
 _NODE_TABLES: list[str] = [
     # File: A source file entry.
-    #   - path (PK): Absolute system path to the source file.
+    #   - path (PK): Repo-relative POSIX path of the source file.
     #   - module_name: Dotted Python module name (e.g., "os.path").
     #   - content_hash: SHA-256 hex digest for change detection.
     """
@@ -27,8 +27,9 @@ _NODE_TABLES: list[str] = [
     )
     """,
     # Class: A class definition extracted from source.
-    #   - id (PK): Unique identifier, format: 'file_path::ClassName'.
+    #   - id (PK): Public id, format: '<repo-relative path>::ClassName'.
     #   - name: The unqualified name of the class.
+    #   - qualified_name: Dotted module plus class name, e.g. 'app.models.User'.
     #   - file_path: Reference to the file where the class is defined.
     #   - line_start: 1-indexed line where the class definition starts.
     #   - line_end: 1-indexed line where the class definition ends.
@@ -37,20 +38,22 @@ _NODE_TABLES: list[str] = [
     #   - bases: A list of raw names for base classes (STRING[]).
     """
     CREATE NODE TABLE IF NOT EXISTS Class(
-        id          STRING,
-        name        STRING,
-        file_path   STRING,
-        line_start  INT64,
-        line_end    INT64,
-        source      STRING,
-        docstring   STRING,
-        bases       STRING[],
+        id             STRING,
+        name           STRING,
+        qualified_name STRING,
+        file_path      STRING,
+        line_start     INT64,
+        line_end       INT64,
+        source         STRING,
+        docstring      STRING,
+        bases          STRING[],
         PRIMARY KEY(id)
     )
     """,
     # Function: A function or method definition.
-    #   - id (PK): Unique identifier, format: 'file_path::[ClassName.]name'.
+    #   - id (PK): Public id, format: '<repo-relative path>::[ClassName.]name'.
     #   - name: The name of the function or method.
+    #   - qualified_name: Dotted module plus '[ClassName.]name', e.g. 'app.models.User.save'.
     #   - signature: The full 'def' line including arguments and return type.
     #   - file_path: Reference to the file where the function is defined.
     #   - line_start: 1-indexed line (including decorators) where it starts.
@@ -63,18 +66,19 @@ _NODE_TABLES: list[str] = [
     #   - raw_calls: Unresolved call strings within the body (STRING[]).
     """
     CREATE NODE TABLE IF NOT EXISTS Function(
-        id           STRING,
-        name         STRING,
-        signature    STRING,
-        file_path    STRING,
-        line_start   INT64,
-        line_end     INT64,
-        source       STRING,
-        docstring    STRING,
-        is_method    BOOLEAN,
-        parent_class STRING,
-        decorators   STRING[],
-        raw_calls    STRING[],
+        id             STRING,
+        name           STRING,
+        qualified_name STRING,
+        signature      STRING,
+        file_path      STRING,
+        line_start     INT64,
+        line_end       INT64,
+        source         STRING,
+        docstring      STRING,
+        is_method      BOOLEAN,
+        parent_class   STRING,
+        decorators     STRING[],
+        raw_calls      STRING[],
         PRIMARY KEY(id)
     )
     """,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from compass_core.errors import IndexBusyError, IndexNotFoundError, QueryTimeoutError
 from compass_core.index.locate import IndexLocation
+from compass_core.index.metadata import SCHEMA_VERSION, IndexMetadata, save_metadata
 from compass_core.settings import settings
 from compass_server.main import app
 from compass_server.routers.query import get_index
@@ -226,6 +228,13 @@ def test_get_index_repo_root_is_absolute(monkeypatch: pytest.MonkeyPatch, tmp_pa
     db = tmp_path / ".compass" / "graph.ladybug"
     db.parent.mkdir()
     db.touch()
+    meta = IndexMetadata(
+        indexed_commit=None,
+        indexed_at=datetime(2026, 11, 1, tzinfo=UTC),
+        schema_version=SCHEMA_VERSION,
+        grammar_versions={},
+    )
+    save_metadata(db.parent / "metadata.json", meta)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(settings, "LADYBUG_DB_PATH", "./.compass/graph.ladybug")
     location = get_index()

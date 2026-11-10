@@ -186,7 +186,7 @@ class IndexStatus:
 
     Example:
         ``IndexStatus(repo_root=Path("/repo"), indexed_at=datetime(2026, 1, 2,
-        tzinfo=UTC), indexed_commit=None, schema_version=1, stale_file_count=0,
+        tzinfo=UTC), indexed_commit=None, schema_version=2, stale_file_count=0,
         new_file_count=None)``
     """
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from compass_core.errors import IndexNotFoundError
+from compass_core.index.metadata import load_metadata
 from compass_core.settings import settings
 
 _INDEX_DIR = ".compass"
@@ -96,11 +97,12 @@ def require_index(start: Path, override: Path | None = None) -> IndexLocation:
 
 
 def locate_index(start: Path | None = None) -> IndexLocation:
-    """Find the index every adapter should use: ``LADYBUG_DB_PATH``, else walk up.
+    """Find and check the index every adapter should use: ``LADYBUG_DB_PATH``, else walk up.
 
     When the configured ``LADYBUG_DB_PATH`` exists it wins, resolved so ``repo_root``
     is absolute whatever the working directory. Otherwise the index is found by
-    walking up from ``start``, as git does with ``.git/``.
+    walking up from ``start``, as git does with ``.git/``. Its metadata is then read, so
+    an index built by an incompatible version of compass is rejected before any query.
 
     Args:
         start: Directory to search from; defaults to the working directory.
@@ -111,6 +113,8 @@ def locate_index(start: Path | None = None) -> IndexLocation:
     Raises:
         IndexNotFoundError: If no configured index exists and none is found above
             ``start``.
+        IndexIncompatibleError: If the index's metadata is unreadable or its schema
+            version is not the one this compass reads; the message says to re-ingest.
 
     Example:
         Run from ``/repo/pkg`` with ``/repo/.compass/graph.ladybug`` present and the
@@ -119,6 +123,33 @@ def locate_index(start: Path | None = None) -> IndexLocation:
     """
     origin = start if start is not None else Path.cwd()
     configured = Path(settings.LADYBUG_DB_PATH).resolve()
-    if configured.exists():
-        return require_index(origin, override=configured)
-    return require_index(origin)
+    location = (
+        require_index(origin, override=configured) if configured.exists() else require_index(origin)
+    )
+    load_metadata(location.metadata_path)
+    return location
+
+
+def locate_repo_index(repo: Path) -> IndexLocation:
+    """Find and check the index of an explicitly named repository.
+
+    Unlike ``locate_index`` this ignores ``LADYBUG_DB_PATH``: the caller named the
+    repository, so a configured path elsewhere must not win.
+
+    Args:
+        repo: The repository, or any directory inside it.
+
+    Returns:
+        The index location.
+
+    Raises:
+        IndexNotFoundError: If no index is found at or above ``repo``.
+        IndexIncompatibleError: If the index must be rebuilt with ``compass ingest``.
+
+    Example:
+        ``locate_repo_index(Path("~/src/app").expanduser())`` returns the index in
+        ``~/src/app/.compass/``.
+    """
+    location = require_index(repo.resolve())
+    load_metadata(location.metadata_path)
+    return location
