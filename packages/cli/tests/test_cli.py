@@ -1,5 +1,6 @@
 """Tests for compass_cli."""
 
+import pytest
 from typer.testing import CliRunner
 
 from compass_cli.main import app
@@ -18,8 +19,8 @@ def test_cli_without_command_shows_concise_help():
     assert result.exit_code == 0
     assert "Navigate your codebase with ease" in result.output
     assert "Usage:" in result.output
-    assert "ingest" in result.output
-    assert "serve" in result.output
+    for command in ("ingest", "status", "search", "describe", "impact", "overview", "serve"):
+        assert command in result.output
     assert "██████╗" not in result.output
 
 
@@ -66,3 +67,9 @@ def test_ingest_reports_skipped_edges(tmp_path):
     assert "1 edge skipped (callee is not a stored function, e.g. class constructor calls)" in (
         result.output
     )
+
+
+@pytest.mark.parametrize("command", ["status", "search", "describe", "impact", "overview"])
+def test_query_commands_exist(command: str) -> None:
+    result = runner.invoke(app, [command, "--help"])
+    assert result.exit_code == 0
