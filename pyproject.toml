@@ -43,6 +43,6 @@ ignore = ["E501"]
 known-first-party = ["compass_core", "compass_cli", "compass_mcp", "compass_server"]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/core/tests", "packages/server/tests", "packages/cli/tests"]
+testpaths = ["packages/core/tests", "packages/server/tests", "packages/mcp/tests", "packages/cli/tests"]
 asyncio_mode = "auto"
 addopts = "--import-mode=importlib"
