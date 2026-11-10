@@ -79,6 +79,16 @@ def test_contract_depends_only_on_the_shared_vocabulary_and_errors() -> None:
     assert offenders == {}
 
 
+def test_renderer_depends_only_on_the_contract() -> None:
+    allowed = ("compass_core.contract", "compass_core.shared_types")
+    offenders = [
+        module
+        for module in _imports(PACKAGE_ROOT / "render.py")
+        if _is_under(module, "compass_core") and not any(_is_under(module, a) for a in allowed)
+    ]
+    assert offenders == []
+
+
 def test_index_never_imports_the_query_layer() -> None:
     offenders = {
         str(path.relative_to(PACKAGE_ROOT)): module

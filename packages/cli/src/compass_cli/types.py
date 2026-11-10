@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 from compass_core.shared_types import Language
@@ -25,3 +26,16 @@ class IngestSummary:
     orphan_count: int
     language_counts: dict[Language, int]
     dropped_edges: int = 0
+
+
+class OutputFormat(StrEnum):
+    """How a query command prints its answer.
+
+    Attributes:
+        TEXT: Compact text, one line per item with ``file:line`` first; for people and
+            coding agents.
+        JSON: The typed contract result as JSON; for scripts and tools.
+    """
+
+    TEXT = "text"
+    JSON = "json"

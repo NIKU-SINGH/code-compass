@@ -2,6 +2,7 @@ import typer
 
 from compass_cli import display
 from compass_cli.commands.ingest import ingest
+from compass_cli.commands.query import describe, impact, overview, search, status
 from compass_cli.commands.serve import serve
 
 app = typer.Typer(
@@ -19,6 +20,11 @@ def main(ctx: typer.Context) -> None:
 
 
 app.command(name="ingest")(ingest)
+app.command(name="status")(status)
+app.command(name="search")(search)
+app.command(name="describe")(describe)
+app.command(name="impact")(impact)
+app.command(name="overview")(overview)
 app.command(name="serve")(serve)
 
 

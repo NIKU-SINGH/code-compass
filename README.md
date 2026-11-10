@@ -47,6 +47,23 @@ compass ingest /path/to/repo
 compass serve
 ```
 
+## Querying from the command line
+
+Run these anywhere inside an indexed repository (or pass `--repo PATH`). Output is compact
+text with `file:line` first; add `--format json` for the typed result.
+
+```bash
+compass status                          # which index, built when, files changed since
+compass search save                     # where is it? best matches first, and why
+compass describe app/models.py::User    # location, docstring, callers, callees, members
+compass impact decode_token --depth 2   # what may break if it changes, nearest first
+compass overview                        # entry points, most imported / called / risky
+```
+
+Queries never modify the repository. Exit codes: `0` ok, `2` invalid argument,
+`3` no such symbol (suggestions printed), `4` ambiguous (candidates printed), `5` no index,
+`6` index busy, `7` index must be rebuilt (`compass ingest`), `8` query timed out.
+
 ## Development
 
 ```bash
