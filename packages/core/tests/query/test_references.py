@@ -131,7 +131,6 @@ def test_qualified_name_with_empty_or_too_many_segments_matches_nothing(
 ) -> None:
     from compass_core.query.references import _qualified
 
-    root = fixture_index.repo_root
-    assert _qualified(fixture_db, "a." * 250, root) == []
-    assert _qualified(fixture_db, ".".join(["a"] * 65), root) == []
-    assert _qualified(fixture_db, "app.auth..decode_token", root) == []
+    assert _qualified(fixture_db, "a." * 250) == []
+    assert _qualified(fixture_db, ".".join(["a"] * 65)) == []
+    assert _qualified(fixture_db, "app.auth..decode_token") == []

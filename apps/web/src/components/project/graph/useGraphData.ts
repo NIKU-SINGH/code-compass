@@ -4,12 +4,39 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import type { components } from "@/lib/api-types";
 
-export type NodeType = "File" | "Class" | "Function" | "Method" | "ExternalDep";
-export type EdgeType = "CONTAINS" | "IMPORTS" | "INHERITS" | "CALLS" | "CALLS_EXTERN";
+type GraphMap = components["schemas"]["GraphMap"];
+type MapNode = components["schemas"]["MapNode"];
+type MapEdge = components["schemas"]["MapEdge"];
 
-export type ApiNode = components["schemas"]["GraphNode"];
-export type ApiEdge = components["schemas"]["GraphEdge"];
-export type GraphData = components["schemas"]["GraphResponse"];
+/** Display type of a node in the graph view (legend, colours, sizes). */
+export type NodeType = "File" | "Class" | "Function" | "Method" | "ExternalDep";
+export type EdgeType = components["schemas"]["EdgeType"];
+
+/** A map node as the graph view draws it: the API node with its display type. */
+export type ApiNode = Omit<MapNode, "kind"> & { type: NodeType };
+/** A map edge with the id the 3D view keys its links by. */
+export type ApiEdge = MapEdge & { id: string };
+
+export interface GraphData {
+  nodes: ApiNode[];
+  edges: ApiEdge[];
+}
+
+const NODE_TYPE: Record<MapNode["kind"], NodeType> = {
+  file: "File",
+  class: "Class",
+  function: "Function",
+  method: "Method",
+  external: "ExternalDep",
+};
+
+/** Adapt the API's graph map to the graph view's shape; edge ids are their position. */
+export function toGraphData(map: GraphMap): GraphData {
+  return {
+    nodes: map.nodes.map(({ kind, ...node }) => ({ ...node, type: NODE_TYPE[kind] })),
+    edges: map.edges.map((edge, index) => ({ ...edge, id: `e${index}` })),
+  };
+}
 
 export function useGraphData() {
   const [data, setData] = useState<GraphData | null>(null);
@@ -21,10 +48,10 @@ export function useGraphData() {
     setLoading(true);
     setError(null);
 
-    apiFetch<GraphData>("/api/repo/graph")
-      .then((d) => {
+    apiFetch<GraphMap>("/api/graph/map")
+      .then((map) => {
         if (cancelled) return;
-        setData(d);
+        setData(toGraphData(map));
         setLoading(false);
       })
       .catch((e: Error) => {

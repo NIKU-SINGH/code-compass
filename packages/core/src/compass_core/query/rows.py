@@ -4,16 +4,16 @@ This is, with ``graph/db.py``, the only module allowed to touch untyped (``Any``
 driver values. Every column is validated here so the rest of the query layer works
 with typed models, and a schema mismatch surfaces as ``IndexIncompatibleError``.
 
-Stored ids look like ``py::app.models::User.save`` and stored ``file_path`` values are
-repo-relative POSIX paths (absolute paths are tolerated and made relative). The public
-id is ``<repo-relative path>::<[Class.]name>``; the qualified name is the stored dotted
-module plus the ``[Class.]name`` tail, e.g. ``app.models.User.save``.
+The graph stores exactly what the public models carry: class and function ids are
+public ids (``app/models.py::User.save``), ``file_path`` values are repo-relative POSIX
+paths, and ``qualified_name`` is stored (``app.models.User.save``). Files and external
+functions get their public ids here: ``file::<path>`` and ``ext::<full_ref>``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import Any
 
 from compass_core.contract.models import SymbolRef
@@ -24,9 +24,18 @@ from compass_core.shared_types import CallType, SymbolKind
 _SEP = "::"
 _CONFIDENCE_DIGITS = 6
 
-FUNCTION_FIELDS = ("id", "name", "file_path", "line_start", "line_end", "signature", "is_method")
+FUNCTION_FIELDS = (
+    "id",
+    "name",
+    "qualified_name",
+    "file_path",
+    "line_start",
+    "line_end",
+    "signature",
+    "is_method",
+)
 """``Function`` properties read by ``function_from_row``, in column order."""
-CLASS_FIELDS = ("id", "name", "file_path", "line_start", "line_end")
+CLASS_FIELDS = ("id", "name", "qualified_name", "file_path", "line_start", "line_end")
 """``Class`` properties read by ``class_from_row``, in column order."""
 FILE_FIELDS = ("path", "module_name")
 """``File`` properties read by ``file_from_row``, in column order."""
@@ -77,172 +86,84 @@ def _expect_width(row: Sequence[Any], width: int, what: str) -> None:
         )
 
 
-def to_repo_path(stored: str, repo_root: Path) -> RepoPath:
-    """Convert a stored path to a repo-relative POSIX path.
-
-    Args:
-        stored: Path as stored in the graph; absolute or already repo-relative.
-        repo_root: Absolute repository root.
-
-    Returns:
-        The repo-relative POSIX path. A stored path outside ``repo_root`` is returned
-        unchanged rather than raising, so an odd row never hides the rest of an answer.
-
-    Example:
-        ``to_repo_path("/r/app/a.py", Path("/r"))`` returns ``"app/a.py"``.
-    """
-    path = Path(stored)
-    if path.is_absolute():
-        try:
-            path = path.relative_to(repo_root)
-        except ValueError:
-            return RepoPath(path.as_posix())
-    return RepoPath(path.as_posix())
-
-
-def module_from_path(file_path: str) -> str:
-    """Derive a dotted module name from a repo-relative path.
-
-    Args:
-        file_path: Repo-relative POSIX path.
-
-    Returns:
-        Dotted module, dropping ``.py`` and a trailing ``__init__``.
-
-    Example:
-        ``module_from_path("app/__init__.py")`` returns ``"app"``.
-    """
-    parts = list(PurePosixPath(file_path).with_suffix("").parts)
-    if parts and parts[-1] == "__init__":
-        parts.pop()
-    return ".".join(parts)
-
-
-def split_stored_id(stored_id: str, file_path: str) -> tuple[str, str]:
-    """Split a stored definition id into its dotted module and ``[Class.]name`` tail.
-
-    Args:
-        stored_id: Stored id such as ``"py::app.models::User.save"``.
-        file_path: Repo-relative path, used to derive the module for ids that carry none.
-
-    Returns:
-        ``(module, tail)``, e.g. ``("app.models", "User.save")``.
-
-    Raises:
-        IndexIncompatibleError: The id has no ``::`` separator.
-    """
-    if _SEP not in stored_id:
-        raise IndexIncompatibleError(f"unexpected symbol id format: {stored_id!r}")
-    head, tail = stored_id.rsplit(_SEP, 1)
-    if _SEP in head:
-        return head.split(_SEP, 1)[1], tail
-    return module_from_path(file_path), tail
-
-
-def public_definition_id(stored_id: str, stored_path: str, repo_root: Path) -> SymbolId:
-    """Build the public id of a function, method or class from its stored columns.
-
-    Args:
-        stored_id: Stored id such as ``"py::app.models::User.save"``.
-        stored_path: Path as stored in the graph; absolute or repo-relative.
-        repo_root: Absolute repository root.
-
-    Returns:
-        ``<repo-relative POSIX path>::<[Class.]name>``.
-
-    Raises:
-        IndexIncompatibleError: The stored id has no ``::`` separator.
-
-    Example:
-        ``public_definition_id("py::app.models::User.save", "app/models.py", root)`` returns
-        ``"app/models.py::User.save"``.
-    """
-    file_path = to_repo_path(stored_path, repo_root)
-    _, tail = split_stored_id(stored_id, file_path)
-    return SymbolId(f"{file_path}{_SEP}{tail}")
-
-
-def public_file_id(stored_path: str, repo_root: Path) -> SymbolId:
+def public_file_id(path: str) -> SymbolId:
     """Build the public id of a file from its stored path.
 
     Args:
-        stored_path: Path as stored in the graph; absolute or repo-relative.
-        repo_root: Absolute repository root.
+        path: Repo-relative POSIX path, as stored.
 
     Returns:
-        ``file::<repo-relative POSIX path>``.
+        ``file::<path>``.
 
     Example:
-        ``public_file_id("/r/app/auth.py", Path("/r"))`` returns ``"file::app/auth.py"``.
+        ``public_file_id("app/auth.py")`` returns ``"file::app/auth.py"``.
     """
-    return SymbolId(f"file{_SEP}{to_repo_path(stored_path, repo_root)}")
+    return SymbolId(f"file{_SEP}{path}")
 
 
-def symbol_from_row(row: Sequence[Any], kind: SymbolKind, repo_root: Path) -> SymbolRef:
-    """Build a function or class ``SymbolRef`` from a graph row.
-
-    Args:
-        row: Columns ``[id, name, file_path, line_start, line_end, signature]``. Extra
-            trailing columns are ignored. A stored line of ``0`` means "unknown".
-        kind: Kind to assign (``FUNCTION``, ``METHOD`` or ``CLASS``).
-        repo_root: Absolute repository root, used to make paths repo-relative.
-
-    Returns:
-        The symbol with a public id and qualified name.
-
-    Raises:
-        IndexIncompatibleError: A column is missing or has an unexpected type.
-
-    Example:
-        ``["py::app.auth::parse", "parse", "app/auth.py", 6, 7, "def parse(raw):"]`` becomes
-        ``SymbolRef(id="app/auth.py::parse", qualified_name="app.auth.parse", ...)``.
-    """
-    _expect_width(row, 6, "symbol row")
-    stored_id = _text(row[0], "id")
-    name = _text(row[1], "name")
-    stored_path = _text(row[2], "file_path")
-    line_start = _line(row[3], "line_start")
-    line_end = _line(row[4], "line_end")
-    signature = _text(row[5], "signature") or None
-    file_path = to_repo_path(stored_path, repo_root)
-    module, tail = split_stored_id(stored_id, file_path)
-    qualified = f"{module}.{tail}" if module else tail
-    if kind is SymbolKind.CLASS:
-        signature = None
+def _definition(row: Sequence[Any], kind: SymbolKind, signature: str | None) -> SymbolRef:
     return SymbolRef(
-        id=public_definition_id(stored_id, stored_path, repo_root),
+        id=SymbolId(_text(row[0], "id")),
         kind=kind,
-        name=name,
-        qualified_name=QualifiedName(qualified),
-        file_path=file_path,
-        line_start=line_start,
-        line_end=line_end,
+        name=_text(row[1], "name"),
+        qualified_name=QualifiedName(_text(row[2], "qualified_name")),
+        file_path=RepoPath(_text(row[3], "file_path")),
+        line_start=_line(row[4], "line_start"),
+        line_end=_line(row[5], "line_end"),
         signature=signature,
     )
 
 
-def file_from_row(row: Sequence[Any], repo_root: Path) -> SymbolRef:
-    """Build a ``FILE`` ``SymbolRef`` from a ``[path, module_name]`` row.
+def symbol_from_row(row: Sequence[Any], kind: SymbolKind) -> SymbolRef:
+    """Build a function, method or class ``SymbolRef`` from a graph row.
 
     Args:
-        row: Columns ``[path, module_name]``.
-        repo_root: Absolute repository root.
+        row: Columns ``[id, name, qualified_name, file_path, line_start, line_end,
+            signature]``; extra trailing columns are ignored. A stored line of ``0``
+            means "unknown".
+        kind: Kind to assign (``FUNCTION``, ``METHOD`` or ``CLASS``); a class gets no
+            signature.
 
     Returns:
-        The file symbol with id ``file::<repo-relative path>``.
+        The symbol.
 
     Raises:
         IndexIncompatibleError: A column is missing or has an unexpected type.
+
+    Example:
+        ``["app/auth.py::parse", "parse", "app.auth.parse", "app/auth.py", 6, 7,
+        "def parse(raw):"]`` becomes ``SymbolRef(id="app/auth.py::parse",
+        qualified_name="app.auth.parse", line_start=6, ...)``.
+    """
+    _expect_width(row, 7, "symbol row")
+    signature = _text(row[6], "signature") or None
+    return _definition(row, kind, None if kind is SymbolKind.CLASS else signature)
+
+
+def file_from_row(row: Sequence[Any]) -> SymbolRef:
+    """Build a ``FILE`` ``SymbolRef`` from a row of ``FILE_FIELDS`` columns.
+
+    Args:
+        row: Columns ``[path, module_name]``.
+
+    Returns:
+        The file symbol with id ``file::<path>``.
+
+    Raises:
+        IndexIncompatibleError: A column is missing or has an unexpected type.
+
+    Example:
+        ``["app/auth.py", "app.auth"]`` becomes ``SymbolRef(id="file::app/auth.py",
+        name="auth.py", qualified_name="app.auth", ...)``.
     """
     _expect_width(row, FILE_WIDTH, "file row")
-    file_path = to_repo_path(_text(row[0], "path"), repo_root)
-    module = _text(row[1], "module_name")
+    path = _text(row[0], "path")
     return SymbolRef(
-        id=public_file_id(_text(row[0], "path"), repo_root),
+        id=public_file_id(path),
         kind=SymbolKind.FILE,
-        name=PurePosixPath(file_path).name,
-        qualified_name=QualifiedName(module),
-        file_path=file_path,
+        name=PurePosixPath(path).name,
+        qualified_name=QualifiedName(_text(row[1], "module_name")),
+        file_path=RepoPath(path),
         line_start=None,
         line_end=None,
         signature=None,
@@ -313,12 +234,11 @@ def count_value(value: Any) -> int:
     return value
 
 
-def function_from_row(row: Sequence[Any], repo_root: Path) -> SymbolRef:
-    """Build a function or method ``SymbolRef`` from a row carrying ``is_method``.
+def function_from_row(row: Sequence[Any]) -> SymbolRef:
+    """Build a function or method ``SymbolRef`` from a row of ``FUNCTION_FIELDS`` columns.
 
     Args:
-        row: Columns ``[id, name, file_path, line_start, line_end, signature, is_method]``.
-        repo_root: Absolute repository root.
+        row: Columns in ``FUNCTION_FIELDS`` order.
 
     Returns:
         The symbol, with kind ``METHOD`` when ``is_method`` is true, else ``FUNCTION``.
@@ -327,21 +247,20 @@ def function_from_row(row: Sequence[Any], repo_root: Path) -> SymbolRef:
         IndexIncompatibleError: A column is missing or has an unexpected type.
 
     Example:
-        ``["py::app.models::User.save", "save", "app/models.py", 6, 7, "def save(self):",
-        True]`` becomes a ``METHOD`` with id ``"app/models.py::User.save"``.
+        ``["app/models.py::User.save", "save", "app.models.User.save", "app/models.py", 6,
+        7, "def save(self):", True]`` becomes a ``METHOD`` with id
+        ``"app/models.py::User.save"``.
     """
     _expect_width(row, FUNCTION_WIDTH, "function row")
-    kind = SymbolKind.METHOD if is_method_flag(row[6]) else SymbolKind.FUNCTION
-    return symbol_from_row(row, kind, repo_root)
+    kind = SymbolKind.METHOD if is_method_flag(row[7]) else SymbolKind.FUNCTION
+    return symbol_from_row(row, kind)
 
 
-def class_from_row(row: Sequence[Any], repo_root: Path) -> SymbolRef:
+def class_from_row(row: Sequence[Any]) -> SymbolRef:
     """Build a ``CLASS`` ``SymbolRef`` from a row of ``CLASS_FIELDS`` columns.
 
     Args:
-        row: Columns ``[id, name, file_path, line_start, line_end]``; extra trailing
-            columns are ignored.
-        repo_root: Absolute repository root.
+        row: Columns in ``CLASS_FIELDS`` order; extra trailing columns are ignored.
 
     Returns:
         The class symbol; classes have no signature.
@@ -350,11 +269,11 @@ def class_from_row(row: Sequence[Any], repo_root: Path) -> SymbolRef:
         IndexIncompatibleError: A column is missing or has an unexpected type.
 
     Example:
-        ``["py::app.models::User", "User", "app/models.py", 4, 9]`` becomes
-        ``SymbolRef(id="app/models.py::User", kind=SymbolKind.CLASS, ...)``.
+        ``["app/models.py::User", "User", "app.models.User", "app/models.py", 4, 9]``
+        becomes ``SymbolRef(id="app/models.py::User", kind=SymbolKind.CLASS, ...)``.
     """
     _expect_width(row, CLASS_WIDTH, "class row")
-    return symbol_from_row([*row[:CLASS_WIDTH], ""], SymbolKind.CLASS, repo_root)
+    return _definition(row, SymbolKind.CLASS, None)
 
 
 def text_value(value: Any, column: str) -> str:

@@ -9,7 +9,7 @@ from compass_core.shared_types import EdgeType, SymbolKind
 
 
 def test_nodes_are_ordered_and_typed(fixture_db: GraphDB, fixture_index: IndexLocation) -> None:
-    nodes = graph_map(fixture_db, fixture_index.repo_root).nodes
+    nodes = graph_map(fixture_db).nodes
     kinds = [node.kind for node in nodes]
 
     assert kinds[0] is SymbolKind.FILE
@@ -23,7 +23,7 @@ def test_nodes_are_ordered_and_typed(fixture_db: GraphDB, fixture_index: IndexLo
 
 
 def test_public_ids_identify_each_kind(fixture_db: GraphDB, fixture_index: IndexLocation) -> None:
-    by_id = {n.public_id: n for n in graph_map(fixture_db, fixture_index.repo_root).nodes}
+    by_id = {n.public_id: n for n in graph_map(fixture_db).nodes}
 
     assert by_id["file::app/auth.py"].kind is SymbolKind.FILE
     assert by_id["app/auth.py::decode_token"].kind is SymbolKind.FUNCTION
@@ -33,7 +33,7 @@ def test_public_ids_identify_each_kind(fixture_db: GraphDB, fixture_index: Index
 def test_edges_are_distinct_and_join_known_nodes(
     fixture_db: GraphDB, fixture_index: IndexLocation
 ) -> None:
-    result = graph_map(fixture_db, fixture_index.repo_root)
+    result = graph_map(fixture_db)
     ids = {node.id for node in result.nodes}
 
     assert len(set(result.edges)) == len(result.edges)

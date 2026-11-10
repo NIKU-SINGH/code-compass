@@ -9,10 +9,10 @@ from compass_core.index.freshness import count_stale
 from compass_core.index.locate import IndexLocation
 from compass_core.index.metadata import load_metadata
 from compass_core.query.cypher import Query
-from compass_core.query.rows import text_value, to_repo_path
+from compass_core.query.rows import text_value
 
 _FILE_PATHS: Query[RepoPath] = Query(
-    "MATCH (f:File) RETURN f.path", lambda row, root: to_repo_path(text_value(row[0], "path"), root)
+    "MATCH (f:File) RETURN f.path", lambda row: RepoPath(text_value(row[0], "path"))
 )
 
 
@@ -38,7 +38,7 @@ def index_status(location: IndexLocation, db: GraphDB) -> IndexStatus:
     """
     meta = load_metadata(location.metadata_path)
     repo_root = location.repo_root.resolve()
-    paths = _FILE_PATHS.run(db, repo_root)
+    paths = _FILE_PATHS.run(db)
     return IndexStatus(
         repo_root=repo_root,
         indexed_at=meta.indexed_at,

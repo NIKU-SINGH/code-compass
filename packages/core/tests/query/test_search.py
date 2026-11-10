@@ -192,7 +192,7 @@ def test_fan_in_agrees_with_reference_resolver(
     callable_hits = [
         h for h in res.hits if h.symbol.kind in (SymbolKind.FUNCTION, SymbolKind.METHOD)
     ]
-    expected = _fan_in(fixture_db, [h.symbol for h in callable_hits], fixture_index.repo_root)
+    expected = _fan_in(fixture_db, [h.symbol for h in callable_hits])
     assert callable_hits and any(expected.values())
     assert {h.symbol.id: h.fan_in for h in callable_hits} == {
         h.symbol.id: expected.get(h.symbol.id, 0) for h in callable_hits

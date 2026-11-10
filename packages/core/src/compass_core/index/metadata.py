@@ -12,7 +12,13 @@ from pathlib import Path
 from compass_core.errors import IndexIncompatibleError
 from compass_core.shared_types import Language
 
-SUPPORTED_SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+"""Graph schema written by this version of compass; indexes in any other version are
+rejected and must be rebuilt with ``compass ingest``.
+
+History: 1 stored internal ids (``py::app.models::User``); 2 stores public ids
+(``app/models.py::User``) and a ``qualified_name`` on classes and functions.
+"""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -28,7 +34,7 @@ class IndexMetadata:
     Example:
         ``{"indexed_commit": "abc", "indexed_at": 1788431823, "grammar_versions":
         {"python": "0.25.0"}}`` loads as ``IndexMetadata(indexed_commit="abc",
-        indexed_at=datetime(..., tzinfo=UTC), schema_version=1,
+        indexed_at=datetime(..., tzinfo=UTC), schema_version=2,
         grammar_versions={Language.PYTHON: "0.25.0"})``.
     """
 
@@ -68,19 +74,22 @@ def load_metadata(path: Path) -> IndexMetadata:
         path: Path to ``metadata.json``.
 
     Returns:
-        The parsed metadata. A missing ``schema_version`` defaults to 1.
+        The parsed metadata. A missing ``schema_version`` counts as 1.
 
     Raises:
         IndexIncompatibleError: If the file is unreadable, malformed, has an unknown
-            language, or has a ``schema_version`` newer than supported.
+            language, or its ``schema_version`` is not ``SCHEMA_VERSION``.
     """
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
         schema_version = raw.get("schema_version", 1)
         if isinstance(schema_version, bool) or not isinstance(schema_version, int):
             raise ValueError(f"invalid schema_version {schema_version!r}")
-        if not 1 <= schema_version <= SUPPORTED_SCHEMA_VERSION:
-            raise ValueError(f"unsupported schema_version {schema_version}")
+        if schema_version != SCHEMA_VERSION:
+            raise IndexIncompatibleError(
+                f"The index at {path.parent} uses schema version {schema_version}; this "
+                f"compass reads version {SCHEMA_VERSION}. Run `compass ingest` to rebuild it."
+            )
         indexed_at = raw["indexed_at"]
         if isinstance(indexed_at, bool) or not isinstance(indexed_at, int | float):
             raise ValueError(f"invalid indexed_at {indexed_at!r}")
