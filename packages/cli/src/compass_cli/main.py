@@ -22,7 +22,9 @@ DISTRIBUTION = "compass-code"
 
 def _print_version(value: bool) -> None:
     if value:
-        typer.echo(f"{DISTRIBUTION} {version(DISTRIBUTION)}")
+        current = f"{DISTRIBUTION} {version(DISTRIBUTION)}"
+        display.logo(subtitle=current)
+        typer.echo(current)
         raise typer.Exit()
 
 
@@ -35,7 +37,7 @@ VERSION = typer.Option(
 def main(ctx: typer.Context, show_version: bool = VERSION) -> None:
     """Code Compass — Navigate your codebase with ease."""
     if ctx.invoked_subcommand is None:
-        display.help_commands()
+        display.welcome()
 
 
 app.command(name="ingest")(ingest)

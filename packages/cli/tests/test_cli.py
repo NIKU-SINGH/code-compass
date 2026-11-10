@@ -13,7 +13,7 @@ def test_cli_help():
     assert result.exit_code == 0
 
 
-def test_cli_without_command_shows_concise_help():
+def test_cli_without_command_lists_the_commands():
     result = runner.invoke(app, [])
 
     assert result.exit_code == 0
@@ -31,14 +31,14 @@ def test_cli_without_command_shows_concise_help():
         "serve",
     ):
         assert command in result.output
-    assert "██████╗" not in result.output
+    assert "██████╗" not in result.output  # piped output never carries the logo
 
 
-def test_help_command_shows_the_same_list():
+def test_help_command_lists_the_commands_without_the_logo():
     result = runner.invoke(app, ["help"])
 
     assert result.exit_code == 0
-    assert result.output == runner.invoke(app, []).output
+    assert result.output == runner.invoke(app, []).output  # not a terminal: no logo either
 
 
 def test_ingest_command_exists():
@@ -99,3 +99,9 @@ def test_version_flag_names_the_package():
 
     assert result.exit_code == 0
     assert result.output.startswith("compass-code ")
+
+
+def test_version_flag_prints_only_the_version_when_piped():
+    result = runner.invoke(app, ["--version"])
+
+    assert result.output.count("\n") == 1

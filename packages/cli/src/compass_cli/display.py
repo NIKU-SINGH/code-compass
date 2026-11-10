@@ -25,8 +25,62 @@ console = Console()
 
 
 # ---------------------------------------------------------------------------
-# Help
+# Logo and help
 # ---------------------------------------------------------------------------
+
+
+LOGO = r"""
+  ██████╗ ██████╗ ██████╗ ███████╗
+ ██╔════╝██╔═══██╗██╔══██╗██╔════╝
+ ██║     ██║   ██║██║  ██║█████╗
+ ██║     ██║   ██║██║  ██║██╔══╝
+ ╚██████╗╚██████╔╝██████╔╝███████╗
+  ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
+
+  ██████╗ ██████╗ ███╗   ███╗██████╗  █████╗ ███████╗███████╗
+ ██╔════╝██╔═══██╗████╗ ████║██╔══██╗██╔══██╗██╔════╝██╔════╝
+ ██║     ██║   ██║██╔████╔██║██████╔╝███████║███████╗███████╗
+ ██║     ██║   ██║██║╚██╔╝██║██╔═══╝ ██╔══██║╚════██║╚════██║
+ ╚██████╗╚██████╔╝██║ ╚═╝ ██║██║     ██║  ██║███████║███████║
+  ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝  ╚═╝╚══════╝╚══════╝
+""".strip("\n")
+"""The block-letter logo shown by bare ``compass`` and ``compass --version``."""
+
+LOGO_MIN_WIDTH = 70
+"""Narrowest terminal (in columns) the logo panel fits without wrapping."""
+
+TAGLINE = "Local-first code knowledge graph"
+"""Shown under the logo."""
+
+
+def logo(subtitle: str = TAGLINE) -> bool:
+    """Print the logo in a gold panel, only in a terminal wide enough for it.
+
+    Piped output (scripts, coding agents) and narrow terminals get nothing, so the
+    logo never breaks a parser or wraps into noise.
+
+    Args:
+        subtitle: Text on the panel's bottom edge.
+
+    Returns:
+        Whether the logo was printed.
+
+    Example:
+        ``compass`` in an 80-column terminal prints the panel; ``compass | cat`` does not.
+    """
+    if not console.is_terminal or console.width < LOGO_MIN_WIDTH:
+        return False
+    console.print(
+        Panel(
+            Text(LOGO, style=f"bold {GOLD}", no_wrap=True),
+            subtitle=f"[bold {GOLD}]{subtitle}[/bold {GOLD}]",
+            border_style=GOLD,
+            padding=(1, 2),
+            expand=False,
+        )
+    )
+    console.print()
+    return True
 
 
 _COMMANDS: tuple[tuple[str, str], ...] = (
@@ -54,6 +108,12 @@ def help_commands() -> None:
         console.print(f"  [bold {GOLD}]{name:<{width}}[/bold {GOLD}]  {summary}")
     console.print()
     console.print("[dim]Run [bold]compass COMMAND --help[/bold] for a command's options.[/dim]")
+
+
+def welcome() -> None:
+    """What bare ``compass`` prints: the logo (in a wide terminal), then the commands."""
+    logo()
+    help_commands()
 
 
 # ---------------------------------------------------------------------------
