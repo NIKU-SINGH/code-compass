@@ -30,6 +30,7 @@ app.command(name="overview")(overview)
 app.command(name="serve")(serve)
 app.command(name="mcp")(mcp)
 app.command(name="setup")(setup)
+app.command(name="help")(display.help_commands)
 
 
 if __name__ == "__main__":
