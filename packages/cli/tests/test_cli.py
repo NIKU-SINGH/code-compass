@@ -34,6 +34,13 @@ def test_cli_without_command_shows_concise_help():
     assert "██████╗" not in result.output
 
 
+def test_help_command_shows_the_same_list():
+    result = runner.invoke(app, ["help"])
+
+    assert result.exit_code == 0
+    assert result.output == runner.invoke(app, []).output
+
+
 def test_ingest_command_exists():
     result = runner.invoke(app, ["ingest", "--help"])
     assert result.exit_code == 0

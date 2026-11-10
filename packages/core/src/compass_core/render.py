@@ -29,6 +29,8 @@ from compass_core.contract.types import SearchMatch, ViaKind
 from compass_core.shared_types import SymbolKind
 
 _INDENT = "  "
+_ID_SEPARATOR = "::"
+"""Splits a public id into its file part and its ``[Class.]name`` part."""
 
 
 def location(symbol: SymbolRef) -> str:
@@ -50,6 +52,29 @@ def location(symbol: SymbolRef) -> str:
     return f"{symbol.file_path}:{symbol.line_start}"
 
 
+def local_name(symbol: SymbolRef) -> str:
+    """A symbol's name within its file: ``Class.method``, ``function`` or the file path.
+
+    Shorter than the qualified name; shown next to ``location``, which names the file.
+
+    Args:
+        symbol: Any symbol.
+
+    Returns:
+        The part of the public id after ``::`` for a class or function, the path for a
+        file, and the qualified name for an external function.
+
+    Example:
+        ``local_name(<User.save in app/models.py>)`` returns ``"User.save"``.
+    """
+    if symbol.kind is SymbolKind.FILE and symbol.file_path is not None:
+        return symbol.file_path
+    if symbol.kind in (SymbolKind.FILE, SymbolKind.EXTERNAL):
+        return symbol.qualified_name
+    _, separator, name = symbol.id.partition(_ID_SEPARATOR)
+    return name if separator else symbol.name
+
+
 def _span(symbol: SymbolRef) -> str:
     start, end = symbol.line_start, symbol.line_end
     if symbol.file_path and start and end and end != start:
@@ -63,7 +88,19 @@ def _symbol(symbol: SymbolRef, *extra: str) -> str:
     return _INDENT.join(part for part in parts if part)
 
 
-def _plural(count: int, noun: str) -> str:
+def plural(count: int, noun: str) -> str:
+    """``count`` and ``noun``, pluralised.
+
+    Args:
+        count: How many.
+        noun: The singular noun.
+
+    Returns:
+        The phrase.
+
+    Example:
+        ``plural(3, "class")`` returns ``"3 classes"``.
+    """
     if count == 1:
         return f"{count} {noun}"
     return f"{count} {noun}es" if noun.endswith("s") else f"{count} {noun}s"
@@ -86,7 +123,7 @@ def render_status(status: IndexStatus) -> str:
     built = status.indexed_at.strftime("%Y-%m-%d %H:%M UTC")
     stale = status.stale_file_count
     fresh = (
-        f"{_plural(stale, 'file')} changed since; run `compass ingest`" if stale else "up to date"
+        f"{plural(stale, 'file')} changed since; run `compass ingest`" if stale else "up to date"
     )
     return f"index: {commit} · built {built} · {fresh}"
 
@@ -100,7 +137,18 @@ def _more(shown: int, total: int) -> list[str]:
     return [f"… {hidden} more; raise the limit to see them"] if hidden > 0 else []
 
 
-def _why(hit: SearchHit) -> str:
+def match_reason(hit: SearchHit) -> str:
+    """Why a search hit matched, with its fan-in for files and functions.
+
+    Args:
+        hit: A search hit.
+
+    Returns:
+        The reason.
+
+    Example:
+        ``"exact name · 1 caller"``.
+    """
     match hit.match:
         case SearchMatch.EXACT:
             reason = "exact name"
@@ -113,9 +161,9 @@ def _why(hit: SearchHit) -> str:
         case _:
             assert_never(hit.match)
     if hit.symbol.kind is SymbolKind.FILE:
-        return f"{reason} · {_plural(hit.fan_in, 'importer')}"
+        return f"{reason} · {plural(hit.fan_in, 'importer')}"
     if hit.symbol.kind in (SymbolKind.FUNCTION, SymbolKind.METHOD):
-        return f"{reason} · {_plural(hit.fan_in, 'caller')}"
+        return f"{reason} · {plural(hit.fan_in, 'caller')}"
     return reason
 
 
@@ -134,8 +182,8 @@ def render_search(result: SearchResult) -> str:
     """
     lines = [
         render_status(result.index),
-        f'search "{result.query}" · {_plural(result.total, "hit")}',
-        *(_symbol(hit.symbol, _why(hit)) for hit in result.hits),
+        f'search "{result.query}" · {plural(result.total, "hit")}',
+        *(_symbol(hit.symbol, match_reason(hit)) for hit in result.hits),
         *_more(len(result.hits), result.total),
         *_caveats(result.caveats),
     ]
@@ -188,7 +236,18 @@ def render_describe(detail: NodeDetail, *, include_source: bool = False) -> str:
     return "\n".join(lines)
 
 
-def _via(via: Via) -> str:
+def via_text(via: Via) -> str:
+    """How an affected symbol depends on the one before it.
+
+    Args:
+        via: The link.
+
+    Returns:
+        A verb and a name.
+
+    Example:
+        ``"calls decode_token"``.
+    """
     match via.kind:
         case ViaKind.CALLS:
             verb = "calls"
@@ -202,7 +261,7 @@ def _via(via: Via) -> str:
 
 
 def _impact_item(item: ResultItem) -> str:
-    via = _via(item.via) if item.via else ""
+    via = via_text(item.via) if item.via else ""
     confidence = "" if item.min_confidence is None else f"{item.min_confidence:.2f}"
     return _INDENT + _symbol(item.symbol, via, confidence)
 
@@ -228,8 +287,8 @@ def render_impact(result: ImpactResult) -> str:
         render_status(result.index),
         f"impact of {target.kind.value} {target.qualified_name} ({location(target)})"
         f" · depth {result.depth}",
-        f"{_plural(result.total, 'affected symbol')} in "
-        f"{_plural(result.affected_file_count, 'file')}",
+        f"{plural(result.total, 'affected symbol')} in "
+        f"{plural(result.affected_file_count, 'file')}",
     ]
     distance = None
     for group in result.groups:
@@ -248,7 +307,7 @@ def _ranked(title: str, ranked: tuple[RankedSymbol, ...], unit: str) -> list[str
     return [
         "",
         f"{title}:",
-        *(_INDENT + _symbol(r.symbol, _plural(r.count, unit)) for r in ranked),
+        *(_INDENT + _symbol(r.symbol, plural(r.count, unit)) for r in ranked),
     ]
 
 
@@ -271,8 +330,8 @@ def render_overview(result: OverviewResult) -> str:
     percent = round(100 * resolution.resolved / resolution.total) if resolution.total else 0
     lines = [
         render_status(result.index),
-        f"{_plural(counts.files, 'file')} · {_plural(counts.classes, 'class')} · "
-        f"{_plural(counts.functions, 'function')}",
+        f"{plural(counts.files, 'file')} · {plural(counts.classes, 'class')} · "
+        f"{plural(counts.functions, 'function')}",
         f"edges: {edges}",
         f"calls resolved: {resolution.resolved} of {resolution.total} ({percent}%)",
     ]
@@ -283,7 +342,7 @@ def render_overview(result: OverviewResult) -> str:
     if result.top_external_libraries:
         lines += ["", "top external libraries:"]
         lines += [
-            f"{_INDENT}{lib.library}  {_plural(lib.call_count, 'call')}"
+            f"{_INDENT}{lib.library}  {plural(lib.call_count, 'call')}"
             for lib in result.top_external_libraries
         ]
     lines += _caveats(result.caveats)
