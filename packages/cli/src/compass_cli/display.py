@@ -18,7 +18,8 @@ from compass_cli.progress import fmt_duration
 from compass_cli.types import IngestSummary
 from compass_core.shared_types import Language
 
-_GOLD = "color(214)"
+GOLD = "color(214)"
+"""Accent colour of every Code Compass panel, rule and command name."""
 
 console = Console()
 
@@ -38,6 +39,7 @@ _COMMANDS: tuple[tuple[str, str], ...] = (
     ("setup", "Tell coding agents in this repo to use Code Compass"),
     ("mcp", "Serve the code graph to coding agents over MCP"),
     ("serve", "Start the API server and the web UI"),
+    ("help", "Show this list"),
 )
 """Commands listed by ``compass`` with no arguments, in the order a user needs them."""
 
@@ -45,15 +47,13 @@ _COMMANDS: tuple[tuple[str, str], ...] = (
 def help_commands() -> None:
     """Print the available CLI commands with one line each."""
     width = max(len(name) for name, _ in _COMMANDS)
-    console.print(f"[bold {_GOLD}]Code Compass[/bold {_GOLD}] — Navigate your codebase with ease\n")
+    console.print(f"[bold {GOLD}]Code Compass[/bold {GOLD}] — Navigate your codebase with ease\n")
     console.print("[bold]Usage:[/bold]  compass [OPTIONS] COMMAND [ARGS]...\n")
     console.print("[bold]Commands:[/bold]")
     for name, summary in _COMMANDS:
-        console.print(f"  [bold {_GOLD}]{name:<{width}}[/bold {_GOLD}]  {summary}")
+        console.print(f"  [bold {GOLD}]{name:<{width}}[/bold {GOLD}]  {summary}")
     console.print()
-    console.print(
-        "[dim]Run [bold]compass COMMAND --help[/bold] for command-specific options.[/dim]"
-    )
+    console.print("[dim]Run [bold]compass COMMAND --help[/bold] for a command's options.[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -82,10 +82,10 @@ def phase_header(num: int, total: int, title: str) -> None:
     """
     console.print(
         Rule(
-            f"[bold {_GOLD}]Phase {num} of {total}[/bold {_GOLD}]"
+            f"[bold {GOLD}]Phase {num} of {total}[/bold {GOLD}]"
             f"[dim]  ·  [/dim]"
             f"[bold]{title}[/bold]",
-            style=_GOLD,
+            style=GOLD,
             align="center",
         )
     )
@@ -155,8 +155,8 @@ def summary(summary: IngestSummary) -> None:
     console.print(
         Panel(
             Group(*parts),
-            title=f"[bold {_GOLD}]compass ingest complete[/bold {_GOLD}]",
-            border_style=_GOLD,
+            title=f"[bold {GOLD}]compass ingest complete[/bold {GOLD}]",
+            border_style=GOLD,
             padding=(1, 2),
             expand=True,
         )
@@ -182,17 +182,22 @@ def skipped_edges_note(count: int) -> str:
     )
 
 
-def next_steps() -> None:
-    """Print suggested next actions after a successful ingest.
+NEXT_STEPS: tuple[tuple[str, str], ...] = (
+    ("compass overview", "See entry points and hot spots"),
+    ("compass search NAME", "Find where something is defined"),
+    ("compass setup", "Let coding agents (Claude Code, Codex) use this index"),
+    ("compass serve", "Explore the graph in the web UI"),
+    ("compass help", "See every command"),
+)
+"""Commands suggested after an ingest, most useful first."""
 
-    Includes the command to start the web UI.
-    """
+
+def next_steps() -> None:
+    """Print the commands worth running after a successful ingest."""
+    width = max(len(command) for command, _ in NEXT_STEPS)
     console.print("[bold]What's next:[/bold]")
-    console.print(
-        f"  [bold {_GOLD}]compass serve[/bold {_GOLD}]            "
-        f"Start the web UI and explore your codebase"
-    )
-    console.print(f"  [bold {_GOLD}]compass serve --help[/bold {_GOLD}]     See all server options")
+    for command, summary in NEXT_STEPS:
+        console.print(f"  [bold {GOLD}]{command:<{width}}[/bold {GOLD}]  {summary}")
     console.print()
 
 

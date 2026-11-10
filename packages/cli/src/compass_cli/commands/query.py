@@ -1,7 +1,9 @@
 """Query commands: ``status``, ``search``, ``describe``, ``impact`` and ``overview``.
 
 Each command finds the index, opens it read-only, calls one ``compass_core.query``
-function and prints its result: compact text by default, the contract JSON with
+function and prints its result: in a terminal, Rich tables and panels
+(``compass_cli.result_views``); when piped, as for a script or a coding agent, the compact
+one-line-per-item text of ``compass_core.render``; and the contract JSON with
 ``--format json``. Queries never write; without an index they exit with a message saying
 to run ``compass ingest``.
 
@@ -18,7 +20,10 @@ from pathlib import Path
 from typing import NoReturn, TypeVar
 
 import typer
+from rich.console import RenderableType
 
+from compass_cli import result_views
+from compass_cli.display import console
 from compass_cli.types import OutputFormat
 from compass_core.contract.errors import ERROR_MAPPINGS, ErrorResponse, to_error_response
 from compass_core.contract.params import (
@@ -54,7 +59,12 @@ from compass_core.shared_types import SymbolKind
 
 R = TypeVar("R")
 
-FORMAT = typer.Option(OutputFormat.TEXT, "--format", "-f", help="text (default) or json.")
+FORMAT = typer.Option(
+    OutputFormat.TEXT,
+    "--format",
+    "-f",
+    help="text (default; tables in a terminal, compact lines when piped) or json.",
+)
 REPO = typer.Option(
     None,
     "--repo",
@@ -87,6 +97,20 @@ def _print(result: Serializable, text: str, fmt: OutputFormat) -> None:
     typer.echo(to_json(result) if fmt is OutputFormat.JSON else text)
 
 
+def _show(
+    result: Serializable,
+    text: Callable[[], str],
+    view: Callable[[], RenderableType],
+    fmt: OutputFormat,
+) -> None:
+    """Print a result: Rich ``view`` in a terminal, else compact ``text`` or JSON."""
+    if fmt is OutputFormat.TEXT and console.is_terminal:
+        console.print(view())
+        console.print()
+    else:
+        _print(result, text(), fmt)
+
+
 def _found(result: Lookup[R], fmt: OutputFormat) -> R:
     """Return a found result; print the candidates or suggestions and exit otherwise."""
     if isinstance(result, AmbiguousReference):
@@ -101,7 +125,7 @@ def _found(result: Lookup[R], fmt: OutputFormat) -> R:
 def status(fmt: OutputFormat = FORMAT, repo: Path | None = REPO) -> None:
     """Show which index is used, when it was built and whether files changed since."""
     result = _run(repo, fmt, lambda db, location: index_status(location, db))
-    _print(result, render_status(result), fmt)
+    _show(result, lambda: render_status(result), lambda: result_views.status_view(result), fmt)
 
 
 def search(
@@ -114,7 +138,7 @@ def search(
     """Find files, classes, functions and methods by name. Best matches first."""
     params = SearchParams(query=text, kind=kind, limit=limit)
     result = _run(repo, fmt, lambda db, location: find_symbols(db, location, params))
-    _print(result, render_search(result), fmt)
+    _show(result, lambda: render_search(result), lambda: result_views.search_view(result), fmt)
 
 
 def describe(
@@ -125,7 +149,12 @@ def describe(
 ) -> None:
     """Show one symbol: location, signature, docstring, callers, callees and members."""
     detail = _found(_run(repo, fmt, lambda db, location: describe_symbol(db, location, ref)), fmt)
-    _print(detail, render_describe(detail, include_source=source), fmt)
+    _show(
+        detail,
+        lambda: render_describe(detail, include_source=source),
+        lambda: result_views.describe_view(detail, include_source=source),
+        fmt,
+    )
 
 
 def impact(
@@ -143,10 +172,10 @@ def impact(
     """List what may break if a symbol or file changes, nearest first."""
     params = ImpactParams(depth=depth, min_confidence=min_confidence, limit=limit)
     result = _found(_run(repo, fmt, lambda db, location: impact_of(db, location, ref, params)), fmt)
-    _print(result, render_impact(result), fmt)
+    _show(result, lambda: render_impact(result), lambda: result_views.impact_view(result), fmt)
 
 
 def overview(fmt: OutputFormat = FORMAT, repo: Path | None = REPO) -> None:
     """Summarise the repository: totals, entry points and the most connected symbols."""
     result = _run(repo, fmt, lambda db, location: repo_overview(db, location))
-    _print(result, render_overview(result), fmt)
+    _show(result, lambda: render_overview(result), lambda: result_views.overview_view(result), fmt)

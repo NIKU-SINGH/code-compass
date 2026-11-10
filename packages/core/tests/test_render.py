@@ -21,6 +21,7 @@ from compass_core.query.overview import overview
 from compass_core.query.search import find_symbols
 from compass_core.query.status import index_status
 from compass_core.render import (
+    local_name,
     location,
     render_ambiguous,
     render_describe,
@@ -123,3 +124,14 @@ def test_location_of_each_kind(fixture_db: GraphDB, fixture_index: IndexLocation
     hits = find_symbols(fixture_db, fixture_index, SearchParams(query="auth")).hits
     file_hit = next(h for h in hits if h.symbol.kind == "file")
     assert location(file_hit.symbol) == "app/auth.py"
+
+
+def test_local_name_is_the_name_within_the_file(
+    fixture_db: GraphDB, fixture_index: IndexLocation
+) -> None:
+    detail = describe(fixture_db, fixture_index, "app/models.py::User.save")
+    assert isinstance(detail, NodeDetail)
+    assert local_name(detail.symbol) == "User.save"
+    hits = find_symbols(fixture_db, fixture_index, SearchParams(query="auth")).hits
+    file_hit = next(h for h in hits if h.symbol.kind == "file")
+    assert local_name(file_hit.symbol) == "app/auth.py"

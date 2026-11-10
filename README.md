@@ -49,8 +49,10 @@ compass serve
 
 ## Querying from the command line
 
-Run these anywhere inside an indexed repository (or pass `--repo PATH`). Output is compact
-text with `file:line` first; add `--format json` for the typed result.
+Run these anywhere inside an indexed repository (or pass `--repo PATH`). In a terminal the
+answer is laid out as panels and tables; piped (a script, or a coding agent running
+`compass` in a shell) it is compact text, one line per item with `file:line` first. Add
+`--format json` for the typed result. `compass help` lists every command.
 
 ```bash
 compass status                          # which index, built when, files changed since
