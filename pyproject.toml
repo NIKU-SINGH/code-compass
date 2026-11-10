@@ -13,14 +13,14 @@ members = ["packages/cli", "packages/mcp", "packages/core", "packages/server"]
 
 [tool.uv.sources]
 compass-core = { workspace = true }
-compass-cli = { workspace = true }
+compass-code = { workspace = true }
 compass-mcp = { workspace = true }
 compass-server = { workspace = true }
 
 [dependency-groups]
 dev = [
     "compass-core",
-    "compass-cli",
+    "compass-code",
     "compass-mcp",
     "compass-server",
     "pytest>=8.0.0",

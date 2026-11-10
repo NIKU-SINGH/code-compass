@@ -9,7 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "code-compass",
-    "compass-cli",
+    "compass-code",
     "compass-core",
     "compass-mcp",
     "compass-server",
@@ -217,7 +217,7 @@ source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
-    { name = "compass-cli" },
+    { name = "compass-code" },
     { name = "compass-core" },
     { name = "compass-mcp" },
     { name = "compass-server" },
@@ -232,7 +232,7 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "compass-cli", editable = "packages/cli" },
+    { name = "compass-code", editable = "packages/cli" },
     { name = "compass-core", editable = "packages/core" },
     { name = "compass-mcp", editable = "packages/mcp" },
     { name = "compass-server", editable = "packages/server" },
@@ -253,24 +253,38 @@ wheels = [
 ]
 
 [[package]]
-name = "compass-cli"
+name = "compass-code"
 version = "0.1.0"
 source = { editable = "packages/cli" }
 dependencies = [
-    { name = "compass-core" },
-    { name = "compass-mcp" },
-    { name = "compass-server" },
+    { name = "fastapi" },
+    { name = "mcp" },
+    { name = "pathspec" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "python-dotenv" },
+    { name = "real-ladybug" },
     { name = "rich" },
+    { name = "tree-sitter" },
+    { name = "tree-sitter-python" },
     { name = "typer" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "compass-core", editable = "packages/core" },
-    { name = "compass-mcp", editable = "packages/mcp" },
-    { name = "compass-server", editable = "packages/server" },
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "mcp", specifier = ">=1.26.0,<2" },
+    { name = "pathspec", specifier = ">=1.0.4" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pydantic-settings", specifier = ">=2.0.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "real-ladybug", specifier = ">=0.15.3,<0.16" },
     { name = "rich", specifier = ">=13.0.0" },
+    { name = "tree-sitter", specifier = ">=0.25.0,<0.26" },
+    { name = "tree-sitter-python", specifier = ">=0.25.0,<0.26" },
     { name = "typer", specifier = ">=0.9.0" },
+    { name = "uvicorn", specifier = ">=0.32.0" },
 ]
 
 [[package]]

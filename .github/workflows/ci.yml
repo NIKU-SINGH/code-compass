@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # release.yml runs this whole workflow first and publishes the `dist` it builds.
+  workflow_call:
 
 jobs:
   lint:
@@ -23,6 +25,9 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --all-packages --all-groups --locked
+
+      - name: Package versions agree
+        run: uv run python scripts/release_version.py check
 
       - name: Run ruff (lint)
         run: uv run ruff check .
@@ -107,3 +112,70 @@ jobs:
       - name: Build
         run: pnpm build
         working-directory: apps/web
+
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "9"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bundle the web UI into compass_server
+        run: make web-static
+
+      - name: Build the compass-code wheel (it bundles every workspace package)
+        run: uv build --wheel packages/cli -o dist
+
+      - name: The wheel carries the engine, the MCP server, the API and the web UI
+        run: |
+          contents=$(unzip -l dist/compass_code-*.whl)
+          for path in compass_cli/main.py compass_core/query/search.py compass_mcp/server.py \
+                      compass_server/main.py compass_server/static/index.html; do
+            grep -q "$path" <<< "$contents" || { echo "missing $path"; exit 1; }
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  smoke:
+    name: Smoke test (${{ matrix.os }}, Python ${{ matrix.python }})
+    needs: package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Install the wheels into a fresh environment and run every command
+        run: scripts/smoke_test.sh dist ${{ matrix.python }}

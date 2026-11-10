@@ -81,3 +81,8 @@ to get green:
   `cd packages/mcp && uv run mypy` and `cd packages/cli && uv run mypy`
 - Web: `pnpm exec tsc --noEmit` and `pnpm build` in `apps/web`
 - If an API shape changed: `make gen-api` and commit the regenerated `lib/api-types.ts`
+- If you add or change a dependency in `core`, `mcp` or `server`, copy it into
+  `packages/cli/pyproject.toml` (the published package bundles them):
+  `python scripts/release_version.py check` must pass
+- If packaging changed: `make web-static && uv build --wheel packages/cli -o dist &&
+  scripts/smoke_test.sh dist`
