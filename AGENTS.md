@@ -77,7 +77,7 @@ Run these and make them pass. Never skip, disable or loosen a test, lint rule or
 to get green:
 - `uv run pytest`
 - `uv run ruff check . && uv run ruff format --check .`
-- `cd packages/core && uv run mypy`, `cd packages/server && uv run mypy` and
-  `cd packages/mcp && uv run mypy`
+- `cd packages/core && uv run mypy`, `cd packages/server && uv run mypy`,
+  `cd packages/mcp && uv run mypy` and `cd packages/cli && uv run mypy`
 - Web: `pnpm exec tsc --noEmit` and `pnpm build` in `apps/web`
 - If an API shape changed: `make gen-api` and commit the regenerated `lib/api-types.ts`

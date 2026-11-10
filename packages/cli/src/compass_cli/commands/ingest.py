@@ -59,31 +59,33 @@ def _format_debug_section(phase: str, ctx: IngestContext) -> str:
         assert ctx.symbol_table is not None
         assert ctx.import_map is not None
         lines.append(f"symbol_table ({len(ctx.symbol_table)} entries):")
-        for key, value in ctx.symbol_table.items():
-            lines.append(f"  {key} -> {value}")
+        for symbol_key, symbol_id in ctx.symbol_table.items():
+            lines.append(f"  {symbol_key} -> {symbol_id}")
         lines.append("")
         lines.append(f"import_map ({len(ctx.import_map)} entries):")
-        for key, value in ctx.import_map.items():
-            lines.append(f"  {key} -> {value}")
+        for module_path, imported_names in ctx.import_map.items():
+            lines.append(f"  {module_path} -> {imported_names}")
 
     elif phase == "resolution":
         assert ctx.resolved_graph is not None
         g = ctx.resolved_graph
         lines.append(f"call_edges ({len(g.call_edges)}):")
-        for e in g.call_edges:
-            lines.append(f"  {e.caller_id} -> {e.callee_id}  [{e.call_type} conf={e.confidence}]")
+        for call in g.call_edges:
+            lines.append(
+                f"  {call.caller_id} -> {call.callee_id}  [{call.call_type} conf={call.confidence}]"
+            )
         lines.append("")
         lines.append(f"external_call_edges ({len(g.external_call_edges)}):")
-        for e in g.external_call_edges:
-            lines.append(f"  {e.caller_id} -> {e.full_ref}  [{e.library}]")
+        for ext_call in g.external_call_edges:
+            lines.append(f"  {ext_call.caller_id} -> {ext_call.full_ref}  [{ext_call.library}]")
         lines.append("")
         lines.append(f"import_edges ({len(g.import_edges)}):")
-        for e in g.import_edges:
-            lines.append(f"  {e.from_path} -> {e.to_path}")
+        for imp in g.import_edges:
+            lines.append(f"  {imp.from_path} -> {imp.to_path}")
         lines.append("")
         lines.append(f"inherit_edges ({len(g.inherit_edges)}):")
-        for e in g.inherit_edges:
-            lines.append(f"  {e.child_id} -> {e.parent_id}")
+        for inherit in g.inherit_edges:
+            lines.append(f"  {inherit.child_id} -> {inherit.parent_id}")
 
     elif phase == "validation":
         assert ctx.report is not None

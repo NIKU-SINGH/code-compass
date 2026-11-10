@@ -95,7 +95,7 @@ writing anything.
 uv sync --all-packages --all-groups
 uv run pytest
 uv run ruff check . && uv run ruff format --check .
-(cd packages/core && uv run mypy) && (cd packages/server && uv run mypy) && (cd packages/mcp && uv run mypy)
+(cd packages/core && uv run mypy) && (cd packages/server && uv run mypy) && (cd packages/mcp && uv run mypy) && (cd packages/cli && uv run mypy)
 
 # Web: regenerate API types from the server's OpenAPI schema
 make gen-api
