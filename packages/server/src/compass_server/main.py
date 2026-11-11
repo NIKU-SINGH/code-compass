@@ -1,16 +1,15 @@
-from importlib.metadata import version
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from compass_core.package_version import installed_version
 from compass_server.errors import register_error_handlers
 from compass_server.routers.query import router as query_router
 from compass_server.settings import server_settings
 from compass_server.web_bundle import STATIC_DIR, has_bundled_ui
 
-VERSION = version("compass-code")
-"""The version of ``compass-code``, the one published package that ships this server."""
+VERSION = installed_version()
+"""The installed version of ``compass-code``, the package that ships this server."""
 
 app = FastAPI(
     title="Code Compass API", description="Backend for the Code Compass visual knowledge graph."

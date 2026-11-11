@@ -1,5 +1,3 @@
-from importlib.metadata import version
-
 import typer
 
 from compass_cli import display
@@ -8,6 +6,7 @@ from compass_cli.commands.mcp import mcp
 from compass_cli.commands.query import describe, impact, overview, search, status
 from compass_cli.commands.serve import serve
 from compass_cli.commands.setup import setup
+from compass_core.package_version import DISTRIBUTION, UNKNOWN, installed_version
 
 app = typer.Typer(
     help="Code Compass CLI",
@@ -16,13 +15,12 @@ app = typer.Typer(
 )
 
 
-DISTRIBUTION = "compass-code"
-"""The PyPI package that installs the ``compass`` command."""
-
-
 def _print_version(value: bool) -> None:
     if value:
-        current = f"{DISTRIBUTION} {version(DISTRIBUTION)}"
+        found = installed_version()
+        current = f"{DISTRIBUTION} {found}"
+        if found == UNKNOWN:
+            current += " (package metadata missing; run `uv sync --all-packages`)"
         display.logo(subtitle=current)
         typer.echo(current)
         raise typer.Exit()

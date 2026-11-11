@@ -5,8 +5,18 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  # release.yml runs this whole workflow first and publishes the `dist` it builds.
+  # release.yml runs this whole workflow first and publishes the `dist` it builds;
+  # macos.yml runs it with the smoke test on macOS.
   workflow_call:
+    inputs:
+      smoke_os:
+        description: JSON list of runners for the smoke test
+        type: string
+        default: '["ubuntu-latest"]'
+      smoke_python:
+        description: JSON list of Python versions for the smoke test
+        type: string
+        default: '["3.11", "3.13"]'
 
 jobs:
   lint:
@@ -164,11 +174,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS runners can sit in GitHub's queue for many minutes and get cancelled, which
-        # would block a release. The wheel is pure Python and its commit already passed the
-        # macOS smoke tests on its PR, so a release (a tag) smoke-tests on Linux only.
-        os: ${{ startsWith(github.ref, 'refs/tags/') && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "macos-latest"]') }}
-        python: ["3.11", "3.13"]
+        # Linux by default. Free macOS runners queue for 10+ minutes and are cancelled
+        # after 15, which turned runs red for no real failure; macOS is tested weekly and
+        # on demand by macos.yml instead.
+        os: ${{ fromJSON(inputs.smoke_os || '["ubuntu-latest"]') }}
+        python: ${{ fromJSON(inputs.smoke_python || '["3.11", "3.13"]') }}
     steps:
       - uses: actions/checkout@v4
 

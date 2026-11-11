@@ -34,7 +34,8 @@ you do. Only the wheel is published; an sdist cannot carry the sibling folders.
    ```
 
 2. Open a PR titled `Release 0.2.0` and merge it once CI is green. CI already builds the
-   wheel and smoke-tests it on Linux and macOS with Python 3.11 and 3.13.
+   wheel and smoke-tests it on Linux with Python 3.11 and 3.13. To check macOS too, run
+   *Actions → macOS → Run workflow* on the branch (it also runs every Monday on `main`).
 3. Tag the merge commit on `main` and push the tag:
 
    ```bash
@@ -46,9 +47,7 @@ you do. Only the wheel is published; an sdist cannot carry the sibling folders.
 The tag starts `.github/workflows/release.yml`, which:
 
 1. checks the tag matches the version of `compass-code`,
-2. runs all of CI (lint, types, tests, web build, wheel build, smoke tests on Linux; the
-   macOS smoke tests run on the release PR instead, as macOS runners can queue for a long
-   time),
+2. runs all of CI (lint, types, tests, web build, wheel build, smoke tests on Linux),
 3. publishes the wheel to PyPI through Trusted Publishing (no API token is stored),
 4. creates a GitHub release with generated notes and the wheel attached.
 

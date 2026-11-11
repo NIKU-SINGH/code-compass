@@ -105,3 +105,13 @@ def test_version_flag_prints_only_the_version_when_piped():
     result = runner.invoke(app, ["--version"])
 
     assert result.output.count("\n") == 1
+
+
+def test_version_flag_explains_missing_metadata_instead_of_crashing(monkeypatch):
+    from compass_cli import main
+
+    monkeypatch.setattr(main, "installed_version", lambda: "unknown")
+    result = runner.invoke(app, ["--version"])
+
+    assert result.exit_code == 0
+    assert "compass-code unknown" in result.output and "uv sync" in result.output
